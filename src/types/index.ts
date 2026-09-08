@@ -10,6 +10,8 @@ export interface Track {
   genre: string;
   mood: string[];
   isFavorite: boolean;
+  provider?: 'gamma' | 'youtube';
+  videoId?: string;
 }
 
 export interface Artist {

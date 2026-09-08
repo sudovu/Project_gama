@@ -1,14 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Compass, Search, Library, User } from 'lucide-react';
 import { Track, Playlist } from './types';
 import { usePlayer } from './hooks/usePlayer';
 import { useLibrary } from './hooks/useLibrary';
+import { useTheme } from './hooks/useTheme';
 import { tracks, artists, albums, playlists } from './data/mockData';
 import { SplashScreen } from './components/SplashScreen';
 import { MiniPlayer } from './components/player/MiniPlayer';
 import { FullPlayer } from './components/player/FullPlayer';
 import { QueuePanel } from './components/player/QueuePanel';
+import { YouTubePlayer } from './components/player/YouTubePlayer';
 import { DiscoverPage } from './pages/DiscoverPage';
 import { SearchPage } from './pages/SearchPage';
 import { LibraryPage } from './pages/LibraryPage';
@@ -24,26 +26,25 @@ type DetailView =
   | { type: 'album'; albumId: string }
   | null;
 
-type Theme = 'dark' | 'light';
-
 function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('discover');
   const [showQueue, setShowQueue] = useState(false);
   const [detailView, setDetailView] = useState<DetailView>(null);
-  const [theme, setTheme] = useState<Theme>('dark');
+  const [showYouTubePlayer, setShowYouTubePlayer] = useState(false);
 
   const player = usePlayer();
   const library = useLibrary();
-
-  // Apply theme
-  useEffect(() => {
-    document.documentElement.classList.toggle('light', theme === 'light');
-  }, [theme]);
+  const themeState = useTheme();
 
   const handlePlayTrack = useCallback((track: Track, queue?: Track[]) => {
     player.playTrack(track, queue);
     library.addToRecentlyPlayed(track);
+    
+    // Show YouTube player for YouTube tracks
+    if (track.provider === 'youtube' && track.videoId) {
+      setShowYouTubePlayer(true);
+    }
   }, [player, library]);
 
   const handleToggleFavorite = useCallback((track: Track) => {
@@ -71,6 +72,19 @@ function App() {
   const handleSearch = useCallback((query: string) => {
     library.addSearchHistory(query);
   }, [library]);
+
+  // Handle quick search events from Discover page
+  useEffect(() => {
+    const handleQuickSearch = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      setActiveTab('search');
+      setDetailView(null);
+      // Dispatch a custom event that SearchPage can listen to
+      window.dispatchEvent(new CustomEvent('gamma-quick-search', { detail: customEvent.detail }));
+    };
+    window.addEventListener('gamma-search', handleQuickSearch);
+    return () => window.removeEventListener('gamma-search', handleQuickSearch);
+  }, []);
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: 'discover', label: 'Discover', icon: Compass },
@@ -200,8 +214,10 @@ function App() {
       case 'profile':
         return (
           <ProfilePage
-            theme={theme}
-            onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+            theme={themeState.theme}
+            mode={themeState.mode}
+            onToggleTheme={themeState.toggleMode}
+            onSelectColor={themeState.setColorTheme}
             totalFavorites={library.favorites.length}
             totalPlaylists={playlists.length + library.userPlaylists.length}
             totalRecent={library.recentlyPlayed.length}
@@ -213,12 +229,18 @@ function App() {
   };
 
   return (
-    <div className={`min-h-screen h-screen flex flex-col overflow-hidden ${theme === 'dark' ? 'bg-gamma-bg text-gamma-text-primary' : 'bg-gray-50 text-gray-900'}`}>
+    <div className={`min-h-screen h-screen flex flex-col overflow-hidden ${themeState.mode === 'dark' ? 'bg-gamma-bg text-gamma-text-primary' : 'bg-gray-50 text-gray-900'}`}>
       {/* Ambient background effect */}
-      {theme === 'dark' && (
+      {themeState.mode === 'dark' && (
         <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-gamma-primary/5 rounded-full blur-3xl animate-pulse-glow" />
-          <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-gamma-accent/5 rounded-full blur-3xl animate-pulse-glow" style={{ animationDelay: '1.5s' }} />
+          <div 
+            className="absolute top-0 left-1/4 w-96 h-96 rounded-full blur-3xl animate-pulse-glow opacity-10"
+            style={{ background: themeState.theme.primary }}
+          />
+          <div 
+            className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full blur-3xl animate-pulse-glow opacity-10"
+            style={{ background: themeState.theme.accent, animationDelay: '1.5s' }}
+          />
         </div>
       )}
 
@@ -236,6 +258,17 @@ function App() {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      {/* YouTube Player */}
+      {showYouTubePlayer && player.state.currentTrack?.videoId && (
+        <div className="relative z-30 px-4 pb-2">
+          <YouTubePlayer
+            videoId={player.state.currentTrack.videoId}
+            isPlaying={player.state.playbackState === 'playing'}
+            onClose={() => setShowYouTubePlayer(false)}
+          />
+        </div>
+      )}
 
       {/* Mini Player */}
       {player.state.currentTrack && !player.state.isExpanded && (

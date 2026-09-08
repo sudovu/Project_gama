@@ -1,15 +1,24 @@
 @import "tailwindcss";
 
+:root {
+  --gamma-primary: #8b5cf6;
+  --gamma-primary-light: #a78bfa;
+  --gamma-accent: #06b6d4;
+  --gamma-accent-light: #22d3ee;
+  --gamma-gradient: linear-gradient(135deg, #8b5cf6, #06b6d4);
+  --gamma-glow: rgba(139, 92, 246, 0.3);
+}
+
 @theme {
   --color-gamma-bg: #050507;
   --color-gamma-surface: #0d0d12;
   --color-gamma-surface-elevated: #16161e;
   --color-gamma-surface-hover: #1e1e2a;
   --color-gamma-border: #2a2a3a;
-  --color-gamma-primary: #8b5cf6;
-  --color-gamma-primary-light: #a78bfa;
-  --color-gamma-accent: #06b6d4;
-  --color-gamma-accent-light: #22d3ee;
+  --color-gamma-primary: var(--gamma-primary);
+  --color-gamma-primary-light: var(--gamma-primary-light);
+  --color-gamma-accent: var(--gamma-accent);
+  --color-gamma-accent-light: var(--gamma-accent-light);
   --color-gamma-text-primary: #f8fafc;
   --color-gamma-text-secondary: #94a3b8;
   --color-gamma-text-muted: #64748b;
@@ -43,6 +52,28 @@ body {
   color: #f8fafc;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Light mode */
+html.light {
+  --color-gamma-bg: #f8fafc;
+  --color-gamma-surface: #ffffff;
+  --color-gamma-surface-elevated: #f1f5f9;
+  --color-gamma-surface-hover: #e2e8f0;
+  --color-gamma-border: #e2e8f0;
+  --color-gamma-text-primary: #0f172a;
+  --color-gamma-text-secondary: #475569;
+  --color-gamma-text-muted: #94a3b8;
+}
+
+html.light body {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+html.light .glass-panel {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(226, 232, 240, 0.8);
 }
 
 @keyframes pulse-glow {
@@ -79,40 +110,18 @@ body {
 }
 
 .gradient-primary {
-  background: linear-gradient(135deg, #8b5cf6, #06b6d4);
+  background: var(--gamma-gradient);
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, #8b5cf6, #06b6d4);
+  background: var(--gamma-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .text-shadow-glow {
-  text-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
-}
-
-/* Light mode overrides */
-html.light {
-  --color-gamma-bg: #f8fafc;
-  --color-gamma-surface: #ffffff;
-  --color-gamma-surface-elevated: #f1f5f9;
-  --color-gamma-surface-hover: #e2e8f0;
-  --color-gamma-border: #e2e8f0;
-  --color-gamma-text-primary: #0f172a;
-  --color-gamma-text-secondary: #475569;
-  --color-gamma-text-muted: #94a3b8;
-}
-
-html.light body {
-  background: #f8fafc;
-  color: #0f172a;
-}
-
-html.light .glass-panel {
-  background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(226, 232, 240, 0.8);
+  text-shadow: 0 0 20px var(--gamma-glow);
 }
 
 /* Reduced motion */
@@ -132,7 +141,7 @@ html.light .glass-panel {
 /* Focus styles for accessibility */
 button:focus-visible,
 a:focus-visible {
-  outline: 2px solid #8b5cf6;
+  outline: 2px solid var(--gamma-primary);
   outline-offset: 2px;
   border-radius: 8px;
 }
@@ -143,64 +152,11 @@ button, [role="button"] {
   -webkit-user-select: none;
 }
 
+/* Hide scrollbar utility */
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
-
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
-}
-
-/* Safe area padding for mobile */
-.pb-safe {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-
-/* Focus visible styles */
-:focus-visible {
-  outline: 2px solid #8b5cf6;
-  outline-offset: 2px;
-  border-radius: 8px;
-}
-
-/* Selection color */
-::selection {
-  background: rgba(139, 92, 246, 0.3);
-  color: #f8fafc;
-}
-
-/* Smooth page transitions */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Prevent text selection on interactive elements */
-button, [role="button"] {
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-/* Custom range input styling */
-input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  background: transparent;
-  cursor: pointer;
-}
-
-input[type="range"]::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #8b5cf6;
-  margin-top: -4px;
 }

@@ -38,10 +38,18 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({ state, onTogglePlay, onN
 
         <div className="flex items-center gap-3 p-3">
           <div 
-            className="cursor-pointer flex-shrink-0"
+            className="cursor-pointer flex-shrink-0 w-11 h-11 rounded-xl overflow-hidden"
             onClick={onExpand}
           >
-            <GammaArtwork seed={state.currentTrack.id} type="track" size="sm" />
+            {state.currentTrack.artwork && state.currentTrack.provider === 'youtube' ? (
+              <img 
+                src={state.currentTrack.artwork}
+                alt={state.currentTrack.title}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <GammaArtwork seed={state.currentTrack.id} type="track" size="sm" />
+            )}
           </div>
           
           <div 
