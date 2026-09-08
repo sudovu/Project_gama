@@ -9,6 +9,34 @@ GAMMA is a premium music discovery application that provides users with an immer
 **Core Philosophy:**
 > GAMMA is a personal frequency space for discovering music.
 
+## 📱 Building Android APK
+
+GAMMA can be converted to an Android APK using two approaches:
+
+### Option 1: Capacitor (Fastest)
+```bash
+npm run build
+npm install @capacitor/core @capacitor/cli @capacitor/android
+npx cap init GAMMA com.example.gamma --web-dir=dist
+npx cap add android
+npx cap sync
+npx cap open android
+# Then in Android Studio: Build → Build APK
+```
+
+### Option 2: Native Android (Full Rewrite)
+See [docs/build-guide.md](docs/build-guide.md) for the complete native Android architecture with Kotlin + Jetpack Compose.
+
+## 🔍 YouTube Integration
+
+GAMMA includes a `YouTubeProvider` with full YouTube Data API v3 integration architecture. To enable real YouTube search:
+
+1. Get a YouTube Data API v3 key from [Google Cloud Console](https://console.cloud.google.com/)
+2. Set environment variable: `VITE_YOUTUBE_API_KEY=your_key`
+3. See [docs/youtube-integration.md](docs/youtube-integration.md) for full details
+
+**Important:** GAMMA only uses officially supported YouTube APIs and does not circumvent any restrictions.
+
 ## ✨ Features
 
 ### 🎵 Music Discovery

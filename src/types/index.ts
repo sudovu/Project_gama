@@ -39,7 +39,7 @@ export interface Playlist {
   artwork: string;
   tracks: Track[];
   isUserCreated: boolean;
-  source: 'gamma' | 'user';
+  source: 'gamma' | 'user' | 'youtube';
 }
 
 export interface SearchResult {
@@ -71,4 +71,23 @@ export interface MoodCategory {
   name: string;
   gradient: string;
   icon: string;
+}
+
+// Provider abstraction for music sources
+export interface PlaybackCapability {
+  canPlay: boolean;
+  canBackgroundPlay: boolean;
+  canDownload: boolean;
+  canCache: boolean;
+  playbackMethod: 'iframe' | 'native' | 'none';
+}
+
+export interface MusicProvider {
+  search(query: string, type?: 'track' | 'artist' | 'album' | 'playlist'): Promise<Track[]>;
+  getTrack(id: string): Promise<Track | null>;
+  getArtist(id: string): Promise<Artist | null>;
+  getPlaylist(id: string): Promise<Playlist | null>;
+  getRecommendations(trackId: string): Promise<Track[]>;
+  getPlaybackCapability(trackId: string): Promise<PlaybackCapability>;
+  getEmbedUrl(videoId: string): string;
 }
