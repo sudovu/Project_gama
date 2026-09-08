@@ -5,6 +5,8 @@ import {
 } from 'lucide-react';
 import { PlayerState } from '../../types';
 import { GammaArtwork } from '../ui/GammaArtwork';
+import { WaveformVisualizer } from './WaveformVisualizer';
+import { AmbientParticles } from './AmbientParticles';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface FullPlayerProps {
@@ -88,7 +90,13 @@ export const FullPlayer: React.FC<FullPlayerProps> = ({
             <ChevronDown size={24} className="text-gamma-text-primary" />
           </button>
           <div className="text-center">
-            <p className="text-xs text-gamma-text-muted uppercase tracking-wider">Now Playing</p>
+            <div className="flex items-center gap-1.5 justify-center">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gamma-primary opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-gamma-primary"></span>
+              </span>
+              <p className="text-xs text-gamma-text-muted uppercase tracking-wider">Now Resonating</p>
+            </div>
           </div>
           <button
             onClick={onShowQueue}
@@ -101,6 +109,9 @@ export const FullPlayer: React.FC<FullPlayerProps> = ({
 
         {/* Artwork */}
         <div className="relative flex-1 flex items-center justify-center px-8">
+          {/* Ambient particles */}
+          <AmbientParticles color={gradientColors[0]} count={25} />
+          
           <motion.div
             key={track.id}
             initial={{ scale: 0.9, opacity: 0 }}
@@ -118,6 +129,15 @@ export const FullPlayer: React.FC<FullPlayerProps> = ({
               className="!w-64 !h-64 md:!w-72 md:!h-72 relative shadow-2xl"
             />
           </motion.div>
+        </div>
+
+        {/* Waveform Visualizer */}
+        <div className="px-8 h-12 opacity-60">
+          <WaveformVisualizer 
+            isPlaying={state.playbackState === 'playing'} 
+            color={gradientColors[0]}
+            barCount={40}
+          />
         </div>
 
         {/* Track Info & Controls */}

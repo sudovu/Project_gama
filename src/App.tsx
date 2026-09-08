@@ -202,6 +202,9 @@ function App() {
           <ProfilePage
             theme={theme}
             onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+            totalFavorites={library.favorites.length}
+            totalPlaylists={playlists.length + library.userPlaylists.length}
+            totalRecent={library.recentlyPlayed.length}
           />
         );
       default:
