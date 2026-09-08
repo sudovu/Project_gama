@@ -93,6 +93,56 @@ body {
   text-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
 }
 
+/* Light mode overrides */
+html.light {
+  --color-gamma-bg: #f8fafc;
+  --color-gamma-surface: #ffffff;
+  --color-gamma-surface-elevated: #f1f5f9;
+  --color-gamma-surface-hover: #e2e8f0;
+  --color-gamma-border: #e2e8f0;
+  --color-gamma-text-primary: #0f172a;
+  --color-gamma-text-secondary: #475569;
+  --color-gamma-text-muted: #94a3b8;
+}
+
+html.light body {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+html.light .glass-panel {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(226, 232, 240, 0.8);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-glow,
+  .animate-float,
+  .animate-waveform {
+    animation: none;
+  }
+  
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* Focus styles for accessibility */
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid #8b5cf6;
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* Prevent text selection on interactive elements */
+button, [role="button"] {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
