@@ -200,15 +200,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   style={{ background: theme.gradient }}
                 >
                   <div className="w-full h-full rounded-full bg-gamma-surface-elevated flex items-center justify-center overflow-hidden">
-                    <div 
-                      className="w-full h-full flex items-center justify-center text-3xl font-bold"
-                      style={{ 
-                        background: theme.gradient,
-                        color: 'white'
-                      }}
-                    >
-                      BG
-                    </div>
+                    <img 
+                      src="https://ui-avatars.com/api/?name=Bhuwan+Gautam&size=200&background=8b5cf6&color=fff&bold=true&font-size=0.4"
+                      alt="Bhuwan Gautam"
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                 </div>
                 <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-gamma-success flex items-center justify-center border-2 border-gamma-surface-elevated">
@@ -315,10 +311,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
         className="text-center py-8"
       >
         <p className="text-xs text-gamma-text-muted">
-          GAMMA v1.0.0 — Your Personal Frequency
+          © 2024 Bhuwan Gautam. All rights reserved.
         </p>
         <p className="text-xs text-gamma-text-muted mt-1">
-          Powered by YouTube
+          GAMMA — Your Personal Frequency
         </p>
       </motion.div>
     </div>
