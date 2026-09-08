@@ -52,7 +52,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({ onPlayTrack, onNavig
           {getGreeting()}<span className="text-gamma-primary">.</span>
         </h1>
         <p className="text-gamma-text-secondary mt-2 text-sm md:text-base">
-          What's your frequency today?
+          Search any song on YouTube or explore below.
         </p>
       </motion.div>
 
@@ -62,9 +62,14 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({ onPlayTrack, onNavig
           <div className="absolute top-0 right-0 w-40 h-40 bg-gamma-primary/10 rounded-full blur-3xl" />
           <div className="absolute bottom-0 left-0 w-32 h-32 bg-gamma-accent/10 rounded-full blur-3xl" />
           <div className="relative z-10">
-            <p className="text-xs text-gamma-primary font-medium uppercase tracking-wider mb-2">Featured Frequency</p>
-            <h3 className="text-xl font-display font-bold text-gamma-text-primary mb-1">Gamma Frequency</h3>
-            <p className="text-sm text-gamma-text-secondary mb-4">The essential GAMMA experience — curated signals for your ears</p>
+            <div className="flex items-center gap-2 mb-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="#ff0000">
+                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+              </svg>
+              <p className="text-xs text-gamma-primary font-medium uppercase tracking-wider">Powered by YouTube</p>
+            </div>
+            <h3 className="text-xl font-display font-bold text-gamma-text-primary mb-1">Search Any Song</h3>
+            <p className="text-sm text-gamma-text-secondary mb-4">Find millions of tracks streamed directly from YouTube</p>
             <button
               onClick={() => onPlayTrack(playlists[0].tracks[0], playlists[0].tracks)}
               className="flex items-center gap-2 px-5 py-2.5 rounded-full gradient-primary text-white text-sm font-medium hover:opacity-90 transition-opacity shadow-lg shadow-gamma-primary/20"
@@ -73,6 +78,26 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({ onPlayTrack, onNavig
               Play Now
             </button>
           </div>
+        </div>
+      </motion.div>
+
+      {/* Quick YouTube Searches */}
+      <motion.div variants={itemVariants} className="mb-8">
+        <GammaSectionHeader title="Quick Search" subtitle="Tap to search on YouTube" />
+        <div className="flex flex-wrap gap-2">
+          {['top hits 2024', 'lofi beats', 'workout music', 'chill vibes', 'rock classics', 'jazz essentials'].map((term) => (
+            <button
+              key={term}
+              onClick={() => {
+                // Navigate to search tab with this query
+                const event = new CustomEvent('gamma-search', { detail: term });
+                window.dispatchEvent(event);
+              }}
+              className="px-4 py-2 rounded-full bg-gamma-surface-elevated border border-gamma-border text-sm text-gamma-text-secondary hover:bg-gamma-surface-hover hover:text-gamma-text-primary hover:border-gamma-primary/30 transition-all"
+            >
+              {term}
+            </button>
+          ))}
         </div>
       </motion.div>
 
