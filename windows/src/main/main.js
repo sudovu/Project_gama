@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, ipcMain, globalShortcut, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -24,7 +24,7 @@ function createWindow() {
     minHeight: 640,
     backgroundColor: '#0a0a0f',
     title: 'GAMA - Cybernetic Music Platform',
-    icon: path.join(__dirname, '../../build/icon.ico'),
+    icon: fs.existsSync(path.join(__dirname, '../../build/icon.ico')) ? path.join(__dirname, '../../build/icon.ico') : undefined,
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
