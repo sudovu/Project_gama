@@ -1,5 +1,21 @@
-node_modules/
-.next/
-dist/
-build/
-*.log
+*.iml
+.gradle
+.kotlin
+/local.properties
+local.properties
+.env
+debug.keystore
+.antigravity
+.vscode
+/build
+app/build
+/captures
+.externalNativeBuild
+.cxx
+.idea
+.DS_Store
+
+# Scratch captures in root
+/*.png
+/*.xml
+/*.log

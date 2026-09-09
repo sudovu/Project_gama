@@ -1,0 +1,978 @@
+package com.example.feature.profile
+
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.example.R
+import com.example.core.ui.GammaFilterChip
+import com.example.core.ui.GammaSectionHeader
+import com.example.ui.theme.GammaAuraBrush
+import com.example.ui.theme.GammaBackground
+import com.example.ui.theme.GammaDivider
+import com.example.ui.theme.GammaPrimary
+import com.example.ui.theme.GammaSecondary
+import com.example.ui.theme.GammaSurfaceElevated
+import com.example.ui.theme.GammaSurfaceHighlight
+import com.example.ui.theme.GammaTextMuted
+import com.example.ui.theme.GammaTextPrimary
+import com.example.ui.theme.GammaTextSecondary
+import com.example.ui.theme.GammaThemeManager
+import com.example.ui.theme.GammaThemePreset
+import java.io.File
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ProfileSettingsScreen(
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+
+    var selectedFrequency by remember { mutableIntStateOf(432) }
+    var spatialAudioEnabled by remember { mutableStateOf(true) }
+    var visualizerPulseEnabled by remember { mutableStateOf(true) }
+
+    val developerName = "VHUWON MATHERS"
+    val developerEmail = "vhuwonmathers@gmail.com"
+    val developerUsername = "sudovu"
+    val developerPhone = "9869367788"
+
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = GammaBackground,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = GammaPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "About & Developer",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = GammaTextPrimary
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent
+                )
+            )
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .background(GammaAuraBrush)
+                .testTag("settings_list"),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            // ==========================================
+            // DEVELOPED BY - HERO SHOWCASE SECTION
+            // ==========================================
+            item {
+                Text(
+                    text = "ABOUT THE CREATOR",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        letterSpacing = 1.5.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = GammaPrimary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(24.dp))
+                        .border(
+                            width = 1.5.dp,
+                            brush = Brush.linearGradient(
+                                colors = listOf(GammaPrimary, GammaSecondary, Color(0xFF38BDF8))
+                            ),
+                            shape = RoundedCornerShape(24.dp)
+                        )
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    GammaSurfaceHighlight,
+                                    GammaSurfaceElevated
+                                )
+                            )
+                        )
+                        .padding(20.dp)
+                        .testTag("about_developer_card")
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // "DEVELOPED BY" Tag Badge
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(30.dp))
+                                .background(GammaPrimary.copy(alpha = 0.15f))
+                                .border(1.dp, GammaPrimary.copy(alpha = 0.4f), RoundedCornerShape(30.dp))
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Code,
+                                    contentDescription = null,
+                                    tint = GammaPrimary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "DEVELOPED BY",
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = FontWeight.ExtraBold,
+                                        letterSpacing = 1.2.sp
+                                    ),
+                                    color = GammaPrimary
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        // Permanent Profile Picture with glowing dual neon rings
+                        Box(
+                            modifier = Modifier
+                                .size(116.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.sweepGradient(
+                                        colors = listOf(
+                                            GammaPrimary,
+                                            GammaSecondary,
+                                            Color(0xFF38BDF8),
+                                            GammaPrimary
+                                        )
+                                    )
+                                )
+                                .padding(3.5.dp)
+                                .testTag("profile_avatar_permanent")
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.img_vhuwon_profile),
+                                contentDescription = "VHUWON MATHERS Profile Picture",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
+                                    .background(GammaBackground),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Full Developer Name (Bold & High Contrast)
+                        Text(
+                            text = developerName,
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 0.5.sp
+                            ),
+                            color = GammaTextPrimary
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Username Pill Badge
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(GammaSurfaceElevated)
+                                .border(1.dp, GammaDivider, RoundedCornerShape(20.dp))
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Verified,
+                                contentDescription = "Verified Developer",
+                                tint = GammaPrimary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "@$developerUsername",
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = GammaPrimary
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "Lead Software Engineer & Android Architect",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = GammaTextSecondary
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        // Detailed Contact Information Cards
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            // Email Contact Tile
+                            DeveloperContactCard(
+                                icon = Icons.Default.Email,
+                                iconTint = GammaPrimary,
+                                label = "EMAIL",
+                                value = developerEmail,
+                                actionLabel = "Send Mail",
+                                actionIcon = Icons.Default.OpenInNew,
+                                onClick = {
+                                    copyAndLaunch(
+                                        context = context,
+                                        clipboardManager = clipboardManager,
+                                        label = "Email",
+                                        text = developerEmail,
+                                        intent = Intent(Intent.ACTION_SENDTO).apply {
+                                            data = Uri.parse("mailto:$developerEmail")
+                                        }
+                                    )
+                                },
+                                testTag = "about_email_card"
+                            )
+
+                            // Phone Contact Tile
+                            DeveloperContactCard(
+                                icon = Icons.Default.Phone,
+                                iconTint = GammaSecondary,
+                                label = "PHONE NUMBER",
+                                value = developerPhone,
+                                subtitle = "+977 $developerPhone",
+                                actionLabel = "Call",
+                                actionIcon = Icons.Default.Call,
+                                onClick = {
+                                    copyAndLaunch(
+                                        context = context,
+                                        clipboardManager = clipboardManager,
+                                        label = "Phone",
+                                        text = developerPhone,
+                                        intent = Intent(Intent.ACTION_DIAL).apply {
+                                            data = Uri.parse("tel:$developerPhone")
+                                        }
+                                    )
+                                },
+                                testTag = "about_phone_card"
+                            )
+
+                            // Username / GitHub Handle Tile
+                            DeveloperContactCard(
+                                icon = Icons.Default.Person,
+                                iconTint = Color(0xFFF59E0B),
+                                label = "USERNAME",
+                                value = developerUsername,
+                                subtitle = "GitHub & Cosmic Identity",
+                                actionLabel = "Copy",
+                                actionIcon = Icons.Default.ContentCopy,
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(developerUsername))
+                                    Toast.makeText(context, "Username copied: $developerUsername", Toast.LENGTH_SHORT).show()
+                                },
+                                testTag = "about_username_card"
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Quick Action Buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    val fullDetails = """
+                                        Developer: $developerName
+                                        Username: @$developerUsername
+                                        Email: $developerEmail
+                                        Phone: $developerPhone
+                                        Project: GAMMA Frequency Audio
+                                    """.trimIndent()
+                                    clipboardManager.setText(AnnotatedString(fullDetails))
+                                    Toast.makeText(context, "All developer details copied!", Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = GammaPrimary,
+                                    contentColor = GammaBackground
+                                ),
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
+                                    .testTag("copy_developer_info_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Copy Details",
+                                    style = MaterialTheme.typography.labelLarge.copy(
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    copyAndLaunch(
+                                        context = context,
+                                        clipboardManager = clipboardManager,
+                                        label = "Email",
+                                        text = developerEmail,
+                                        intent = Intent(Intent.ACTION_SENDTO).apply {
+                                            data = Uri.parse("mailto:$developerEmail?subject=Hello%20Bhuwan%20(GAMMA%20App)")
+                                        }
+                                    )
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = GammaPrimary
+                                ),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, GammaPrimary),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Email,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Contact",
+                                    style = MaterialTheme.typography.labelLarge.copy(
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ==========================================
+            // APPLICATION ARCHITECTURE & ABOUT
+            // ==========================================
+            item {
+                Text(
+                    text = "APPLICATION SPECIFICATIONS",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        letterSpacing = 1.2.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = GammaPrimary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(GammaSurfaceElevated)
+                        .border(1.dp, GammaDivider, RoundedCornerShape(18.dp))
+                        .padding(18.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(GammaPrimary.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.GraphicEq,
+                                    contentDescription = null,
+                                    tint = GammaPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "GAMA Audio Engine",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = GammaTextPrimary
+                                )
+                                Text(
+                                    text = "Version 1.2.0 (Official Release)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = GammaPrimary
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "Engineered with precision by Bhuwan Gautam (sudovu). Powered by Kotlin, Jetpack Compose, Room local metadata persistence, 5-band real-time DSP audio equalizer, and the official YouTube embedded playback bridge.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = GammaTextSecondary,
+                            lineHeight = 20.sp
+                        )
+                    }
+                }
+            }
+
+            // ==========================================
+            // THEME & VISUAL PALETTE SELECTION
+            // ==========================================
+            item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Palette,
+                            contentDescription = null,
+                            tint = GammaPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "THEME & COLOR HARMONICS",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                letterSpacing = 1.2.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = GammaPrimary
+                        )
+                    }
+                    Text(
+                        text = GammaThemeManager.selectedThemePreset.title,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = GammaTextSecondary
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    GammaThemePreset.entries.forEach { preset ->
+                        val isSelected = GammaThemeManager.selectedThemePreset == preset
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(
+                                    if (isSelected) GammaPrimary.copy(alpha = 0.12f)
+                                    else GammaSurfaceElevated
+                                )
+                                .border(
+                                    width = if (isSelected) 1.5.dp else 1.dp,
+                                    color = if (isSelected) GammaPrimary else GammaDivider,
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+                                .clickable {
+                                    GammaThemeManager.selectTheme(preset, context)
+                                    Toast.makeText(
+                                        context,
+                                        "Theme applied: ${preset.title}",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                                .padding(14.dp)
+                                .testTag("theme_preset_${preset.name.lowercase()}")
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = preset.title,
+                                            style = MaterialTheme.typography.titleSmall.copy(
+                                                fontWeight = FontWeight.Bold
+                                            ),
+                                            color = if (isSelected) GammaPrimary else GammaTextPrimary
+                                        )
+                                        if (isSelected) {
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(GammaPrimary.copy(alpha = 0.2f))
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = "ACTIVE",
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 9.sp
+                                                    ),
+                                                    color = GammaPrimary
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = preset.subtitle,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = GammaTextSecondary
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                // Color preview swatches
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .clip(CircleShape)
+                                            .background(preset.primaryColor)
+                                            .border(1.dp, GammaDivider, CircleShape)
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .clip(CircleShape)
+                                            .background(preset.secondaryColor)
+                                            .border(1.dp, GammaDivider, CircleShape)
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .clip(CircleShape)
+                                            .background(preset.accentColor)
+                                            .border(1.dp, GammaDivider, CircleShape)
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .clip(CircleShape)
+                                            .background(preset.backgroundColor)
+                                            .border(1.dp, GammaDivider, CircleShape)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ==========================================
+            // RESONANCE TUNING & AUDIO CALIBRATION
+            // ==========================================
+            item {
+                Text(
+                    text = "AUDIO EQUALIZER PREFERENCE",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        letterSpacing = 1.2.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = GammaPrimary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(GammaSurfaceElevated)
+                        .border(1.dp, GammaDivider, RoundedCornerShape(18.dp))
+                        .padding(18.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = "Default Audio Tuning",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = GammaTextPrimary
+                        )
+                        Text(
+                            text = "Select your default sound signature for playback.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = GammaTextSecondary
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val profiles = listOf("Balanced", "Bass Boost", "Vocal Focus")
+                            profiles.forEach { profile ->
+                                GammaFilterChip(
+                                    text = profile,
+                                    selected = profile == "Balanced",
+                                    onClick = { },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ==========================================
+            // AUDIO & VISUAL ENGINE SWITCHES
+            // ==========================================
+            item {
+                Text(
+                    text = "AUDIO & VISUAL ENGINE",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        letterSpacing = 1.2.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = GammaPrimary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(GammaSurfaceElevated)
+                        .border(1.dp, GammaDivider, RoundedCornerShape(18.dp))
+                        .padding(18.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Spatial Zero-Phase Matrix",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.SemiBold
+                                    ),
+                                    color = GammaTextPrimary
+                                )
+                                Text(
+                                    text = "Widens stereo soundfield for deep headphone listening.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = GammaTextSecondary
+                                )
+                            }
+                            Switch(
+                                checked = spatialAudioEnabled,
+                                onCheckedChange = { spatialAudioEnabled = it },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = GammaBackground,
+                                    checkedTrackColor = GammaPrimary,
+                                    uncheckedThumbColor = GammaTextMuted,
+                                    uncheckedTrackColor = GammaDivider
+                                )
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Dynamic Frequency Spectrum",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.SemiBold
+                                    ),
+                                    color = GammaTextPrimary
+                                )
+                                Text(
+                                    text = "Renders real-time audio waveform equalizer on player.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = GammaTextSecondary
+                                )
+                            }
+                            Switch(
+                                checked = visualizerPulseEnabled,
+                                onCheckedChange = { visualizerPulseEnabled = it },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = GammaBackground,
+                                    checkedTrackColor = GammaPrimary,
+                                    uncheckedThumbColor = GammaTextMuted,
+                                    uncheckedTrackColor = GammaDivider
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ==========================================
+            // PROVIDER COMPLIANCE & ATTRIBUTION
+            // ==========================================
+            item {
+                Text(
+                    text = "PROVIDER COMPLIANCE & ATTRIBUTION",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        letterSpacing = 1.2.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = GammaPrimary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(GammaSurfaceElevated)
+                        .border(1.dp, GammaDivider, RoundedCornerShape(18.dp))
+                        .padding(18.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = GammaPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Official YouTube IFrame Embed Integration",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = GammaTextPrimary
+                            )
+                        }
+
+                        Text(
+                            text = "GAMMA operates under official YouTube developer terms. Playback is rendered through the official YouTube embedded player without scraping, ripping, or modifying audio streams, respecting creator rights and platform guidelines.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = GammaTextSecondary
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = "Designed & Built by Bhuwan Gautam (sudovu)",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = GammaPrimary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeveloperContactCard(
+    icon: ImageVector,
+    iconTint: Color,
+    label: String,
+    value: String,
+    subtitle: String? = null,
+    actionLabel: String,
+    actionIcon: ImageVector,
+    onClick: () -> Unit,
+    testTag: String
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(GammaSurfaceElevated)
+            .border(1.dp, GammaDivider.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(14.dp)
+            .testTag(testTag)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(iconTint.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = iconTint,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        letterSpacing = 1.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = GammaTextMuted
+                )
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = GammaTextPrimary
+                )
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = GammaTextSecondary
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(GammaSurfaceHighlight)
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = actionIcon,
+                        contentDescription = actionLabel,
+                        tint = GammaPrimary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = actionLabel,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = GammaPrimary
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun copyAndLaunch(
+    context: Context,
+    clipboardManager: androidx.compose.ui.platform.ClipboardManager,
+    label: String,
+    text: String,
+    intent: Intent
+) {
+    clipboardManager.setText(AnnotatedString(text))
+    try {
+        context.startActivity(intent)
+    } catch (_: Exception) {
+        Toast.makeText(context, "$label copied: $text", Toast.LENGTH_SHORT).show()
+    }
+}

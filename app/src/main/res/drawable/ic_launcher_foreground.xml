@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Stylized Greek Gamma character -->
+    <!-- Top horizontal beam of Gamma -->
+    <path
+        android:pathData="M 30,28 L 78,28 C 80.5,28 82,30 82,32.5 C 82,35 80.5,37 78,37 L 38,37 L 38,78 C 38,80.5 36,82 33.5,82 C 31,82 29,80.5 29,78 L 29,32 C 29,29.8 30.2,28 30,28 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="29"
+                android:startY="28"
+                android:endX="82"
+                android:endY="82"
+                android:type="linear">
+                <item android:color="#00F5D4" android:offset="0.0" />
+                <item android:color="#7928CA" android:offset="0.65" />
+                <item android:color="#B388FF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Frequency Wave Bars within the Gamma aperture -->
+    <!-- Bar 1 -->
+    <path
+        android:pathData="M 46,45 L 46,74"
+        android:strokeWidth="4"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="46"
+                android:startY="45"
+                android:endX="46"
+                android:endY="74"
+                android:type="linear">
+                <item android:color="#00F5D4" android:offset="0.0" />
+                <item android:color="#9D4EDD" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Bar 2 (Central High Resonance) -->
+    <path
+        android:pathData="M 55,39 L 55,80"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="55"
+                android:startY="39"
+                android:endX="55"
+                android:endY="80"
+                android:type="linear">
+                <item android:color="#5BFCE5" android:offset="0.0" />
+                <item android:color="#C77DFF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Bar 3 -->
+    <path
+        android:pathData="M 64,48 L 64,71"
+        android:strokeWidth="4"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="64"
+                android:startY="48"
+                android:endX="64"
+                android:endY="71"
+                android:type="linear">
+                <item android:color="#70E000" android:offset="0.0" />
+                <item android:color="#00F5D4" android:offset="0.4" />
+                <item android:color="#7928CA" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Bar 4 -->
+    <path
+        android:pathData="M 73,54 L 73,65"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="73"
+                android:startY="54"
+                android:endX="73"
+                android:endY="65"
+                android:type="linear">
+                <item android:color="#00F5D4" android:offset="0.0" />
+                <item android:color="#9D4EDD" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

@@ -1,0 +1,431 @@
+package com.example.feature.discover
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.core.ui.GammaAlbumCard
+import com.example.core.ui.GammaArtistCard
+import com.example.core.ui.GammaErrorState
+import com.example.core.ui.GammaFilterChip
+import com.example.core.ui.GammaInternetAccessDialog
+import com.example.core.ui.GammaInternetBanner
+import com.example.core.ui.GammaLoadingSkeleton
+import com.example.core.ui.GammaPlaylistCard
+import com.example.core.ui.GammaQuickPickCard
+import com.example.core.ui.GammaSectionHeader
+import com.example.core.ui.GammaTrackRow
+import com.example.core.ui.GammaUploadMusicDialog
+import com.example.core.util.NetworkMonitor
+import com.example.domain.model.Album
+import com.example.domain.model.Artist
+import com.example.domain.model.Playlist
+import com.example.domain.model.Track
+import com.example.ui.theme.GammaAuraBrush
+import com.example.ui.theme.GammaBackground
+import com.example.ui.theme.GammaPrimary
+import com.example.ui.theme.GammaSecondary
+import com.example.ui.theme.GammaSurfaceElevated
+import com.example.ui.theme.GammaSurfaceHighlight
+import com.example.ui.theme.GammaTextMuted
+import com.example.ui.theme.GammaTextPrimary
+import com.example.ui.theme.GammaTextSecondary
+
+@Composable
+fun DiscoverScreen(
+    viewModel: DiscoverViewModel,
+    currentPlayingTrackId: String?,
+    isPlaying: Boolean,
+    onTrackClick: (Track, List<Track>) -> Unit,
+    onArtistClick: (String) -> Unit,
+    onAlbumClick: (String) -> Unit,
+    onPlaylistClick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
+
+    var showUploadDialog by remember { mutableStateOf(false) }
+    var showInternetDialog by remember { mutableStateOf(false) }
+
+    if (showUploadDialog) {
+        GammaUploadMusicDialog(
+            onDismiss = { showUploadDialog = false },
+            onUploadConfirmed = { title, artist, freq, genre, yt, uri ->
+                viewModel.uploadTrack(title, artist, freq, genre, yt, uri)
+            }
+        )
+    }
+
+    if (showInternetDialog) {
+        GammaInternetAccessDialog(
+            onDismiss = { showInternetDialog = false },
+            onRetry = { viewModel.loadFeed() }
+        )
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(GammaAuraBrush)
+    ) {
+        when (val state = uiState) {
+            is DiscoverUiState.Loading -> {
+                GammaLoadingSkeleton()
+            }
+            is DiscoverUiState.Error -> {
+                GammaErrorState(
+                    message = state.message,
+                    onRetry = { viewModel.loadFeed() }
+                )
+            }
+            is DiscoverUiState.Success -> {
+                val feed = state.feed
+                val displayedTracks = if (state.selectedMood == "All") {
+                    feed.trendingTracks
+                } else {
+                    feed.moodPlaylists[state.selectedMood] ?: feed.trendingTracks
+                }
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag("discover_list"),
+                    contentPadding = PaddingValues(bottom = 120.dp)
+                ) {
+                    // Top Bar / Header with Upload Action and Network Status
+                    item {
+                        DiscoverHeader(
+                            isOnline = isOnline,
+                            onUploadClick = { showUploadDialog = true },
+                            onNetworkClick = { showInternetDialog = true }
+                        )
+                    }
+
+                    // Offline internet prompt banner if disconnected
+                    item {
+                        GammaInternetBanner(
+                            isOnline = isOnline,
+                            onOpenSettings = { NetworkMonitor.openNetworkSettings(context) }
+                        )
+                    }
+
+                    // Mood selector filters
+                    item {
+                        MoodSelectorRow(
+                            selectedMood = state.selectedMood,
+                            onMoodSelect = { viewModel.selectMood(it) }
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    // Dedicated Uploaded Signals Section (Discoverable Music!)
+                    if (feed.uploadedTracks.isNotEmpty()) {
+                        item {
+                            GammaSectionHeader(
+                                category = "Your Transmissions",
+                                title = "Uploaded Signals (${feed.uploadedTracks.size})"
+                            )
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.testTag("uploaded_tracks_row")
+                            ) {
+                                items(feed.uploadedTracks, key = { "up_disc_" + it.id }) { track ->
+                                    val isFav = state.favoriteIds.contains(track.id)
+                                    GammaQuickPickCard(
+                                        track = track.copy(isFavorite = isFav),
+                                        onClick = { onTrackClick(track, feed.uploadedTracks) }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+                    }
+
+                    // Quick Picks
+                    if (feed.quickPicks.isNotEmpty()) {
+                        item {
+                            GammaSectionHeader(
+                                category = "Trending Now",
+                                title = "Quick Picks"
+                            )
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.testTag("quick_picks_row")
+                            ) {
+                                items(feed.quickPicks, key = { it.id }) { track ->
+                                    GammaQuickPickCard(
+                                        track = track,
+                                        onClick = { onTrackClick(track, feed.quickPicks) }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+                    }
+
+                    // Continue Listening (Recent)
+                    if (state.recentTracks.isNotEmpty()) {
+                        item {
+                            GammaSectionHeader(
+                                category = "Your Orbit",
+                                title = "Continue Listening"
+                            )
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.testTag("recent_tracks_row")
+                            ) {
+                                items(state.recentTracks.take(5), key = { it.id }) { track ->
+                                    val isFav = state.favoriteIds.contains(track.id)
+                                    GammaQuickPickCard(
+                                        track = track.copy(isFavorite = isFav),
+                                        onClick = { onTrackClick(track, state.recentTracks) }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+                    }
+
+                    // Curated Playlists
+                    if (feed.featuredPlaylists.isNotEmpty()) {
+                        item {
+                            GammaSectionHeader(
+                                category = "Curated Soundwaves",
+                                title = "Featured Playlists"
+                            )
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                modifier = Modifier.testTag("featured_playlists_row")
+                            ) {
+                                items(feed.featuredPlaylists, key = { it.id }) { playlist ->
+                                    GammaPlaylistCard(
+                                        playlist = playlist,
+                                        onClick = { onPlaylistClick(playlist.id) }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+                    }
+
+                    // Trending Signals (Track List)
+                    item {
+                        GammaSectionHeader(
+                            category = "Featured Tracks",
+                            title = if (state.selectedMood == "All") "Trending Music" else "${state.selectedMood} Picks"
+                        )
+                    }
+
+                    items(displayedTracks.take(8), key = { it.id }) { track ->
+                        val isFav = state.favoriteIds.contains(track.id)
+                        val isCurr = track.id == currentPlayingTrackId
+                        Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                            GammaTrackRow(
+                                track = track.copy(isFavorite = isFav),
+                                isCurrentTrack = isCurr,
+                                isPlaying = isPlaying && isCurr,
+                                onClick = { onTrackClick(track, displayedTracks) },
+                                onFavoriteToggle = { viewModel.toggleFavorite(track) }
+                            )
+                        }
+                    }
+
+                    // Featured Albums
+                    if (feed.featuredAlbums.isNotEmpty()) {
+                        item {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            GammaSectionHeader(
+                                category = "Curated Releases",
+                                title = "Featured Albums"
+                            )
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                items(feed.featuredAlbums, key = { it.id }) { album ->
+                                    GammaAlbumCard(
+                                        album = album,
+                                        onClick = { onAlbumClick(album.id) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Featured Artists
+                    if (feed.featuredArtists.isNotEmpty()) {
+                        item {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            GammaSectionHeader(
+                                category = "Orbital Creators",
+                                title = "Featured Artists"
+                            )
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                items(feed.featuredArtists, key = { it.id }) { artist ->
+                                    GammaArtistCard(
+                                        artist = artist,
+                                        onClick = { onArtistClick(artist.id) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiscoverHeader(
+    isOnline: Boolean,
+    onUploadClick: () -> Unit,
+    onNetworkClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "GAMA",
+                    style = MaterialTheme.typography.displayMedium.copy(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(GammaPrimary, GammaSecondary)
+                        )
+                    )
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(GammaPrimary, CircleShape)
+                )
+            }
+            Text(
+                text = "Your personal music space",
+                style = MaterialTheme.typography.bodyMedium,
+                color = GammaTextSecondary
+            )
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Upload button
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(GammaPrimary)
+                    .clickable(onClick = onUploadClick)
+                    .padding(horizontal = 12.dp, vertical = 7.dp)
+                    .testTag("upload_music_button")
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.CloudUpload,
+                        contentDescription = "Upload Music",
+                        tint = GammaSurfaceElevated,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = "Upload",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = GammaSurfaceElevated
+                    )
+                }
+            }
+
+            // Network indicator
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(GammaSurfaceElevated)
+                    .clickable(onClick = onNetworkClick)
+                    .padding(8.dp)
+                    .testTag("network_indicator_badge")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Wifi,
+                    contentDescription = "Network Status",
+                    tint = if (isOnline) GammaPrimary else GammaTextMuted,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MoodSelectorRow(
+    selectedMood: String,
+    onMoodSelect: (String) -> Unit
+) {
+    val moods = listOf("All", "Hip-Hop", "Rock & Metal", "Pop Hits", "Classics")
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(moods) { mood ->
+            GammaFilterChip(
+                text = mood,
+                selected = mood == selectedMood,
+                onClick = { onMoodSelect(mood) }
+            )
+        }
+    }
+}
