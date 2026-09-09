@@ -25,19 +25,25 @@ A native iOS application engineered with **SwiftUI**, **AVAudioSession**, **Medi
 
 ---
 
-## 🚀 Building & Running
+## 🚀 Building & Installing
 
-### 1. Open the Project in Xcode
+### 💻 Installing from a Windows Laptop (No Mac Required)
+If you are developing on a Windows machine, you do **not** need a Mac:
+1. GitHub Actions automatically builds the `.ipa` using cloud macOS runners on every push.
+2. Download `GAMA-v1.0-iOS-IPA` from the repository's [GitHub Actions](https://github.com/sudovu/Project_gama/actions) tab.
+3. Use **Sideloadly for Windows** to sign and install the app directly onto your iPhone over USB using any standard free Apple ID!
+4. 👉 Full detailed step-by-step instructions: [Windows to iOS Installation Guide](WINDOWS_INSTALL_GUIDE.md).
+
+---
+
+### 🍏 Installing from macOS / Xcode
+1. Open the project in Xcode:
 ```bash
 open ios/GamaMusic.xcodeproj
 ```
-
-### 2. Select Scheme & Target Device
-- In the top toolbar, select the `GamaMusic` scheme.
-- Choose your connected iPhone or an iOS Simulator (e.g., iPhone 15 Pro).
-
-### 3. Run the App
-- Press `Cmd + R` or click the **Play** button in Xcode to build and launch the application.
+2. In the top toolbar, select the `GamaMusic` scheme and your connected iPhone.
+3. Under **Signing & Capabilities**, select your Apple ID.
+4. Press `Cmd + R` (Play) to run and install directly to your device.
 
 ---
 

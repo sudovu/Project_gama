@@ -73,11 +73,8 @@ GAMMA/
 ---
 
 ### 🍎 3. iOS (iPhone & iPad)
-- **Prerequisites**: macOS, Xcode 14.0+ (iOS 16.0+ deployment target).
-- **Run in Xcode**:
-  ```bash
-  open ios/GamaMusic.xcodeproj
-  ```
+- **Installing from a Windows Laptop**: No Mac required! Automated GitHub Actions compiles `GAMA-v1.0.ipa` on free cloud macOS runners. Use **Sideloadly for Windows** to install via USB with any free Apple ID. See [`ios/WINDOWS_INSTALL_GUIDE.md`](file:///C:/Users/Sudo/antigravity/GAMMA/ios/WINDOWS_INSTALL_GUIDE.md).
+- **Installing from macOS**: Open `ios/GamaMusic.xcodeproj` in Xcode and press `Cmd + R` to run directly on your connected iPhone.
 - Supports background playback mode (`UIBackgroundModes: audio`) and full Control Center / Dynamic Island / Lock Screen controls via `MPNowPlayingInfoCenter`.
 - See [`ios/README.md`](file:///C:/Users/Sudo/antigravity/GAMMA/ios/README.md) for details.
 
