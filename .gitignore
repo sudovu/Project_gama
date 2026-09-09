@@ -19,3 +19,14 @@ app/build
 /*.png
 /*.xml
 /*.log
+
+# Windows Desktop
+windows/node_modules/
+windows/dist/
+windows/.vite/
+
+# iOS
+ios/build/
+*.xcuserdata
+*.xcworkspace/xcuserdata/
+DerivedData/
