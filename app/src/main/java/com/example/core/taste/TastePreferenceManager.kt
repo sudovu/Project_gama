@@ -2,10 +2,14 @@ package com.example.core.taste
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.example.core.media.SmartQueueEngine
+import com.example.data.provider.YouTubeProvider
 import com.example.domain.model.Track
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 
 class TastePreferenceManager(context: Context) {
 
@@ -20,6 +24,9 @@ class TastePreferenceManager(context: Context) {
     private val _spotifyTastes = MutableStateFlow(loadList(KEY_SPOTIFY_TASTES, listOf("Rock & Metal", "Alternative Rock", "Cyberpunk", "Nu Metal")))
     val spotifyTastes: StateFlow<List<String>> = _spotifyTastes.asStateFlow()
 
+    private val _spotifyTracks = MutableStateFlow<List<Track>>(emptyList())
+    val spotifyTracks: StateFlow<List<Track>> = _spotifyTracks.asStateFlow()
+
     private val _isGoogleLinked = MutableStateFlow(prefs.getBoolean(KEY_GOOGLE_LINKED, false))
     val isGoogleLinked: StateFlow<Boolean> = _isGoogleLinked.asStateFlow()
 
@@ -28,6 +35,12 @@ class TastePreferenceManager(context: Context) {
 
     private val _youtubeTastes = MutableStateFlow(loadList(KEY_YOUTUBE_TASTES, listOf("432Hz Ambient", "Progressive Metal", "Synthwave", "Heavy Drums")))
     val youtubeTastes: StateFlow<List<String>> = _youtubeTastes.asStateFlow()
+
+    private val _googleTracks = MutableStateFlow<List<Track>>(emptyList())
+    val googleTracks: StateFlow<List<Track>> = _googleTracks.asStateFlow()
+
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
     private val _lastSyncTime = MutableStateFlow(prefs.getLong(KEY_LAST_SYNC, 0L))
     val lastSyncTime: StateFlow<Long> = _lastSyncTime.asStateFlow()
@@ -54,6 +67,7 @@ class TastePreferenceManager(context: Context) {
 
         _isSpotifyLinked.value = false
         _spotifyUsername.value = ""
+        _spotifyTracks.value = emptyList()
     }
 
     fun linkGoogle(email: String = "google.user@gmail.com", tastes: List<String> = listOf("432Hz Ambient", "Progressive Metal", "Synthwave")) {
@@ -78,6 +92,54 @@ class TastePreferenceManager(context: Context) {
 
         _isGoogleLinked.value = false
         _googleEmail.value = ""
+        _googleTracks.value = emptyList()
+    }
+
+    suspend fun syncLiveTastes(youtubeProvider: YouTubeProvider) = withContext(Dispatchers.IO) {
+        _isSyncing.value = true
+        try {
+            if (_isSpotifyLinked.value) {
+                val tastes = _spotifyTastes.value
+                val fetched = mutableListOf<Track>()
+                for (taste in tastes.take(3)) {
+                    try {
+                        val res = youtubeProvider.searchWithScope("$taste hits single official music video", "YOUTUBE_MUSIC")
+                        res.getOrNull()?.tracks?.let { list ->
+                            val singles = list.filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
+                            fetched.addAll(singles.take(3))
+                        }
+                    } catch (_: Exception) {}
+                }
+                if (fetched.isNotEmpty()) {
+                    _spotifyTracks.value = fetched.distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
+                }
+            }
+
+            if (_isGoogleLinked.value) {
+                val tastes = _youtubeTastes.value
+                val fetched = mutableListOf<Track>()
+                for (taste in tastes.take(3)) {
+                    try {
+                        val res = youtubeProvider.searchWithScope("$taste tracks single official music video", "YOUTUBE_MUSIC")
+                        res.getOrNull()?.tracks?.let { list ->
+                            val singles = list.filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
+                            fetched.addAll(singles.take(3))
+                        }
+                    } catch (_: Exception) {}
+                }
+                if (fetched.isNotEmpty()) {
+                    _googleTracks.value = fetched.distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
+                }
+            }
+
+            val now = System.currentTimeMillis()
+            prefs.edit().putLong(KEY_LAST_SYNC, now).apply()
+            _lastSyncTime.value = now
+        } catch (e: Exception) {
+            android.util.Log.e("TastePreference", "Error syncing tastes", e)
+        } finally {
+            _isSyncing.value = false
+        }
     }
 
     fun syncAllTastes() {
@@ -88,6 +150,8 @@ class TastePreferenceManager(context: Context) {
 
     fun getSpotifyAdaptedRecommendations(catalog: List<Track>): List<Track> {
         if (!_isSpotifyLinked.value) return emptyList()
+        val liveTracks = _spotifyTracks.value
+        if (liveTracks.isNotEmpty()) return liveTracks
         val activeTastes = _spotifyTastes.value
         return catalog.filter { track ->
             activeTastes.any { taste ->
@@ -100,6 +164,8 @@ class TastePreferenceManager(context: Context) {
 
     fun getYouTubeAdaptedRecommendations(catalog: List<Track>): List<Track> {
         if (!_isGoogleLinked.value) return emptyList()
+        val liveTracks = _googleTracks.value
+        if (liveTracks.isNotEmpty()) return liveTracks
         val activeTastes = _youtubeTastes.value
         return catalog.filter { track ->
             activeTastes.any { taste ->

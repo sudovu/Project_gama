@@ -324,7 +324,10 @@ fun GammaApp(
                 }
 
                 composable(Screen.Settings.route) {
-                    ProfileSettingsScreen(playbackManager = container.playbackManager)
+                    ProfileSettingsScreen(
+                        playbackManager = container.playbackManager,
+                        youtubeProvider = container.youtubeProvider
+                    )
                 }
 
                 composable("artist/{artistId}", arguments = listOf(navArgument("artistId") { type = NavType.StringType })) { backStackEntry ->
@@ -425,182 +428,191 @@ fun GammaApp(
             it.youtubeVideoId.isNotEmpty() && it.localAudioUri.isEmpty()
         } ?: false
 
-        // Persistent background audio: keep YouTube host active offscreen if user closes video to play music only
-        if (isYouTubeTrack && isVideoClosed) {
-            Box(
-                modifier = Modifier
+        if (isYouTubeTrack) {
+            val showVideoUi = !isVideoClosed && (isVideoFullscreen || !isVideoPipMinimized || isPlayerScreen)
+            val isFullscreenActive = isVideoFullscreen && showVideoUi
+
+            val videoWidth by animateDpAsState(
+                targetValue = when {
+                    !showVideoUi -> 1.dp
+                    isPlayerScreen -> 320.dp
+                    else -> 220.dp
+                },
+                label = "videoWidth"
+            )
+            val videoHeight by animateDpAsState(
+                targetValue = when {
+                    !showVideoUi -> 1.dp
+                    isPlayerScreen -> 210.dp
+                    else -> 130.dp
+                },
+                label = "videoHeight"
+            )
+            val cornerRadius by animateDpAsState(
+                targetValue = when {
+                    !showVideoUi -> 0.dp
+                    isPlayerScreen -> 20.dp
+                    else -> 12.dp
+                },
+                label = "cornerRadius"
+            )
+
+            val outerModifier = when {
+                isFullscreenActive -> Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+                    .zIndex(500f)
+                showVideoUi -> Modifier
+                    .fillMaxSize()
+                    .padding(
+                        top = if (isPlayerScreen) 86.dp else 0.dp,
+                        bottom = if (isPlayerScreen) 0.dp else 148.dp,
+                        end = if (isPlayerScreen) 0.dp else 14.dp
+                    )
+                    .zIndex(200f)
+                else -> Modifier
                     .size(1.dp)
                     .alpha(0.001f)
-            ) {
-                CompliantYouTubeHost(
-                    playbackManager = container.playbackManager,
-                    modifier = Modifier.fillMaxSize()
-                )
+                    .zIndex(-100f)
             }
-        }
 
-        if (isYouTubeTrack && !isVideoClosed) {
-            if (isVideoFullscreen) {
-                // ==========================================
-                // 1. FULLSCREEN VIDEO MODE (NO NAVIGATION BAR)
-                // ==========================================
+            Box(
+                modifier = outerModifier,
+                contentAlignment = when {
+                    isFullscreenActive -> Alignment.Center
+                    isPlayerScreen -> Alignment.TopCenter
+                    else -> Alignment.BottomEnd
+                }
+            ) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black)
-                        .zIndex(500f)
+                    modifier = if (isFullscreenActive) {
+                        Modifier.fillMaxSize()
+                    } else {
+                        Modifier
+                            .size(width = videoWidth, height = videoHeight)
+                            .then(
+                                if (showVideoUi) {
+                                    Modifier
+                                        .clip(RoundedCornerShape(cornerRadius))
+                                        .background(Color.Black)
+                                        .border(1.5.dp, GammaGlowCyan, RoundedCornerShape(cornerRadius))
+                                        .clickable(enabled = !isPlayerScreen) {
+                                            navController.navigate(Screen.Player.route)
+                                        }
+                                } else {
+                                    Modifier.alpha(0.001f)
+                                }
+                            )
+                    }
                 ) {
+                    // SINGLE UNIFIED PERSISTENT YOUTUBE HOST:
+                    // Guaranteed never to unmount or destroy WebView across UI state changes
                     CompliantYouTubeHost(
                         playbackManager = container.playbackManager,
                         modifier = Modifier.fillMaxSize()
                     )
 
-                    // Cybernetic Top Control Bar Overlay
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .align(Alignment.TopCenter)
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent)
-                                )
-                            )
-                            .statusBarsPadding()
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    if (isFullscreenActive) {
+                        // Cybernetic Top Control Bar Overlay (Fullscreen)
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .background(GammaPrimary, CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    text = playbackState.currentTrack?.title ?: "GAMA",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = Color.White,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.TopCenter)
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent)
+                                    )
                                 )
-                                Text(
-                                    text = "${playbackState.currentTrack?.artist ?: "Unknown"} • 432Hz FULLSCREEN",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = GammaPrimary,
-                                    fontSize = 11.sp
-                                )
-                            }
-                        }
-
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                .statusBarsPadding()
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Minimize button (collapses video to corner and displays navigation bar)
-                            IconButton(
-                                onClick = {
-                                    isVideoFullscreen = false
-                                    if (isPlayerScreen) {
-                                        navController.popBackStack()
-                                    }
-                                },
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .testTag("video_minimize_button")
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.KeyboardArrowDown,
-                                    contentDescription = "Minimize video to navigation bar",
-                                    tint = GammaPrimary,
-                                    modifier = Modifier.size(20.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .background(GammaPrimary, CircleShape)
                                 )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = playbackState.currentTrack?.title ?: "GAMA",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = Color.White,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "${playbackState.currentTrack?.artist ?: "Unknown"} • 432Hz FULLSCREEN",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = GammaPrimary,
+                                        fontSize = 11.sp
+                                    )
+                                }
                             }
 
-                            // Exit Fullscreen button (returns to player screen)
-                            IconButton(
-                                onClick = {
-                                    isVideoFullscreen = false
-                                },
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .testTag("video_exit_fullscreen_button")
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.FullscreenExit,
-                                    contentDescription = "Exit Fullscreen",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
+                                IconButton(
+                                    onClick = {
+                                        isVideoFullscreen = false
+                                        if (isPlayerScreen) {
+                                            navController.popBackStack()
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .testTag("video_minimize_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = "Minimize video to navigation bar",
+                                        tint = GammaPrimary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
 
-                            // Cross (Close) button: closes video & continues playing music only
-                            IconButton(
-                                onClick = {
-                                    isVideoFullscreen = false
-                                    isVideoClosed = true
-                                    // Switches seamlessly to music-only mode without stopping playback
-                                },
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .testTag("video_close_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Close video (play music only)",
-                                    tint = Color(0xFFFF5252),
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                IconButton(
+                                    onClick = {
+                                        isVideoFullscreen = false
+                                    },
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .testTag("video_exit_fullscreen_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.FullscreenExit,
+                                        contentDescription = "Exit Fullscreen",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = {
+                                        isVideoFullscreen = false
+                                        isVideoClosed = true
+                                    },
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .testTag("video_close_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Close video (play music only)",
+                                        tint = Color(0xFFFF5252),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
-                    }
-                }
-            } else if (!isVideoPipMinimized || isPlayerScreen) {
-                // ==========================================
-                // 2. EXPANDED PLAYER SCREEN OR MINIMIZED CORNER PIP
-                // ==========================================
-                val videoWidth by animateDpAsState(
-                    targetValue = if (isPlayerScreen) 320.dp else 220.dp,
-                    label = "videoWidth"
-                )
-                val videoHeight by animateDpAsState(
-                    targetValue = if (isPlayerScreen) 210.dp else 130.dp,
-                    label = "videoHeight"
-                )
-                val cornerRadius by animateDpAsState(
-                    targetValue = if (isPlayerScreen) 20.dp else 12.dp,
-                    label = "cornerRadius"
-                )
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(
-                            top = if (isPlayerScreen) 86.dp else 0.dp,
-                            bottom = if (isPlayerScreen) 0.dp else 148.dp,
-                            end = if (isPlayerScreen) 0.dp else 14.dp
-                        ),
-                    contentAlignment = if (isPlayerScreen) Alignment.TopCenter else Alignment.BottomEnd
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(width = videoWidth, height = videoHeight)
-                            .clip(RoundedCornerShape(cornerRadius))
-                            .background(Color.Black)
-                            .border(1.5.dp, GammaGlowCyan, RoundedCornerShape(cornerRadius))
-                            .clickable(enabled = !isPlayerScreen) {
-                                navController.navigate(Screen.Player.route)
-                            }
-                    ) {
-                        CompliantYouTubeHost(
-                            playbackManager = container.playbackManager,
-                            modifier = Modifier.fillMaxSize()
-                        )
-
+                    } else if (showVideoUi) {
                         // Top Controls Overlay Bar on Video (Minimize, Fullscreen, Cross)
                         Row(
                             modifier = Modifier
@@ -615,7 +627,6 @@ fun GammaApp(
                             horizontalArrangement = Arrangement.End,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Minimize Button: Collapses player screen or docks corner PiP to mini-player
                             IconButton(
                                 onClick = {
                                     if (isPlayerScreen) {
@@ -640,7 +651,6 @@ fun GammaApp(
 
                             Spacer(modifier = Modifier.width(6.dp))
 
-                            // Fullscreen Button: Expands to 100% fullscreen (hiding navigation bar)
                             IconButton(
                                 onClick = {
                                     isVideoFullscreen = true
@@ -659,11 +669,9 @@ fun GammaApp(
 
                             Spacer(modifier = Modifier.width(6.dp))
 
-                            // Cross (Close) Button: Closes video & continues playing music only
                             IconButton(
                                 onClick = {
                                     isVideoClosed = true
-                                    // Continues playing music without stopping playback
                                 },
                                 modifier = Modifier
                                     .size(28.dp)

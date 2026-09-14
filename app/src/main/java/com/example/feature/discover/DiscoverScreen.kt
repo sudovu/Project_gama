@@ -91,6 +91,8 @@ fun DiscoverScreen(
     val isGoogleLinked by tasteManager.isGoogleLinked.collectAsStateWithLifecycle()
     val spotifyTastes by tasteManager.spotifyTastes.collectAsStateWithLifecycle()
     val youtubeTastes by tasteManager.youtubeTastes.collectAsStateWithLifecycle()
+    val liveSpotifyTracks by tasteManager.spotifyTracks.collectAsStateWithLifecycle()
+    val liveGoogleTracks by tasteManager.googleTracks.collectAsStateWithLifecycle()
 
     var showUploadDialog by remember { mutableStateOf(false) }
     var showInternetDialog by remember { mutableStateOf(false) }
@@ -134,10 +136,10 @@ fun DiscoverScreen(
                     feed.moodPlaylists[state.selectedMood] ?: feed.trendingTracks
                 }
 
-                val spotifyTracks = remember(feed, isSpotifyLinked) {
+                val spotifyTracks = remember(feed, isSpotifyLinked, liveSpotifyTracks) {
                     tasteManager.getSpotifyAdaptedRecommendations(feed.quickPicks + feed.trendingTracks)
                 }
-                val ytTracks = remember(feed, isGoogleLinked) {
+                val ytTracks = remember(feed, isGoogleLinked, liveGoogleTracks) {
                     tasteManager.getYouTubeAdaptedRecommendations(feed.quickPicks + feed.trendingTracks)
                 }
 

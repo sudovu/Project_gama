@@ -63,14 +63,20 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.example.data.provider.YouTubeProvider
+import kotlinx.coroutines.launch
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -113,13 +119,15 @@ import com.example.ui.theme.GammaThemeManager
 import com.example.ui.theme.GammaThemePreset
 import java.io.File
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ProfileSettingsScreen(
     playbackManager: PlaybackManager? = null,
+    youtubeProvider: YouTubeProvider? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
 
     val playbackState = playbackManager?.playbackState?.collectAsStateWithLifecycle()?.value
@@ -136,16 +144,20 @@ fun ProfileSettingsScreen(
     val isGoogleLinked by tasteManager.isGoogleLinked.collectAsStateWithLifecycle()
     val googleEmail by tasteManager.googleEmail.collectAsStateWithLifecycle()
     val youtubeTastes by tasteManager.youtubeTastes.collectAsStateWithLifecycle()
+    val isSyncing by tasteManager.isSyncing.collectAsStateWithLifecycle()
 
     val developerName = "VHUWON MATHERS"
     val developerEmail = "vhuwonmathers@gmail.com"
     val developerUsername = "sudovu"
     val developerPhone = "9869367788"
 
-    var showSpotifyEditDialog by remember { mutableStateOf(false) }
+    var showSpotifyConnectDialog by remember { mutableStateOf(false) }
     var editSpotifyUser by remember(spotifyUser) { mutableStateOf(if (spotifyUser.isNotEmpty()) spotifyUser else "vhuwon.mathers") }
-    var showGoogleEditDialog by remember { mutableStateOf(false) }
+    var selectedSpotifyTastes by remember(spotifyTastes) { mutableStateOf(spotifyTastes.toSet()) }
+
+    var showGoogleConnectDialog by remember { mutableStateOf(false) }
     var editGoogleEmail by remember(googleEmail) { mutableStateOf(if (googleEmail.isNotEmpty()) googleEmail else "vhuwonmathers@gmail.com") }
+    var selectedGoogleTastes by remember(youtubeTastes) { mutableStateOf(youtubeTastes.toSet()) }
 
     val launchUrl: (String) -> Unit = { url ->
         try {
@@ -664,23 +676,38 @@ fun ProfileSettingsScreen(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(GammaPrimary.copy(alpha = 0.15f))
-                                .clickable {
-                                    tasteManager.syncAllTastes()
-                                    Toast.makeText(context, "Music tastes synchronized with Discover feed!", Toast.LENGTH_SHORT).show()
+                                .clickable(enabled = !isSyncing) {
+                                    if (youtubeProvider != null) {
+                                        coroutineScope.launch {
+                                            tasteManager.syncLiveTastes(youtubeProvider)
+                                            Toast.makeText(context, "Music tastes synchronized with Discover feed!", Toast.LENGTH_SHORT).show()
+                                        }
+                                    } else {
+                                        tasteManager.syncAllTastes()
+                                        Toast.makeText(context, "Music tastes synchronized with Discover feed!", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                                 .testTag("sync_all_tastes_button")
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Sync,
-                                    contentDescription = "Sync",
-                                    tint = GammaPrimary,
-                                    modifier = Modifier.size(12.dp)
-                                )
+                                if (isSyncing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(12.dp),
+                                        strokeWidth = 1.5.dp,
+                                        color = GammaPrimary
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Sync,
+                                        contentDescription = "Sync",
+                                        tint = GammaPrimary,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "SYNC TASTES",
+                                    text = if (isSyncing) "SYNCING..." else "SYNC TASTES",
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 10.sp
@@ -752,7 +779,8 @@ fun ProfileSettingsScreen(
                                                         .size(14.dp)
                                                         .clickable {
                                                             editSpotifyUser = if (spotifyUser.isNotEmpty()) spotifyUser else "vhuwon.mathers"
-                                                            showSpotifyEditDialog = true
+                                                            selectedSpotifyTastes = spotifyTastes.toSet()
+                                                            showSpotifyConnectDialog = true
                                                         }
                                                 )
                                             }
@@ -765,7 +793,7 @@ fun ProfileSettingsScreen(
                                         .clip(RoundedCornerShape(12.dp))
                                         .background(
                                             if (isSpotifyLinked) Color(0xFF1DB954).copy(alpha = 0.2f)
-                                            else GammaSurfaceHighlight
+                                             else GammaSurfaceHighlight
                                         )
                                         .padding(horizontal = 10.dp, vertical = 5.dp)
                                 ) {
@@ -823,15 +851,27 @@ fun ProfileSettingsScreen(
                                     }
                                     OutlinedButton(
                                         onClick = {
-                                            tasteManager.syncAllTastes()
-                                            Toast.makeText(context, "Spotify tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
+                                            if (youtubeProvider != null) {
+                                                coroutineScope.launch {
+                                                    tasteManager.syncLiveTastes(youtubeProvider)
+                                                    Toast.makeText(context, "Spotify tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
+                                                }
+                                            } else {
+                                                tasteManager.syncAllTastes()
+                                                Toast.makeText(context, "Spotify tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
+                                            }
                                         },
+                                        enabled = !isSyncing,
                                         modifier = Modifier.weight(1f).height(38.dp),
                                         shape = RoundedCornerShape(10.dp)
                                     ) {
-                                        Icon(imageVector = Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF1DB954))
+                                        if (isSyncing) {
+                                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp, color = Color(0xFF1DB954))
+                                        } else {
+                                            Icon(imageVector = Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF1DB954))
+                                        }
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Sync Taste", style = MaterialTheme.typography.labelSmall, color = Color(0xFF1DB954))
+                                        Text(if (isSyncing) "Syncing..." else "Sync Taste", style = MaterialTheme.typography.labelSmall, color = Color(0xFF1DB954))
                                     }
                                     OutlinedButton(
                                         onClick = {
@@ -852,11 +892,9 @@ fun ProfileSettingsScreen(
                                 )
                                 Button(
                                     onClick = {
-                                        val spotifyAuthUrl = "https://accounts.spotify.com/en/login?continue=https%3A%2F%2Fopen.spotify.com"
-                                        launchUrl(spotifyAuthUrl)
-                                        val username = if (spotifyUser.isNotEmpty()) spotifyUser else "vhuwon.mathers"
-                                        tasteManager.linkSpotify(username, listOf("Rock & Metal", "Alternative Rock", "Cyberpunk", "Nu Metal"))
-                                        Toast.makeText(context, "Opening Spotify for linking... Account synced!", Toast.LENGTH_LONG).show()
+                                        editSpotifyUser = if (spotifyUser.isNotEmpty()) spotifyUser else "vhuwon.mathers"
+                                        selectedSpotifyTastes = spotifyTastes.toSet()
+                                        showSpotifyConnectDialog = true
                                     },
                                     modifier = Modifier.fillMaxWidth().height(40.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954)),
@@ -928,7 +966,8 @@ fun ProfileSettingsScreen(
                                                         .size(14.dp)
                                                         .clickable {
                                                             editGoogleEmail = if (googleEmail.isNotEmpty()) googleEmail else "vhuwonmathers@gmail.com"
-                                                            showGoogleEditDialog = true
+                                                            selectedGoogleTastes = youtubeTastes.toSet()
+                                                            showGoogleConnectDialog = true
                                                         }
                                                 )
                                             }
@@ -941,7 +980,7 @@ fun ProfileSettingsScreen(
                                         .clip(RoundedCornerShape(12.dp))
                                         .background(
                                             if (isGoogleLinked) Color(0xFFFF0000).copy(alpha = 0.2f)
-                                            else GammaSurfaceHighlight
+                                             else GammaSurfaceHighlight
                                         )
                                         .padding(horizontal = 10.dp, vertical = 5.dp)
                                 ) {
@@ -999,15 +1038,27 @@ fun ProfileSettingsScreen(
                                     }
                                     OutlinedButton(
                                         onClick = {
-                                            tasteManager.syncAllTastes()
-                                            Toast.makeText(context, "YouTube Music tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
+                                            if (youtubeProvider != null) {
+                                                coroutineScope.launch {
+                                                    tasteManager.syncLiveTastes(youtubeProvider)
+                                                    Toast.makeText(context, "YouTube Music tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
+                                                }
+                                            } else {
+                                                tasteManager.syncAllTastes()
+                                                Toast.makeText(context, "YouTube Music tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
+                                            }
                                         },
+                                        enabled = !isSyncing,
                                         modifier = Modifier.weight(1f).height(38.dp),
                                         shape = RoundedCornerShape(10.dp)
                                     ) {
-                                        Icon(imageVector = Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFFFF4D4D))
+                                        if (isSyncing) {
+                                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp, color = Color(0xFFFF4D4D))
+                                        } else {
+                                            Icon(imageVector = Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFFFF4D4D))
+                                        }
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Sync Taste", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF4D4D))
+                                        Text(if (isSyncing) "Syncing..." else "Sync Taste", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF4D4D))
                                     }
                                     OutlinedButton(
                                         onClick = {
@@ -1028,11 +1079,9 @@ fun ProfileSettingsScreen(
                                 )
                                 Button(
                                     onClick = {
-                                        val googleAuthUrl = "https://accounts.google.com/AccountChooser?service=youtube&continue=https%3A%2F%2Fmusic.youtube.com%2F"
-                                        launchUrl(googleAuthUrl)
-                                        val email = if (googleEmail.isNotEmpty()) googleEmail else "vhuwonmathers@gmail.com"
-                                        tasteManager.linkGoogle(email, listOf("432Hz Ambient", "Progressive Metal", "Synthwave", "Heavy Drums"))
-                                        Toast.makeText(context, "Opening Google to link YouTube Music... Account synced!", Toast.LENGTH_LONG).show()
+                                        editGoogleEmail = if (googleEmail.isNotEmpty()) googleEmail else "vhuwonmathers@gmail.com"
+                                        selectedGoogleTastes = youtubeTastes.toSet()
+                                        showGoogleConnectDialog = true
                                     },
                                     modifier = Modifier.fillMaxWidth().height(40.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF0000)),
@@ -1123,43 +1172,97 @@ fun ProfileSettingsScreen(
         }
     }
 
-    if (showSpotifyEditDialog) {
+    if (showSpotifyConnectDialog) {
+        val availableSpotifyTastes = listOf(
+            "Rock & Metal", "Alternative Rock", "Cyberpunk", "Nu Metal",
+            "Hip-Hop", "Synthwave", "Pop Classics", "Indie Rock",
+            "Electronic / EDM", "Lo-Fi Beats", "432Hz Ambient", "Acoustic"
+        )
         AlertDialog(
-            onDismissRequest = { showSpotifyEditDialog = false },
+            onDismissRequest = { showSpotifyConnectDialog = false },
             title = {
-                Text("Edit Spotify Account", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = GammaTextPrimary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.GraphicEq,
+                        contentDescription = null,
+                        tint = Color(0xFF1DB954),
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        if (isSpotifyLinked) "Edit Spotify Taste Profile" else "Connect Spotify Account",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = GammaTextPrimary
+                    )
+                }
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(
-                        "Update the connected Spotify username or profile identifier to customize taste synchronization.",
+                        "Enter your Spotify handle and select your favorite genres. GAMA adapts your soundwave feed with live synced tracks!",
                         style = MaterialTheme.typography.bodySmall,
                         color = GammaTextSecondary
                     )
                     OutlinedTextField(
                         value = editSpotifyUser,
                         onValueChange = { editSpotifyUser = it },
-                        label = { Text("Spotify Username") },
+                        label = { Text("Spotify Username / Profile") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Text(
+                        "Select Favorite Genres & Tastes:",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = GammaPrimary
+                    )
+
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        availableSpotifyTastes.forEach { taste ->
+                            val isSelected = selectedSpotifyTastes.contains(taste)
+                            GammaFilterChip(
+                                text = taste,
+                                selected = isSelected,
+                                onClick = {
+                                    selectedSpotifyTastes = if (isSelected) {
+                                        selectedSpotifyTastes - taste
+                                    } else {
+                                        selectedSpotifyTastes + taste
+                                    }
+                                }
+                            )
+                        }
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         val finalUser = editSpotifyUser.trim().ifEmpty { "vhuwon.mathers" }
-                        tasteManager.linkSpotify(finalUser, spotifyTastes.ifEmpty { listOf("Rock & Metal", "Alternative Rock", "Cyberpunk", "Nu Metal") })
-                        showSpotifyEditDialog = false
-                        Toast.makeText(context, "Spotify profile updated!", Toast.LENGTH_SHORT).show()
+                        val finalTastes = selectedSpotifyTastes.toList().ifEmpty { listOf("Rock & Metal", "Cyberpunk", "Alternative Rock") }
+                        tasteManager.linkSpotify(finalUser, finalTastes)
+                        if (youtubeProvider != null) {
+                            coroutineScope.launch {
+                                tasteManager.syncLiveTastes(youtubeProvider)
+                            }
+                        }
+                        showSpotifyConnectDialog = false
+                        Toast.makeText(context, "Spotify connected & music tastes syncing!", Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954))
                 ) {
-                    Text("Save", color = Color.Black)
+                    Text(if (isSpotifyLinked) "Save & Sync" else "Connect & Sync", color = Color.Black, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showSpotifyEditDialog = false }) {
+                TextButton(onClick = { showSpotifyConnectDialog = false }) {
                     Text("Cancel", color = GammaTextSecondary)
                 }
             },
@@ -1167,16 +1270,37 @@ fun ProfileSettingsScreen(
         )
     }
 
-    if (showGoogleEditDialog) {
+    if (showGoogleConnectDialog) {
+        val availableGoogleTastes = listOf(
+            "432Hz Ambient", "Progressive Metal", "Synthwave", "Heavy Drums",
+            "Lo-Fi Chill", "Vocal Focus", "Orchestral", "Deep House",
+            "Acoustic Folk", "Hip-Hop", "Electronic / EDM", "Pop Classics"
+        )
         AlertDialog(
-            onDismissRequest = { showGoogleEditDialog = false },
+            onDismissRequest = { showGoogleConnectDialog = false },
             title = {
-                Text("Edit Google Account", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = GammaTextPrimary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Sensors,
+                        contentDescription = null,
+                        tint = Color(0xFFFF0000),
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        if (isGoogleLinked) "Edit YouTube Music Profile" else "Connect Google & YouTube Music",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = GammaTextPrimary
+                    )
+                }
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(
-                        "Update the connected Google Account email to sync personalized YouTube Music taste preferences.",
+                        "Enter your Google Account email and choose your favorite musical resonances. Real single tracks will sync to your Discover feed.",
                         style = MaterialTheme.typography.bodySmall,
                         color = GammaTextSecondary
                     )
@@ -1187,23 +1311,56 @@ fun ProfileSettingsScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Text(
+                        "Select Musical Resonances:",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = GammaPrimary
+                    )
+
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        availableGoogleTastes.forEach { taste ->
+                            val isSelected = selectedGoogleTastes.contains(taste)
+                            GammaFilterChip(
+                                text = taste,
+                                selected = isSelected,
+                                onClick = {
+                                    selectedGoogleTastes = if (isSelected) {
+                                        selectedGoogleTastes - taste
+                                    } else {
+                                        selectedGoogleTastes + taste
+                                    }
+                                }
+                            )
+                        }
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         val finalEmail = editGoogleEmail.trim().ifEmpty { "vhuwonmathers@gmail.com" }
-                        tasteManager.linkGoogle(finalEmail, youtubeTastes.ifEmpty { listOf("432Hz Ambient", "Progressive Metal", "Synthwave", "Heavy Drums") })
-                        showGoogleEditDialog = false
-                        Toast.makeText(context, "Google profile updated!", Toast.LENGTH_SHORT).show()
+                        val finalTastes = selectedGoogleTastes.toList().ifEmpty { listOf("432Hz Ambient", "Progressive Metal", "Synthwave") }
+                        tasteManager.linkGoogle(finalEmail, finalTastes)
+                        if (youtubeProvider != null) {
+                            coroutineScope.launch {
+                                tasteManager.syncLiveTastes(youtubeProvider)
+                            }
+                        }
+                        showGoogleConnectDialog = false
+                        Toast.makeText(context, "Google connected & YouTube Music syncing!", Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF0000))
                 ) {
-                    Text("Save", color = Color.White)
+                    Text(if (isGoogleLinked) "Save & Sync" else "Connect & Sync", color = Color.White, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showGoogleEditDialog = false }) {
+                TextButton(onClick = { showGoogleConnectDialog = false }) {
                     Text("Cancel", color = GammaTextSecondary)
                 }
             },

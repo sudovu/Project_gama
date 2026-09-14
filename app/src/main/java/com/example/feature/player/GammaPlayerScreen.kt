@@ -57,12 +57,15 @@ import androidx.compose.foundation.rememberScrollState
 import com.example.core.ui.GammaCurvedWaveformSeekbar
 import com.example.core.ui.GammaGestureOverlay
 import com.example.domain.model.TuningPreset
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
@@ -128,6 +131,8 @@ fun GammaPlayerScreen(
     var showSpecsSheet by remember { mutableStateOf(false) }
     var showEqualizerSheet by remember { mutableStateOf(false) }
     var showSleepTimerSheet by remember { mutableStateOf(false) }
+    var showCustomSleepDialog by remember { mutableStateOf(false) }
+    var customMinutes by remember { mutableStateOf(20) }
     var showSpeedSheet by remember { mutableStateOf(false) }
     val queueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val specsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -247,19 +252,6 @@ fun GammaPlayerScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Sleep Timer button
-                    IconButton(
-                        onClick = { showSleepTimerSheet = true },
-                        modifier = Modifier.testTag("player_sleep_timer_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Bedtime,
-                            contentDescription = "Sleep timer",
-                            tint = if (playback.isSleepTimerActive) GammaPrimary else GammaTextSecondary,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-
                     IconButton(
                         onClick = { showSpecsSheet = true },
                         modifier = Modifier.testTag("player_info_button")
@@ -1351,6 +1343,58 @@ fun GammaPlayerScreen(
                     }
                 }
 
+                // Custom Duration Option
+                val isCustomSelected = playback.isSleepTimerActive && !playback.isSleepTimerEndOfTrack &&
+                    presets.none { it.second * 60L == playback.sleepTimerInitialSeconds }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isCustomSelected) GammaSurfaceHighlight else Color.Transparent)
+                        .clickable {
+                            showSleepTimerSheet = false
+                            showCustomSleepDialog = true
+                        }
+                        .padding(horizontal = 12.dp, vertical = 14.dp)
+                        .testTag("sleep_timer_custom_option"),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = if (isCustomSelected && playback.sleepTimerInitialSeconds != null) {
+                                "Custom (${playback.sleepTimerInitialSeconds!! / 60} min)"
+                            } else {
+                                "Custom Duration..."
+                            },
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = if (isCustomSelected) FontWeight.Bold else FontWeight.Normal
+                            ),
+                            color = if (isCustomSelected) GammaPrimary else GammaTextPrimary
+                        )
+                        Text(
+                            text = "Choose any time from 1 to 180 minutes",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = GammaTextSecondary
+                        )
+                    }
+                    if (isCustomSelected) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = GammaPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = null,
+                            tint = GammaTextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = "🌙 Music volume will gently fade out over the final 30 seconds before pausing.",
@@ -1361,6 +1405,108 @@ fun GammaPlayerScreen(
                 )
             }
         }
+    }
+
+    // Custom Sleep Timer Dialog
+    if (showCustomSleepDialog) {
+        AlertDialog(
+            onDismissRequest = { showCustomSleepDialog = false },
+            containerColor = GammaSurfaceElevated,
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Timer,
+                        contentDescription = null,
+                        tint = GammaPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Custom Sleep Timer",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = GammaTextPrimary
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "$customMinutes min",
+                        style = MaterialTheme.typography.displayMedium.copy(
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 40.sp
+                        ),
+                        color = GammaPrimary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Audio will gently fade out and pause",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = GammaTextSecondary
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Slider(
+                        value = customMinutes.toFloat(),
+                        onValueChange = { customMinutes = it.toInt().coerceIn(1, 180) },
+                        valueRange = 1f..180f,
+                        steps = 178,
+                        colors = SliderDefaults.colors(
+                            thumbColor = GammaPrimary,
+                            activeTrackColor = GammaPrimary,
+                            inactiveTrackColor = GammaSurfaceHighlight
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        OutlinedButton(
+                            onClick = { customMinutes = (customMinutes - 5).coerceAtLeast(1) },
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("-5m", color = GammaPrimary)
+                        }
+                        OutlinedButton(
+                            onClick = { customMinutes = (customMinutes + 5).coerceAtMost(180) },
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("+5m", color = GammaPrimary)
+                        }
+                        OutlinedButton(
+                            onClick = { customMinutes = (customMinutes + 15).coerceAtMost(180) },
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("+15m", color = GammaPrimary)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.startSleepTimer(customMinutes, endOfTrack = false)
+                        showCustomSleepDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = GammaPrimary),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Start Timer", color = GammaBackground, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCustomSleepDialog = false }) {
+                    Text("Cancel", color = GammaTextSecondary)
+                }
+            }
+        )
     }
 
     // Playback Speed Bottom Sheet

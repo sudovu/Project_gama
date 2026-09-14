@@ -12,6 +12,7 @@ class GammaContainer(context: Context) {
     val database: GammaDatabase = GammaDatabase.getInstance(context)
     val networkMonitor: NetworkMonitor = NetworkMonitor(context)
     val musicProvider: MusicProvider = YouTubeProvider()
+    val youtubeProvider: YouTubeProvider = musicProvider as YouTubeProvider
     val musicRepository: MusicRepository = MusicRepository(
         provider = musicProvider,
         favoriteDao = database.favoriteDao(),
