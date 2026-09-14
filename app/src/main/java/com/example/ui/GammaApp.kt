@@ -324,7 +324,7 @@ fun GammaApp(
                 }
 
                 composable(Screen.Settings.route) {
-                    ProfileSettingsScreen()
+                    ProfileSettingsScreen(playbackManager = container.playbackManager)
                 }
 
                 composable("artist/{artistId}", arguments = listOf(navArgument("artistId") { type = NavType.StringType })) { backStackEntry ->

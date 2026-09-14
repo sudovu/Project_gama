@@ -28,6 +28,7 @@ interface YouTubePlayerBridge {
     fun playVideo()
     fun pauseVideo()
     fun seekToSeconds(seconds: Float)
+    fun applyEqualizer(bands: List<Float>, masterGain: Float, isEnabled: Boolean)
 }
 
 class PlaybackManager(private val context: Context) {
@@ -101,6 +102,12 @@ class PlaybackManager(private val context: Context) {
 
     fun attachBridge(bridge: YouTubePlayerBridge) {
         this.playerBridge = bridge
+        val eq = _playbackState.value.equalizerSettings
+        bridge.applyEqualizer(
+            bands = eq.bands.map { it.gainDb },
+            masterGain = eq.masterGain,
+            isEnabled = eq.isEnabled
+        )
         _playbackState.value.currentTrack?.let { track ->
             if (track.youtubeVideoId.isNotEmpty()) {
                 bridge.loadVideo(track.youtubeVideoId)
@@ -447,12 +454,16 @@ class PlaybackManager(private val context: Context) {
             val updatedBands = currentSettings.bands.map { band ->
                 if (band.index == index) band.copy(gainDb = gainDb) else band
             }
-            current.copy(
-                equalizerSettings = currentSettings.copy(
-                    bands = updatedBands,
-                    currentPreset = TuningPreset.CUSTOM
-                )
+            val newSettings = currentSettings.copy(
+                bands = updatedBands,
+                currentPreset = TuningPreset.CUSTOM
             )
+            playerBridge?.applyEqualizer(
+                bands = updatedBands.map { it.gainDb },
+                masterGain = newSettings.masterGain,
+                isEnabled = newSettings.isEnabled
+            )
+            current.copy(equalizerSettings = newSettings)
         }
     }
 
@@ -464,12 +475,16 @@ class PlaybackManager(private val context: Context) {
             val updatedBands = currentSettings.bands.mapIndexed { i, band ->
                 band.copy(gainDb = gains.getOrElse(i) { 0f })
             }
-            current.copy(
-                equalizerSettings = currentSettings.copy(
-                    currentPreset = preset,
-                    bands = updatedBands
-                )
+            val newSettings = currentSettings.copy(
+                currentPreset = preset,
+                bands = updatedBands
             )
+            playerBridge?.applyEqualizer(
+                bands = updatedBands.map { it.gainDb },
+                masterGain = newSettings.masterGain,
+                isEnabled = newSettings.isEnabled
+            )
+            current.copy(equalizerSettings = newSettings)
         }
     }
 
@@ -477,19 +492,31 @@ class PlaybackManager(private val context: Context) {
         val target = enabled ?: !_playbackState.value.equalizerSettings.isEnabled
         audioEngine.setEqualizerEnabled(target)
         _playbackState.update { current ->
-            current.copy(
-                equalizerSettings = current.equalizerSettings.copy(isEnabled = target)
+            val newSettings = current.equalizerSettings.copy(isEnabled = target)
+            playerBridge?.applyEqualizer(
+                bands = newSettings.bands.map { it.gainDb },
+                masterGain = newSettings.masterGain,
+                isEnabled = target
             )
+            current.copy(equalizerSettings = newSettings)
         }
     }
 
     fun setMasterGain(gain: Float) {
         audioEngine.setMasterGain(gain)
         _playbackState.update { current ->
-            current.copy(
-                equalizerSettings = current.equalizerSettings.copy(masterGain = gain)
+            val newSettings = current.equalizerSettings.copy(masterGain = gain)
+            playerBridge?.applyEqualizer(
+                bands = newSettings.bands.map { it.gainDb },
+                masterGain = gain,
+                isEnabled = newSettings.isEnabled
             )
+            current.copy(equalizerSettings = newSettings)
         }
+    }
+
+    fun setSpatialAudioEnabled(enabled: Boolean) {
+        audioEngine.setSpatialAudioEnabled(enabled)
     }
 
     // JavaScript Bridge callbacks from YouTube

@@ -82,6 +82,22 @@ class YouTubeWebViewBridge(
             }
         }
     }
+
+    override fun applyEqualizer(bands: List<Float>, masterGain: Float, isEnabled: Boolean) {
+        val b0 = bands.getOrElse(0) { 0f }
+        val b1 = bands.getOrElse(1) { 0f }
+        val b2 = bands.getOrElse(2) { 0f }
+        val b3 = bands.getOrElse(3) { 0f }
+        val b4 = bands.getOrElse(4) { 0f }
+        val js = "if(window.setGammaEqualizer){ window.setGammaEqualizer($b0, $b1, $b2, $b3, $b4, $masterGain, $isEnabled); } else { window.pendingEq = [$b0, $b1, $b2, $b3, $b4, $masterGain, $isEnabled]; }"
+        webView.post {
+            try {
+                webView.evaluateJavascript(js, null)
+            } catch (e: Exception) {
+                android.util.Log.e("YouTubeIFrame", "Error evaluating applyEqualizer JS", e)
+            }
+        }
+    }
 }
 
 open class BackgroundPlaybackWebView(context: Context) : WebView(context) {
@@ -264,6 +280,11 @@ fun createCompliantYouTubeWebView(context: Context, playbackManager: PlaybackMan
                                     console.error("playVideo error: " + e);
                                 }
                             }
+                            if (window.setGammaEqualizer && window.pendingEq) {
+                                try {
+                                    window.setGammaEqualizer.apply(null, window.pendingEq);
+                                } catch(e) {}
+                            }
                             startTimeTracking();
                         }
 
@@ -347,6 +368,68 @@ fun createCompliantYouTubeWebView(context: Context, playbackManager: PlaybackMan
                                 try {
                                     gammaPlayer.seekTo(seconds, true);
                                 } catch (e) {}
+                            }
+                        };
+
+                        window.setGammaEqualizer = function(b0, b1, b2, b3, b4, masterGain, enabled) {
+                            window.pendingEq = [b0, b1, b2, b3, b4, masterGain, enabled];
+                            try {
+                                if (gammaPlayer && gammaPlayer.setVolume) {
+                                    var vol = Math.round(Math.min(100, Math.max(0, 100 * masterGain)));
+                                    gammaPlayer.setVolume(vol);
+                                }
+                                if (!window.gammaAudioCtx) {
+                                    var videoEl = document.querySelector('video') || (gammaPlayer && gammaPlayer.getIframe && gammaPlayer.getIframe().contentDocument ? gammaPlayer.getIframe().contentDocument.querySelector('video') : null);
+                                    if (videoEl) {
+                                        var AudioContext = window.AudioContext || window.webkitAudioContext;
+                                        window.gammaAudioCtx = new AudioContext();
+                                        window.gammaSource = window.gammaAudioCtx.createMediaElementSource(videoEl);
+
+                                        window.gammaFilter0 = window.gammaAudioCtx.createBiquadFilter();
+                                        window.gammaFilter0.type = 'lowshelf';
+                                        window.gammaFilter0.frequency.value = 60;
+
+                                        window.gammaFilter1 = window.gammaAudioCtx.createBiquadFilter();
+                                        window.gammaFilter1.type = 'peaking';
+                                        window.gammaFilter1.frequency.value = 230;
+
+                                        window.gammaFilter2 = window.gammaAudioCtx.createBiquadFilter();
+                                        window.gammaFilter2.type = 'peaking';
+                                        window.gammaFilter2.frequency.value = 910;
+
+                                        window.gammaFilter3 = window.gammaAudioCtx.createBiquadFilter();
+                                        window.gammaFilter3.type = 'peaking';
+                                        window.gammaFilter3.frequency.value = 3600;
+
+                                        window.gammaFilter4 = window.gammaAudioCtx.createBiquadFilter();
+                                        window.gammaFilter4.type = 'highshelf';
+                                        window.gammaFilter4.frequency.value = 14000;
+
+                                        window.gammaGainNode = window.gammaAudioCtx.createGain();
+
+                                        window.gammaSource
+                                            .connect(window.gammaFilter0)
+                                            .connect(window.gammaFilter1)
+                                            .connect(window.gammaFilter2)
+                                            .connect(window.gammaFilter3)
+                                            .connect(window.gammaFilter4)
+                                            .connect(window.gammaGainNode)
+                                            .connect(window.gammaAudioCtx.destination);
+                                    }
+                                }
+                                if (window.gammaAudioCtx && window.gammaFilter0) {
+                                    if (window.gammaAudioCtx.state === 'suspended') {
+                                        window.gammaAudioCtx.resume();
+                                    }
+                                    window.gammaFilter0.gain.value = enabled ? b0 : 0;
+                                    window.gammaFilter1.gain.value = enabled ? b1 : 0;
+                                    window.gammaFilter2.gain.value = enabled ? b2 : 0;
+                                    window.gammaFilter3.gain.value = enabled ? b3 : 0;
+                                    window.gammaFilter4.gain.value = enabled ? b4 : 0;
+                                    window.gammaGainNode.gain.value = enabled ? masterGain : 1.0;
+                                }
+                            } catch(e) {
+                                console.log("WebAudio DSP notice: " + e);
                             }
                         };
                     </script>

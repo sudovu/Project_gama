@@ -1,9 +1,14 @@
 package com.example.core.media
 
 import android.content.Context
+import android.content.Intent
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.media.audiofx.AudioEffect
+import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer as AndroidHardwareEqualizer
+import android.media.audiofx.LoudnessEnhancer
+import android.media.audiofx.Virtualizer
 import android.net.Uri
 import android.util.Log
 import com.example.domain.model.EqualizerSettings
@@ -143,6 +148,9 @@ class GamaAudioEngine(private val context: Context) {
     private var mediaPlayer: MediaPlayer? = null
     private var hardwareEqualizer: AndroidHardwareEqualizer? = null
     private var globalHardwareEqualizer: AndroidHardwareEqualizer? = null
+    private var globalBassBoost: BassBoost? = null
+    private var globalVirtualizer: Virtualizer? = null
+    private var globalLoudnessEnhancer: LoudnessEnhancer? = null
 
     private var currentTrack: Track? = null
     private var currentPlaybackPositionMs = 0L
@@ -152,14 +160,56 @@ class GamaAudioEngine(private val context: Context) {
     private val currentBandGains = floatArrayOf(0f, 0f, 0f, 0f, 0f)
 
     init {
+        initHardwareEffects()
+    }
+
+    private fun initHardwareEffects() {
         try {
-            // Attempt to hook global audio session (0) if platform allows
-            globalHardwareEqualizer = AndroidHardwareEqualizer(0, 0).apply {
+            val openIntent = Intent(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION).apply {
+                putExtra(AudioEffect.EXTRA_AUDIO_SESSION, 0)
+                putExtra(AudioEffect.EXTRA_PACKAGE_NAME, context.packageName)
+                putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
+            }
+            context.sendBroadcast(openIntent)
+        } catch (_: Exception) {}
+
+        try {
+            globalHardwareEqualizer = AndroidHardwareEqualizer(1000, 0).apply {
                 enabled = isEqEnabled
                 applyHardwareEqualizerGains(this)
             }
         } catch (e: Exception) {
             Log.d(TAG, "Global session equalizer not available: ${e.message}")
+        }
+
+        try {
+            globalBassBoost = BassBoost(1000, 0).apply {
+                enabled = isEqEnabled
+                if (strengthSupported) {
+                    setStrength(0)
+                }
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "Global bass boost not available: ${e.message}")
+        }
+
+        try {
+            globalVirtualizer = Virtualizer(1000, 0).apply {
+                enabled = isEqEnabled
+                if (strengthSupported) {
+                    setStrength(0)
+                }
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "Global virtualizer not available: ${e.message}")
+        }
+
+        try {
+            globalLoudnessEnhancer = LoudnessEnhancer(0).apply {
+                enabled = isEqEnabled
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "Global loudness enhancer not available: ${e.message}")
         }
     }
 
@@ -314,7 +364,7 @@ class GamaAudioEngine(private val context: Context) {
         if (sessionId != 0) {
             try {
                 hardwareEqualizer?.release()
-                hardwareEqualizer = AndroidHardwareEqualizer(0, sessionId).apply {
+                hardwareEqualizer = AndroidHardwareEqualizer(1000, sessionId).apply {
                     enabled = isEqEnabled
                     applyHardwareEqualizerGains(this)
                 }
@@ -331,6 +381,19 @@ class GamaAudioEngine(private val context: Context) {
             filters[bandIndex].setGain(clamped)
             hardwareEqualizer?.let { applyHardwareEqualizerGains(it) }
             globalHardwareEqualizer?.let { applyHardwareEqualizerGains(it) }
+
+            // Dynamic BassBoost integration: if band 0 (60Hz) is boosted, dynamically scale BassBoost
+            if (bandIndex == 0) {
+                try {
+                    val bassRatio = (clamped.coerceAtLeast(0f) / 12.0f)
+                    val strength = (bassRatio * 1000).toInt().toShort()
+                    globalBassBoost?.let { bb ->
+                        if (bb.strengthSupported) {
+                            bb.setStrength(strength)
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
         }
     }
 
@@ -343,16 +406,59 @@ class GamaAudioEngine(private val context: Context) {
     fun applyPreset(preset: TuningPreset) {
         val gains = EqualizerSettings.presetGains(preset)
         setAllBands(gains)
+
+        // Preset-specific hardware DSP profile tuning
+        try {
+            when (preset) {
+                TuningPreset.BASS_BOOST -> {
+                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(800) }
+                }
+                TuningPreset.SYNTHWAVE -> {
+                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(450) }
+                    globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(400) }
+                }
+                TuningPreset.ELECTRONIC -> {
+                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(600) }
+                    globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(500) }
+                }
+                TuningPreset.VOCAL_CLARITY -> {
+                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(0) }
+                    globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(200) }
+                }
+                else -> {
+                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(0) }
+                    globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(0) }
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     fun setMasterGain(gain: Float) {
         this.masterGainMultiplier = gain.coerceIn(0.2f, 2.0f)
+        try {
+            val boostMb = ((gain - 1.0f).coerceAtLeast(0f) * 1000).toInt()
+            globalLoudnessEnhancer?.setTargetGain(boostMb)
+        } catch (_: Exception) {}
+    }
+
+    fun setSpatialAudioEnabled(enabled: Boolean) {
+        try {
+            globalVirtualizer?.let { virt ->
+                virt.enabled = enabled
+                if (virt.strengthSupported) {
+                    virt.setStrength(if (enabled) 700 else 0)
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     fun setEqualizerEnabled(enabled: Boolean) {
         this.isEqEnabled = enabled
         hardwareEqualizer?.enabled = enabled
         globalHardwareEqualizer?.enabled = enabled
+        globalBassBoost?.enabled = enabled
+        globalVirtualizer?.enabled = enabled
+        globalLoudnessEnhancer?.enabled = enabled
     }
 
     private fun applyHardwareEqualizerGains(hwEq: AndroidHardwareEqualizer) {
@@ -361,10 +467,18 @@ class GamaAudioEngine(private val context: Context) {
             val minMb = hwEq.bandLevelRange[0]
             val maxMb = hwEq.bandLevelRange[1]
 
-            for (i in 0 until minOf(numBands, currentBandGains.size)) {
-                val db = currentBandGains[i]
+            for (bandIdx in 0 until numBands) {
+                val centerFreqHz = hwEq.getCenterFreq(bandIdx.toShort()) / 1000
+                val closestIdx = when {
+                    centerFreqHz < 120 -> 0 // 60 Hz
+                    centerFreqHz < 500 -> 1 // 230 Hz
+                    centerFreqHz < 2000 -> 2 // 910 Hz
+                    centerFreqHz < 8000 -> 3 // 3.6 kHz
+                    else -> 4 // 14 kHz
+                }
+                val db = currentBandGains[closestIdx]
                 val mb = (db * 100).toInt().coerceIn(minMb.toInt(), maxMb.toInt()).toShort()
-                hwEq.setBandLevel(i.toShort(), mb)
+                hwEq.setBandLevel(bandIdx.toShort(), mb)
             }
         } catch (_: Exception) {}
     }
