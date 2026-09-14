@@ -498,7 +498,7 @@ fun GammaApp(
                         }
 
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             // Minimize button (collapses video to corner and displays navigation bar)
@@ -510,16 +510,14 @@ fun GammaApp(
                                     }
                                 },
                                 modifier = Modifier
-                                    .size(26.dp)
-                                    .background(Color.Black.copy(alpha = 0.65f), CircleShape)
-                                    .border(1.dp, GammaGlowCyan, CircleShape)
+                                    .size(32.dp)
                                     .testTag("video_minimize_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.KeyboardArrowDown,
                                     contentDescription = "Minimize video to navigation bar",
                                     tint = GammaPrimary,
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
 
@@ -529,16 +527,14 @@ fun GammaApp(
                                     isVideoFullscreen = false
                                 },
                                 modifier = Modifier
-                                    .size(26.dp)
-                                    .background(Color.Black.copy(alpha = 0.65f), CircleShape)
-                                    .border(1.dp, GammaGlowCyan, CircleShape)
+                                    .size(32.dp)
                                     .testTag("video_exit_fullscreen_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.FullscreenExit,
                                     contentDescription = "Exit Fullscreen",
                                     tint = Color.White,
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
 
@@ -550,16 +546,14 @@ fun GammaApp(
                                     // Switches seamlessly to music-only mode without stopping playback
                                 },
                                 modifier = Modifier
-                                    .size(26.dp)
-                                    .background(Color(0xFF330011).copy(alpha = 0.85f), CircleShape)
-                                    .border(1.dp, Color(0xFFFF3366), CircleShape)
+                                    .size(32.dp)
                                     .testTag("video_close_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Close video (play music only)",
-                                    tint = Color(0xFFFF4D4D),
-                                    modifier = Modifier.size(14.dp)
+                                    tint = Color(0xFFFF5252),
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
@@ -633,20 +627,18 @@ fun GammaApp(
                                     }
                                 },
                                 modifier = Modifier
-                                    .size(22.dp)
-                                    .background(Color.Black.copy(alpha = 0.65f), CircleShape)
-                                    .border(1.dp, GammaGlowCyan.copy(alpha = 0.7f), CircleShape)
+                                    .size(28.dp)
                                     .testTag("pip_minimize_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.KeyboardArrowDown,
                                     contentDescription = "Minimize video",
                                     tint = GammaPrimary,
-                                    modifier = Modifier.size(12.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
 
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
 
                             // Fullscreen Button: Expands to 100% fullscreen (hiding navigation bar)
                             IconButton(
@@ -654,20 +646,18 @@ fun GammaApp(
                                     isVideoFullscreen = true
                                 },
                                 modifier = Modifier
-                                    .size(22.dp)
-                                    .background(Color.Black.copy(alpha = 0.65f), CircleShape)
-                                    .border(1.dp, GammaGlowCyan.copy(alpha = 0.7f), CircleShape)
+                                    .size(28.dp)
                                     .testTag("pip_fullscreen_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Fullscreen,
                                     contentDescription = "Fullscreen video",
                                     tint = Color.White,
-                                    modifier = Modifier.size(12.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
 
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
 
                             // Cross (Close) Button: Closes video & continues playing music only
                             IconButton(
@@ -676,16 +666,14 @@ fun GammaApp(
                                     // Continues playing music without stopping playback
                                 },
                                 modifier = Modifier
-                                    .size(22.dp)
-                                    .background(Color(0xFF330011).copy(alpha = 0.85f), CircleShape)
-                                    .border(1.dp, Color(0xFFFF3366), CircleShape)
+                                    .size(28.dp)
                                     .testTag("pip_close_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Close video (play music only)",
                                     tint = Color(0xFFFF4D4D),
-                                    modifier = Modifier.size(12.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
