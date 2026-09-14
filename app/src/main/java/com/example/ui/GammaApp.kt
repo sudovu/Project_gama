@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -121,10 +122,12 @@ fun GammaApp(
 
     var isVideoFullscreen by remember { mutableStateOf(false) }
     var isVideoClosed by remember { mutableStateOf(false) }
+    var isVideoPipMinimized by remember { mutableStateOf(false) }
 
     LaunchedEffect(playbackState.currentTrack?.id) {
         if (playbackState.currentTrack != null) {
             isVideoClosed = false
+            isVideoPipMinimized = false
         }
     }
 
@@ -178,6 +181,7 @@ fun GammaApp(
                         GammaMiniPlayer(
                             playbackState = playbackState,
                             onExpandClick = {
+                                isVideoPipMinimized = false
                                 navController.navigate(Screen.Player.route)
                             },
                             onPlayPauseClick = {
@@ -445,6 +449,7 @@ fun GammaApp(
                                     colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent)
                                 )
                             )
+                            .statusBarsPadding()
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
@@ -544,7 +549,7 @@ fun GammaApp(
                         }
                     }
                 }
-            } else {
+            } else if (!isVideoPipMinimized || isPlayerScreen) {
                 // ==========================================
                 // 2. EXPANDED PLAYER SCREEN OR MINIMIZED CORNER PIP
                 // ==========================================
@@ -600,29 +605,31 @@ fun GammaApp(
                             horizontalArrangement = Arrangement.End,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (isPlayerScreen) {
-                                // Minimize Button: Collapses player to minimized mode where navigation bar is displayed
-                                IconButton(
-                                    onClick = {
+                            // Minimize Button: Collapses player screen or docks corner PiP to mini-player
+                            IconButton(
+                                onClick = {
+                                    if (isPlayerScreen) {
                                         if (!navController.popBackStack()) {
                                             navController.navigate(Screen.Discover.route)
                                         }
-                                    },
-                                    modifier = Modifier
-                                        .size(30.dp)
-                                        .background(Color.Black.copy(alpha = 0.65f), CircleShape)
-                                        .border(1.dp, GammaGlowCyan.copy(alpha = 0.7f), CircleShape)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.KeyboardArrowDown,
-                                        contentDescription = "Minimize to navigation bar",
-                                        tint = GammaPrimary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.width(6.dp))
+                                    } else {
+                                        isVideoPipMinimized = true
+                                    }
+                                },
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .background(Color.Black.copy(alpha = 0.65f), CircleShape)
+                                    .border(1.dp, GammaGlowCyan.copy(alpha = 0.7f), CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowDown,
+                                    contentDescription = "Minimize video",
+                                    tint = GammaPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
+
+                            Spacer(modifier = Modifier.width(6.dp))
 
                             // Fullscreen Button: Expands to 100% fullscreen (hiding navigation bar)
                             IconButton(
