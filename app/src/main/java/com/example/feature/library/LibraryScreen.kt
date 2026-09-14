@@ -1,6 +1,7 @@
 package com.example.feature.library
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.DownloadDone
@@ -52,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.core.ui.GammaArtwork
 import com.example.core.ui.GammaEmptyState
 import com.example.core.ui.GammaFilterChip
+import com.example.core.ui.GammaImportPlaylistDialog
 import com.example.core.ui.GammaPrimaryButton
 import com.example.core.ui.GammaSecondaryButton
 import com.example.core.ui.GammaTrackRow
@@ -78,6 +81,7 @@ fun LibraryScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
     var showUploadDialog by remember { mutableStateOf(false) }
+    var showImportDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
     var newPlaylistDesc by remember { mutableStateOf("") }
 
@@ -86,6 +90,15 @@ fun LibraryScreen(
             onDismiss = { showUploadDialog = false },
             onUploadConfirmed = { title, artist, freq, genre, yt, uri ->
                 viewModel.uploadTrack(title, artist, freq, genre, yt, uri)
+            }
+        )
+    }
+
+    if (showImportDialog) {
+        GammaImportPlaylistDialog(
+            onDismiss = { showImportDialog = false },
+            onImportConfirmed = { name, tracks ->
+                viewModel.importPlaylist(name, tracks)
             }
         )
     }
@@ -114,6 +127,22 @@ fun LibraryScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // Import Playlist Button (Spotify, YouTube Music, Apple Music)
+                    IconButton(
+                        onClick = { showImportDialog = true },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(GammaSurfaceElevated, CircleShape)
+                            .border(1.dp, GammaDivider, CircleShape)
+                            .testTag("library_import_playlist_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudDownload,
+                            contentDescription = "Import Playlist",
+                            tint = GammaPrimary
+                        )
+                    }
+
                     // Upload Music Button
                     IconButton(
                         onClick = { showUploadDialog = true },

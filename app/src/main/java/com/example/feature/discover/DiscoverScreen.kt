@@ -55,6 +55,7 @@ import com.example.core.ui.GammaQuickPickCard
 import com.example.core.ui.GammaSectionHeader
 import com.example.core.ui.GammaTrackRow
 import com.example.core.ui.GammaUploadMusicDialog
+import com.example.core.taste.TastePreferenceManager
 import com.example.core.util.NetworkMonitor
 import com.example.domain.model.Album
 import com.example.domain.model.Artist
@@ -84,6 +85,12 @@ fun DiscoverScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
+
+    val tasteManager = remember { TastePreferenceManager.getInstance(context) }
+    val isSpotifyLinked by tasteManager.isSpotifyLinked.collectAsStateWithLifecycle()
+    val isGoogleLinked by tasteManager.isGoogleLinked.collectAsStateWithLifecycle()
+    val spotifyTastes by tasteManager.spotifyTastes.collectAsStateWithLifecycle()
+    val youtubeTastes by tasteManager.youtubeTastes.collectAsStateWithLifecycle()
 
     var showUploadDialog by remember { mutableStateOf(false) }
     var showInternetDialog by remember { mutableStateOf(false) }
@@ -125,6 +132,13 @@ fun DiscoverScreen(
                     feed.trendingTracks
                 } else {
                     feed.moodPlaylists[state.selectedMood] ?: feed.trendingTracks
+                }
+
+                val spotifyTracks = remember(feed, isSpotifyLinked) {
+                    tasteManager.getSpotifyAdaptedRecommendations(feed.quickPicks + feed.trendingTracks)
+                }
+                val ytTracks = remember(feed, isGoogleLinked) {
+                    tasteManager.getYouTubeAdaptedRecommendations(feed.quickPicks + feed.trendingTracks)
                 }
 
                 LazyColumn(
@@ -199,6 +213,52 @@ fun DiscoverScreen(
                                     GammaQuickPickCard(
                                         track = track,
                                         onClick = { onTrackClick(track, feed.quickPicks) }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+                    }
+
+                    // Spotify Taste-Adapted Soundwaves
+                    if (isSpotifyLinked && spotifyTracks.isNotEmpty()) {
+                        item {
+                            GammaSectionHeader(
+                                category = "Spotify Sync (${spotifyTastes.take(2).joinToString(", ")})",
+                                title = "Taste Profile Matches"
+                            )
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.testTag("spotify_taste_row")
+                            ) {
+                                items(spotifyTracks, key = { "spotify_${it.id}" }) { track ->
+                                    GammaQuickPickCard(
+                                        track = track,
+                                        onClick = { onTrackClick(track, spotifyTracks) }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+                    }
+
+                    // YouTube Music Taste-Adapted Resonances
+                    if (isGoogleLinked && ytTracks.isNotEmpty()) {
+                        item {
+                            GammaSectionHeader(
+                                category = "YouTube Music (${youtubeTastes.take(2).joinToString(", ")})",
+                                title = "Resonances For You"
+                            )
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.testTag("youtube_taste_row")
+                            ) {
+                                items(ytTracks, key = { "yt_${it.id}" }) { track ->
+                                    GammaQuickPickCard(
+                                        track = track,
+                                        onClick = { onTrackClick(track, ytTracks) }
                                     )
                                 }
                             }

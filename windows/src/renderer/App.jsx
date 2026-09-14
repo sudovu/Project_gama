@@ -703,7 +703,7 @@ export default function App() {
         <div id="yt-hidden-player" className="w-full h-full"></div>
 
         {/* Video Control Buttons Overlay */}
-        <div className="absolute top-2 right-2 flex items-center space-x-1.5 z-50 bg-black/80 backdrop-blur-md px-2 py-1 rounded-xl border border-slate-700">
+        <div className="absolute top-2 right-2 flex items-center space-x-1 z-50 bg-black/85 backdrop-blur-md px-1.5 py-0.5 rounded-lg border border-slate-700/80">
           <button
             onClick={() => {
               if (isVideoFullscreen) {
@@ -713,29 +713,29 @@ export default function App() {
               }
             }}
             title="Minimize"
-            className="p-1 rounded-lg text-gammaCyan hover:bg-slate-800 transition-colors"
+            className="p-0.5 rounded text-gammaCyan hover:bg-slate-800 transition-colors"
           >
-            <Minimize2 className="w-3.5 h-3.5" />
+            <Minimize2 className="w-3 h-3" />
           </button>
 
           <button
             onClick={() => setIsVideoFullscreen(!isVideoFullscreen)}
             title={isVideoFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-            className="p-1 rounded-lg text-slate-200 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-0.5 rounded text-slate-200 hover:text-white hover:bg-slate-800 transition-colors"
           >
-            <Maximize2 className="w-3.5 h-3.5" />
+            <Maximize2 className="w-3 h-3" />
           </button>
 
           <button
             onClick={() => {
               setIsVideoFullscreen(false);
               setShowVideoPip(false);
-              togglePlayPause();
+              // Switch to music-only mode; do NOT stop playback!
             }}
-            title="Close video"
-            className="p-1 rounded-lg text-rose-500 hover:text-rose-400 hover:bg-rose-950/40 transition-colors"
+            title="Close video (play music only)"
+            className="p-0.5 rounded text-rose-500 hover:text-rose-400 hover:bg-rose-950/40 transition-colors"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-3 h-3" />
           </button>
         </div>
       </div>

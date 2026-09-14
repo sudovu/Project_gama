@@ -126,7 +126,7 @@ fun GammaApp(
 
     LaunchedEffect(playbackState.currentTrack?.id) {
         if (playbackState.currentTrack != null) {
-            isVideoClosed = false
+            // Keep isVideoClosed persistent across tracks: once closed, music plays without video popping up
             isVideoPipMinimized = false
         }
     }
@@ -412,7 +412,9 @@ fun GammaApp(
                                     restoreState = true
                                 }
                             }
-                        }
+                        },
+                        isVideoClosed = isVideoClosed,
+                        onReopenVideo = { isVideoClosed = false }
                     )
                 }
             }
@@ -422,6 +424,20 @@ fun GammaApp(
         val isYouTubeTrack = playbackState.currentTrack?.let {
             it.youtubeVideoId.isNotEmpty() && it.localAudioUri.isEmpty()
         } ?: false
+
+        // Persistent background audio: keep YouTube host active offscreen if user closes video to play music only
+        if (isYouTubeTrack && isVideoClosed) {
+            Box(
+                modifier = Modifier
+                    .size(1.dp)
+                    .alpha(0.001f)
+            ) {
+                CompliantYouTubeHost(
+                    playbackManager = container.playbackManager,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
 
         if (isYouTubeTrack && !isVideoClosed) {
             if (isVideoFullscreen) {
@@ -450,7 +466,7 @@ fun GammaApp(
                                 )
                             )
                             .statusBarsPadding()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -460,7 +476,7 @@ fun GammaApp(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(8.dp)
+                                    .size(7.dp)
                                     .background(GammaPrimary, CircleShape)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
@@ -482,7 +498,7 @@ fun GammaApp(
                         }
 
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             // Minimize button (collapses video to corner and displays navigation bar)
@@ -494,15 +510,16 @@ fun GammaApp(
                                     }
                                 },
                                 modifier = Modifier
-                                    .size(38.dp)
+                                    .size(26.dp)
                                     .background(Color.Black.copy(alpha = 0.65f), CircleShape)
                                     .border(1.dp, GammaGlowCyan, CircleShape)
+                                    .testTag("video_minimize_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.KeyboardArrowDown,
                                     contentDescription = "Minimize video to navigation bar",
                                     tint = GammaPrimary,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
 
@@ -512,38 +529,37 @@ fun GammaApp(
                                     isVideoFullscreen = false
                                 },
                                 modifier = Modifier
-                                    .size(38.dp)
+                                    .size(26.dp)
                                     .background(Color.Black.copy(alpha = 0.65f), CircleShape)
                                     .border(1.dp, GammaGlowCyan, CircleShape)
+                                    .testTag("video_exit_fullscreen_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.FullscreenExit,
                                     contentDescription = "Exit Fullscreen",
                                     tint = Color.White,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
 
-                            // Cross (Close) button (closes video & stops playback)
+                            // Cross (Close) button: closes video & continues playing music only
                             IconButton(
                                 onClick = {
                                     isVideoFullscreen = false
                                     isVideoClosed = true
-                                    container.playbackManager.stopPlayback()
-                                    if (isPlayerScreen) {
-                                        navController.popBackStack()
-                                    }
+                                    // Switches seamlessly to music-only mode without stopping playback
                                 },
                                 modifier = Modifier
-                                    .size(38.dp)
+                                    .size(26.dp)
                                     .background(Color(0xFF330011).copy(alpha = 0.85f), CircleShape)
                                     .border(1.dp, Color(0xFFFF3366), CircleShape)
+                                    .testTag("video_close_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = "Close video",
+                                    contentDescription = "Close video (play music only)",
                                     tint = Color(0xFFFF4D4D),
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
                         }
@@ -617,19 +633,20 @@ fun GammaApp(
                                     }
                                 },
                                 modifier = Modifier
-                                    .size(30.dp)
+                                    .size(22.dp)
                                     .background(Color.Black.copy(alpha = 0.65f), CircleShape)
                                     .border(1.dp, GammaGlowCyan.copy(alpha = 0.7f), CircleShape)
+                                    .testTag("pip_minimize_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.KeyboardArrowDown,
                                     contentDescription = "Minimize video",
                                     tint = GammaPrimary,
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(12.dp)
                                 )
                             }
 
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
 
                             // Fullscreen Button: Expands to 100% fullscreen (hiding navigation bar)
                             IconButton(
@@ -637,39 +654,38 @@ fun GammaApp(
                                     isVideoFullscreen = true
                                 },
                                 modifier = Modifier
-                                    .size(30.dp)
+                                    .size(22.dp)
                                     .background(Color.Black.copy(alpha = 0.65f), CircleShape)
                                     .border(1.dp, GammaGlowCyan.copy(alpha = 0.7f), CircleShape)
+                                    .testTag("pip_fullscreen_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Fullscreen,
                                     contentDescription = "Fullscreen video",
                                     tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(12.dp)
                                 )
                             }
 
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
 
-                            // Cross (Close) Button: Closes video & stops playback
+                            // Cross (Close) Button: Closes video & continues playing music only
                             IconButton(
                                 onClick = {
                                     isVideoClosed = true
-                                    container.playbackManager.stopPlayback()
-                                    if (isPlayerScreen) {
-                                        navController.popBackStack()
-                                    }
+                                    // Continues playing music without stopping playback
                                 },
                                 modifier = Modifier
-                                    .size(30.dp)
+                                    .size(22.dp)
                                     .background(Color(0xFF330011).copy(alpha = 0.85f), CircleShape)
                                     .border(1.dp, Color(0xFFFF3366), CircleShape)
+                                    .testTag("pip_close_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = "Close video",
+                                    contentDescription = "Close video (play music only)",
                                     tint = Color(0xFFFF4D4D),
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(12.dp)
                                 )
                             }
                         }

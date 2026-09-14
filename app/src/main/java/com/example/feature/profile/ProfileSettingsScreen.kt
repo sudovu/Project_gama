@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
@@ -42,6 +43,7 @@ import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
@@ -94,6 +96,8 @@ import com.example.ui.theme.GammaSurfaceHighlight
 import com.example.ui.theme.GammaTextMuted
 import com.example.ui.theme.GammaTextPrimary
 import com.example.ui.theme.GammaTextSecondary
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.core.taste.TastePreferenceManager
 import com.example.ui.theme.GammaThemeManager
 import com.example.ui.theme.GammaThemePreset
 import java.io.File
@@ -109,6 +113,14 @@ fun ProfileSettingsScreen(
     var selectedFrequency by remember { mutableIntStateOf(432) }
     var spatialAudioEnabled by remember { mutableStateOf(true) }
     var visualizerPulseEnabled by remember { mutableStateOf(true) }
+
+    val tasteManager = remember { TastePreferenceManager.getInstance(context) }
+    val isSpotifyLinked by tasteManager.isSpotifyLinked.collectAsStateWithLifecycle()
+    val spotifyUser by tasteManager.spotifyUsername.collectAsStateWithLifecycle()
+    val spotifyTastes by tasteManager.spotifyTastes.collectAsStateWithLifecycle()
+    val isGoogleLinked by tasteManager.isGoogleLinked.collectAsStateWithLifecycle()
+    val googleEmail by tasteManager.googleEmail.collectAsStateWithLifecycle()
+    val youtubeTastes by tasteManager.youtubeTastes.collectAsStateWithLifecycle()
 
     val developerName = "VHUWON MATHERS"
     val developerEmail = "vhuwonmathers@gmail.com"
@@ -800,6 +812,352 @@ fun ProfileSettingsScreen(
                                     uncheckedTrackColor = GammaDivider
                                 )
                             )
+                        }
+                    }
+                }
+            }
+
+            // ==========================================
+            // STREAMING & TASTE INTEGRATIONS (Spotify & Google / YouTube Music)
+            // ==========================================
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "CONNECTED ACCOUNTS & MUSIC TASTE",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            letterSpacing = 1.2.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = GammaPrimary
+                    )
+                    if (isSpotifyLinked || isGoogleLinked) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(GammaPrimary.copy(alpha = 0.15f))
+                                .clickable {
+                                    tasteManager.syncAllTastes()
+                                    Toast.makeText(context, "Music tastes synchronized with Discover feed!", Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                .testTag("sync_all_tastes_button")
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Sync,
+                                    contentDescription = "Sync",
+                                    tint = GammaPrimary,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "SYNC TASTES",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 10.sp
+                                    ),
+                                    color = GammaPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Spotify Card
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(GammaSurfaceElevated)
+                            .border(
+                                width = if (isSpotifyLinked) 1.5.dp else 1.dp,
+                                color = if (isSpotifyLinked) Color(0xFF1DB954) else GammaDivider,
+                                shape = RoundedCornerShape(18.dp)
+                            )
+                            .padding(16.dp)
+                            .testTag("spotify_integration_card")
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF1DB954).copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.GraphicEq,
+                                            contentDescription = "Spotify",
+                                            tint = Color(0xFF1DB954),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = "Spotify",
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = GammaTextPrimary
+                                        )
+                                        Text(
+                                            text = if (isSpotifyLinked) spotifyUser.ifEmpty { "Connected User" } else "Not Connected",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (isSpotifyLinked) Color(0xFF1DB954) else GammaTextMuted
+                                        )
+                                    }
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(
+                                            if (isSpotifyLinked) Color(0xFF1DB954).copy(alpha = 0.2f)
+                                            else GammaSurfaceHighlight
+                                        )
+                                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                                ) {
+                                    Text(
+                                        text = if (isSpotifyLinked) "LINKED" else "UNLINKED",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 10.sp
+                                        ),
+                                        color = if (isSpotifyLinked) Color(0xFF1DB954) else GammaTextMuted
+                                    )
+                                }
+                            }
+
+                            if (isSpotifyLinked) {
+                                Text(
+                                    text = "Referenced Taste Profile:",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = GammaTextSecondary
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    spotifyTastes.take(3).forEach { taste ->
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(Color(0xFF1DB954).copy(alpha = 0.12f))
+                                                .border(1.dp, Color(0xFF1DB954).copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                        ) {
+                                            Text(
+                                                text = taste,
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                                color = Color(0xFF1DB954)
+                                            )
+                                        }
+                                    }
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            tasteManager.syncAllTastes()
+                                            Toast.makeText(context, "Spotify tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.weight(1f).height(38.dp),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(imageVector = Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF1DB954))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Sync Taste", style = MaterialTheme.typography.labelSmall, color = Color(0xFF1DB954))
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            tasteManager.unlinkSpotify()
+                                            Toast.makeText(context, "Spotify unlinked", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.weight(1f).height(38.dp),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text("Unlink", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF4D4D))
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = "Connect your Spotify account to analyze listening history, top genres, and adapt GAMA soundwave recommendations.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = GammaTextSecondary
+                                )
+                                Button(
+                                    onClick = {
+                                        tasteManager.linkSpotify("Spotify User", listOf("Rock & Metal", "Alternative Rock", "Cyberpunk", "Nu Metal"))
+                                        Toast.makeText(context, "Spotify account linked! Taste profile synced.", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(40.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954)),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(imageVector = Icons.Default.Link, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.Black)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Link Spotify Account", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Color.Black)
+                                }
+                            }
+                        }
+                    }
+
+                    // Google & YouTube Music Card
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(GammaSurfaceElevated)
+                            .border(
+                                width = if (isGoogleLinked) 1.5.dp else 1.dp,
+                                color = if (isGoogleLinked) Color(0xFFFF0000) else GammaDivider,
+                                shape = RoundedCornerShape(18.dp)
+                            )
+                            .padding(16.dp)
+                            .testTag("google_integration_card")
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFFFF0000).copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Sensors,
+                                            contentDescription = "YouTube Music",
+                                            tint = Color(0xFFFF0000),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = "Google & YouTube Music",
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = GammaTextPrimary
+                                        )
+                                        Text(
+                                            text = if (isGoogleLinked) googleEmail.ifEmpty { "Connected Account" } else "Not Connected",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (isGoogleLinked) Color(0xFFFF4D4D) else GammaTextMuted
+                                        )
+                                    }
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(
+                                            if (isGoogleLinked) Color(0xFFFF0000).copy(alpha = 0.2f)
+                                            else GammaSurfaceHighlight
+                                        )
+                                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                                ) {
+                                    Text(
+                                        text = if (isGoogleLinked) "LINKED" else "UNLINKED",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 10.sp
+                                        ),
+                                        color = if (isGoogleLinked) Color(0xFFFF4D4D) else GammaTextMuted
+                                    )
+                                }
+                            }
+
+                            if (isGoogleLinked) {
+                                Text(
+                                    text = "Referenced Taste Profile:",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = GammaTextSecondary
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    youtubeTastes.take(3).forEach { taste ->
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(Color(0xFFFF0000).copy(alpha = 0.12f))
+                                                .border(1.dp, Color(0xFFFF0000).copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                        ) {
+                                            Text(
+                                                text = taste,
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                                color = Color(0xFFFF4D4D)
+                                            )
+                                        }
+                                    }
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            tasteManager.syncAllTastes()
+                                            Toast.makeText(context, "YouTube Music tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.weight(1f).height(38.dp),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(imageVector = Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFFFF4D4D))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Sync Taste", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF4D4D))
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            tasteManager.unlinkGoogle()
+                                            Toast.makeText(context, "Google unlinked", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.weight(1f).height(38.dp),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text("Unlink", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF4D4D))
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = "Connect your Google account to sync your YouTube Music playlists, artist preferences, and frequency resonances.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = GammaTextSecondary
+                                )
+                                Button(
+                                    onClick = {
+                                        tasteManager.linkGoogle("user@gmail.com", listOf("432Hz Ambient", "Progressive Metal", "Synthwave", "Heavy Drums"))
+                                        Toast.makeText(context, "Google account linked! Taste profile synced.", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(40.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF0000)),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(imageVector = Icons.Default.Link, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Link Google Account", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                                }
+                            }
                         }
                     }
                 }

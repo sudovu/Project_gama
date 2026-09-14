@@ -100,7 +100,7 @@ struct PlayerView: View {
 
                     // Video Overlay Controls (Minimize, Fullscreen, Cross)
                     VStack {
-                        HStack(spacing: 8) {
+                        HStack(spacing: 6) {
                             Spacer()
 
                             // Minimize button (collapses to bottom bar)
@@ -108,7 +108,7 @@ struct PlayerView: View {
                                 audio.isPlayerExpanded = false
                             }) {
                                 Image(systemName: "chevron.down.circle.fill")
-                                    .font(.system(size: 24))
+                                    .font(.system(size: 16))
                                     .foregroundColor(Color(red: 0, green: 1, blue: 0.8))
                                     .background(Color.black.opacity(0.6))
                                     .clipShape(Circle())
@@ -119,25 +119,24 @@ struct PlayerView: View {
                                 audio.showVideoPip.toggle()
                             }) {
                                 Image(systemName: audio.showVideoPip ? "arrow.up.left.and.arrow.down.right.circle.fill" : "arrow.down.right.and.arrow.up.left.circle.fill")
-                                    .font(.system(size: 24))
+                                    .font(.system(size: 16))
                                     .foregroundColor(.white)
                                     .background(Color.black.opacity(0.6))
                                     .clipShape(Circle())
                             }
 
-                            // Cross (Close) button
+                            // Cross (Close) button: switch to music-only playback without pausing
                             Button(action: {
-                                audio.pause()
-                                audio.isPlayerExpanded = false
+                                audio.showVideoPip = false
                             }) {
                                 Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 24))
+                                    .font(.system(size: 16))
                                     .foregroundColor(Color(red: 1.0, green: 0.2, blue: 0.4))
                                     .background(Color.black.opacity(0.6))
                                     .clipShape(Circle())
                             }
                         }
-                        .padding(10)
+                        .padding(8)
                         Spacer()
                     }
                     .frame(width: 310, height: 310)

@@ -105,7 +105,9 @@ import com.example.ui.theme.GammaTextSecondary
 fun GammaPlayerScreen(
     viewModel: PlayerViewModel,
     onCollapseClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isVideoClosed: Boolean = false,
+    onReopenVideo: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val playback = uiState.playbackState
@@ -223,7 +225,7 @@ fun GammaPlayerScreen(
                     .scale(if (playback.isPlaying) pulseScale else 1.0f),
                 contentAlignment = Alignment.Center
             ) {
-                if (!isYouTubePlaying) {
+                if (!isYouTubePlaying || isVideoClosed) {
                     // Background aura ring
                     Box(
                         modifier = Modifier
@@ -238,6 +240,36 @@ fun GammaPlayerScreen(
                         shape = RoundedCornerShape(20.dp),
                         hasGlowBorder = true
                     )
+
+                    if (isYouTubePlaying && isVideoClosed) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 8.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color.Black.copy(alpha = 0.82f))
+                                .border(1.dp, GammaPrimary, RoundedCornerShape(16.dp))
+                                .clickable { onReopenVideo() }
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                .testTag("reopen_video_badge")
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Watch Video",
+                                    tint = GammaPrimary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Watch Video",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = GammaPrimary,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+                    }
                 }
             }
 

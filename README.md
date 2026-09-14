@@ -21,7 +21,10 @@ GAMMA/
 ├── app/                      # Android Native Application (Kotlin + Jetpack Compose)
 ├── windows/                  # Windows Desktop Application (Electron 31 + React 18 + Vite 5)
 ├── ios/                      # iOS Native Application (SwiftUI + AVFoundation + MediaPlayer)
-├── GAMA-v1.0-Universal.apk   # Pre-built Universal Android APK (Android 7.0+)
+├── versions/                 # Version Archives & Downloadable APK Releases (v1.0, v1.1...)
+│   ├── README.md             # Version Index & Release Log
+│   ├── v1.0/                 # Release v1.0 (GAMA-v1.0.apk)
+│   └── v1.1/                 # Release v1.1 (GAMA-v1.1.apk - Latest)
 └── README.md
 ```
 
@@ -53,7 +56,7 @@ GAMMA/
   ```
 - **Install Ready-To-Use Universal APK**:
   ```bash
-  adb install GAMA-v1.0-Universal.apk
+  adb install versions/v1.1/GAMA-v1.1.apk
   ```
 - See [`app/README.md`](file:///C:/Users/Sudo/antigravity/GAMMA/app) for details.
 

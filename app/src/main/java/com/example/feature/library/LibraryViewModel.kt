@@ -177,6 +177,18 @@ class LibraryViewModel(
         }
     }
 
+    fun importPlaylist(name: String, tracks: List<Track>) {
+        if (name.isNotBlank()) {
+            viewModelScope.launch {
+                val playlistId = repository.createPlaylist(name.trim(), "Imported playlist • ${tracks.size} tracks")
+                tracks.forEach { track ->
+                    repository.addTrackToPlaylist(playlistId, track)
+                }
+                _selectedTab.value = LibraryTab.PLAYLISTS
+            }
+        }
+    }
+
     fun clearHistory() {
         viewModelScope.launch {
             repository.clearHistory()
