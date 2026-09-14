@@ -242,6 +242,19 @@ class PlaybackManager(private val context: Context) {
         }
     }
 
+    fun stopPlayback() {
+        _playbackState.update {
+            it.copy(
+                isPlaying = false,
+                currentTrack = null,
+                positionMs = 0L
+            )
+        }
+        audioEngine.stop()
+        playerBridge?.pauseVideo()
+        GamaPlaybackService.stop(context)
+    }
+
     fun seekTo(positionMs: Long) {
         val track = _playbackState.value.currentTrack
         val duration = _playbackState.value.durationMs

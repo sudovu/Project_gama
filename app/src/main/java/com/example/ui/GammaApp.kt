@@ -7,8 +7,12 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,14 +24,20 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -35,17 +45,25 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -101,6 +119,41 @@ fun GammaApp(
     val playbackState by container.playbackManager.playbackState.collectAsStateWithLifecycle()
     val isPlayerScreen = currentRoute == Screen.Player.route
 
+    var isVideoFullscreen by remember { mutableStateOf(false) }
+    var isVideoClosed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(playbackState.currentTrack?.id) {
+        if (playbackState.currentTrack != null) {
+            isVideoClosed = false
+        }
+    }
+
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
+    val window = activity?.window
+
+    LaunchedEffect(isVideoFullscreen) {
+        window?.let { win ->
+            val insetsController = WindowCompat.getInsetsController(win, win.decorView)
+            if (isVideoFullscreen) {
+                insetsController.hide(WindowInsetsCompat.Type.systemBars())
+                insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                insetsController.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
+    BackHandler(enabled = isVideoFullscreen) {
+        isVideoFullscreen = false
+    }
+
+    BackHandler(enabled = isPlayerScreen && !isVideoFullscreen) {
+        if (!navController.popBackStack()) {
+            navController.navigate(Screen.Discover.route)
+        }
+    }
+
     val bottomNavItems = listOf(
         Pair(Screen.Discover, Icons.Default.Sensors),
         Pair(Screen.Search, Icons.Default.Search),
@@ -114,7 +167,8 @@ fun GammaApp(
             containerColor = GammaBackground,
             contentWindowInsets = WindowInsets.systemBars,
             bottomBar = {
-                if (!isPlayerScreen) {
+                // Navigation bar is displayed ONLY when minimized (not on player screen and not in fullscreen video)
+                if (!isPlayerScreen && !isVideoFullscreen) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -189,7 +243,7 @@ fun GammaApp(
                 startDestination = Screen.Discover.route,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(if (isPlayerScreen) androidx.compose.foundation.layout.PaddingValues(0.dp) else innerPadding)
+                    .padding(if (isPlayerScreen || isVideoFullscreen) androidx.compose.foundation.layout.PaddingValues(0.dp) else innerPadding)
             ) {
                 composable(Screen.Discover.route) {
                     val viewModel: DiscoverViewModel = viewModel(
@@ -360,49 +414,259 @@ fun GammaApp(
             }
         }
 
-        // Persistent hardware-accelerated authentic YouTube player (visible at alpha 1.0f)
+        // Persistent hardware-accelerated authentic YouTube player with Fullscreen, Minimize & Cross controls
         val isYouTubeTrack = playbackState.currentTrack?.let {
             it.youtubeVideoId.isNotEmpty() && it.localAudioUri.isEmpty()
         } ?: false
 
-        if (isYouTubeTrack) {
-            val videoWidth by animateDpAsState(
-                targetValue = if (isPlayerScreen) 320.dp else 220.dp,
-                label = "videoWidth"
-            )
-            val videoHeight by animateDpAsState(
-                targetValue = if (isPlayerScreen) 210.dp else 130.dp,
-                label = "videoHeight"
-            )
-            val cornerRadius by animateDpAsState(
-                targetValue = if (isPlayerScreen) 20.dp else 12.dp,
-                label = "cornerRadius"
-            )
-
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(
-                        top = if (isPlayerScreen) 86.dp else 0.dp,
-                        bottom = if (isPlayerScreen) 0.dp else 148.dp,
-                        end = if (isPlayerScreen) 0.dp else 14.dp
-                    ),
-                contentAlignment = if (isPlayerScreen) Alignment.TopCenter else Alignment.BottomEnd
-            ) {
+        if (isYouTubeTrack && !isVideoClosed) {
+            if (isVideoFullscreen) {
+                // ==========================================
+                // 1. FULLSCREEN VIDEO MODE (NO NAVIGATION BAR)
+                // ==========================================
                 Box(
                     modifier = Modifier
-                        .size(width = videoWidth, height = videoHeight)
-                        .clip(RoundedCornerShape(cornerRadius))
+                        .fillMaxSize()
                         .background(Color.Black)
-                        .border(1.5.dp, GammaGlowCyan, RoundedCornerShape(cornerRadius))
-                        .clickable(enabled = !isPlayerScreen) {
-                            navController.navigate(Screen.Player.route)
-                        }
+                        .zIndex(500f)
                 ) {
                     CompliantYouTubeHost(
                         playbackManager = container.playbackManager,
                         modifier = Modifier.fillMaxSize()
                     )
+
+                    // Cybernetic Top Control Bar Overlay
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.TopCenter)
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent)
+                                )
+                            )
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(GammaPrimary, CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = playbackState.currentTrack?.title ?: "GAMA",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "${playbackState.currentTrack?.artist ?: "Unknown"} • 432Hz FULLSCREEN",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = GammaPrimary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Minimize button (collapses video to corner and displays navigation bar)
+                            IconButton(
+                                onClick = {
+                                    isVideoFullscreen = false
+                                    if (isPlayerScreen) {
+                                        navController.popBackStack()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .background(Color.Black.copy(alpha = 0.65f), CircleShape)
+                                    .border(1.dp, GammaGlowCyan, CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowDown,
+                                    contentDescription = "Minimize video to navigation bar",
+                                    tint = GammaPrimary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+
+                            // Exit Fullscreen button (returns to player screen)
+                            IconButton(
+                                onClick = {
+                                    isVideoFullscreen = false
+                                },
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .background(Color.Black.copy(alpha = 0.65f), CircleShape)
+                                    .border(1.dp, GammaGlowCyan, CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FullscreenExit,
+                                    contentDescription = "Exit Fullscreen",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+
+                            // Cross (Close) button (closes video & stops playback)
+                            IconButton(
+                                onClick = {
+                                    isVideoFullscreen = false
+                                    isVideoClosed = true
+                                    container.playbackManager.stopPlayback()
+                                    if (isPlayerScreen) {
+                                        navController.popBackStack()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .background(Color(0xFF330011).copy(alpha = 0.85f), CircleShape)
+                                    .border(1.dp, Color(0xFFFF3366), CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Close video",
+                                    tint = Color(0xFFFF4D4D),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                // ==========================================
+                // 2. EXPANDED PLAYER SCREEN OR MINIMIZED CORNER PIP
+                // ==========================================
+                val videoWidth by animateDpAsState(
+                    targetValue = if (isPlayerScreen) 320.dp else 220.dp,
+                    label = "videoWidth"
+                )
+                val videoHeight by animateDpAsState(
+                    targetValue = if (isPlayerScreen) 210.dp else 130.dp,
+                    label = "videoHeight"
+                )
+                val cornerRadius by animateDpAsState(
+                    targetValue = if (isPlayerScreen) 20.dp else 12.dp,
+                    label = "cornerRadius"
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            top = if (isPlayerScreen) 86.dp else 0.dp,
+                            bottom = if (isPlayerScreen) 0.dp else 148.dp,
+                            end = if (isPlayerScreen) 0.dp else 14.dp
+                        ),
+                    contentAlignment = if (isPlayerScreen) Alignment.TopCenter else Alignment.BottomEnd
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = videoWidth, height = videoHeight)
+                            .clip(RoundedCornerShape(cornerRadius))
+                            .background(Color.Black)
+                            .border(1.5.dp, GammaGlowCyan, RoundedCornerShape(cornerRadius))
+                            .clickable(enabled = !isPlayerScreen) {
+                                navController.navigate(Screen.Player.route)
+                            }
+                    ) {
+                        CompliantYouTubeHost(
+                            playbackManager = container.playbackManager,
+                            modifier = Modifier.fillMaxSize()
+                        )
+
+                        // Top Controls Overlay Bar on Video (Minimize, Fullscreen, Cross)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.TopCenter)
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent)
+                                    )
+                                )
+                                .padding(horizontal = 6.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (isPlayerScreen) {
+                                // Minimize Button: Collapses player to minimized mode where navigation bar is displayed
+                                IconButton(
+                                    onClick = {
+                                        if (!navController.popBackStack()) {
+                                            navController.navigate(Screen.Discover.route)
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .size(30.dp)
+                                        .background(Color.Black.copy(alpha = 0.65f), CircleShape)
+                                        .border(1.dp, GammaGlowCyan.copy(alpha = 0.7f), CircleShape)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = "Minimize to navigation bar",
+                                        tint = GammaPrimary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(6.dp))
+                            }
+
+                            // Fullscreen Button: Expands to 100% fullscreen (hiding navigation bar)
+                            IconButton(
+                                onClick = {
+                                    isVideoFullscreen = true
+                                },
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .background(Color.Black.copy(alpha = 0.65f), CircleShape)
+                                    .border(1.dp, GammaGlowCyan.copy(alpha = 0.7f), CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Fullscreen,
+                                    contentDescription = "Fullscreen video",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            // Cross (Close) Button: Closes video & stops playback
+                            IconButton(
+                                onClick = {
+                                    isVideoClosed = true
+                                    container.playbackManager.stopPlayback()
+                                    if (isPlayerScreen) {
+                                        navController.popBackStack()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .background(Color(0xFF330011).copy(alpha = 0.85f), CircleShape)
+                                    .border(1.dp, Color(0xFFFF3366), CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Close video",
+                                    tint = Color(0xFFFF4D4D),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

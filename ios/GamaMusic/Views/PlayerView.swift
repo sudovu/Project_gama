@@ -97,6 +97,50 @@ struct PlayerView: View {
                     .frame(width: 310, height: 310)
                     .cornerRadius(24)
                     .opacity(audio.showVideoPip ? 1.0 : 0.001)
+
+                    // Video Overlay Controls (Minimize, Fullscreen, Cross)
+                    VStack {
+                        HStack(spacing: 8) {
+                            Spacer()
+
+                            // Minimize button (collapses to bottom bar)
+                            Button(action: {
+                                audio.isPlayerExpanded = false
+                            }) {
+                                Image(systemName: "chevron.down.circle.fill")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(Color(red: 0, green: 1, blue: 0.8))
+                                    .background(Color.black.opacity(0.6))
+                                    .clipShape(Circle())
+                            }
+
+                            // Fullscreen / PiP toggle button
+                            Button(action: {
+                                audio.showVideoPip.toggle()
+                            }) {
+                                Image(systemName: audio.showVideoPip ? "arrow.up.left.and.arrow.down.right.circle.fill" : "arrow.down.right.and.arrow.up.left.circle.fill")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.white)
+                                    .background(Color.black.opacity(0.6))
+                                    .clipShape(Circle())
+                            }
+
+                            // Cross (Close) button
+                            Button(action: {
+                                audio.pause()
+                                audio.isPlayerExpanded = false
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(Color(red: 1.0, green: 0.2, blue: 0.4))
+                                    .background(Color.black.opacity(0.6))
+                                    .clipShape(Circle())
+                            }
+                        }
+                        .padding(10)
+                        Spacer()
+                    }
+                    .frame(width: 310, height: 310)
                 }
 
                 Spacer()

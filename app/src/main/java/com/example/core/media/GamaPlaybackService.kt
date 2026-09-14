@@ -137,6 +137,22 @@ class GamaPlaybackService : Service() {
         } catch (_: Exception) {}
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        try {
+            PlaybackManager.activeInstance?.pause()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            manager?.cancel(NOTIFICATION_ID)
+            stopSelf()
+        } catch (_: Exception) {}
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action ?: return START_STICKY
 

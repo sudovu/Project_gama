@@ -1,8 +1,8 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Volume2, VolumeX,
   Compass, Search, Library, Sliders, User, Download, CheckCircle, Heart,
-  Maximize2, Minimize2, Radio, Activity, ExternalLink, ShieldCheck
+  Maximize2, Minimize2, Radio, Activity, ExternalLink, ShieldCheck, X
 } from 'lucide-react';
 import { INITIAL_TRACKS, GENRES } from './mockData';
 import profilePic from './assets/img_vhuwon_profile.jpg';
@@ -25,6 +25,7 @@ export default function App() {
   const [favorites, setFavorites] = useState(new Set(['trk_em_01', 'trk_sk_01']));
   const [downloaded, setDownloaded] = useState(new Set(['trk_em_01']));
   const [showVideoPip, setShowVideoPip] = useState(true);
+  const [isVideoFullscreen, setIsVideoFullscreen] = useState(false);
 
   // Equalizer state (gains in dB)
   const [eqGains, setEqGains] = useState([0, 0, 0, 0, 0]);
@@ -689,13 +690,54 @@ export default function App() {
         </div>
       </footer>
 
-      {/* EMBEDDED YOUTUBE VIDEO PIP (BOTTOM-RIGHT) */}
+      {/* EMBEDDED YOUTUBE VIDEO PIP (WITH CROSS, FULLSCREEN & MINIMIZE BUTTONS) */}
       <div 
-        className={`fixed bottom-28 right-6 w-72 h-44 rounded-2xl overflow-hidden border-2 border-gammaCyan/80 shadow-2xl bg-black transition-all z-20 ${
-          showVideoPip ? 'opacity-100 scale-100' : 'opacity-0 pointer-events-none scale-75'
+        className={`fixed transition-all z-40 bg-black ${
+          isVideoFullscreen
+            ? 'inset-0 w-full h-full'
+            : `bottom-28 right-6 w-80 h-48 rounded-2xl overflow-hidden border-2 border-gammaCyan/80 shadow-2xl ${
+                showVideoPip ? 'opacity-100 scale-100' : 'opacity-0 pointer-events-none scale-75'
+              }`
         }`}
       >
         <div id="yt-hidden-player" className="w-full h-full"></div>
+
+        {/* Video Control Buttons Overlay */}
+        <div className="absolute top-2 right-2 flex items-center space-x-1.5 z-50 bg-black/80 backdrop-blur-md px-2 py-1 rounded-xl border border-slate-700">
+          <button
+            onClick={() => {
+              if (isVideoFullscreen) {
+                setIsVideoFullscreen(false);
+              } else {
+                setShowVideoPip(false);
+              }
+            }}
+            title="Minimize"
+            className="p-1 rounded-lg text-gammaCyan hover:bg-slate-800 transition-colors"
+          >
+            <Minimize2 className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            onClick={() => setIsVideoFullscreen(!isVideoFullscreen)}
+            title={isVideoFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+            className="p-1 rounded-lg text-slate-200 hover:text-white hover:bg-slate-800 transition-colors"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            onClick={() => {
+              setIsVideoFullscreen(false);
+              setShowVideoPip(false);
+              togglePlayPause();
+            }}
+            title="Close video"
+            className="p-1 rounded-lg text-rose-500 hover:text-rose-400 hover:bg-rose-950/40 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
     </div>
   );
