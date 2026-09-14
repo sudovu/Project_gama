@@ -105,6 +105,9 @@ interface UploadedTrackDao {
     @Query("SELECT * FROM uploaded_tracks ORDER BY uploadedAt DESC")
     fun getAllUploaded(): Flow<List<UploadedTrackEntity>>
 
+    @Query("SELECT * FROM uploaded_tracks ORDER BY uploadedAt DESC")
+    suspend fun getAllUploadedSync(): List<UploadedTrackEntity>
+
     @Query("SELECT * FROM uploaded_tracks WHERE id = :id")
     suspend fun getUploadedById(id: String): UploadedTrackEntity?
 

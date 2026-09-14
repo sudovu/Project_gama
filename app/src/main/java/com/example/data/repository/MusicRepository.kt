@@ -596,4 +596,52 @@ class MusicRepository(
         if (a.contains("kinetic pulse") || a.contains("vektor orbit") || a.contains("solaris resonance") || a.contains("aether void")) return true
         return false
     }
+
+    suspend fun getAllCandidateTracks(): List<Track> {
+        val base = CuratedFrequencies.allTracks
+        val cached = try {
+            discoveryCacheDao.getAllDiscoveredSync().map { it.toDomain() }
+        } catch (_: Exception) {
+            emptyList()
+        }
+        val uploaded = try {
+            uploadedTrackDao.getAllUploadedSync().map { it.toDomain() }
+        } catch (_: Exception) {
+            emptyList()
+        }
+        return (base + cached + uploaded)
+            .filterNot { isLegacyMockTrack(it.id, it.title, it.artist) }
+            .distinctBy { it.id }
+    }
+
+    suspend fun getTracksForGenreFromYouTube(genre: String): List<Track> {
+        val ytTracks = if (provider is YouTubeProvider) {
+            provider.fetchTracksForGenre(genre)
+        } else {
+            val query = "$genre hits songs"
+            searchWithScope(query, "YOUTUBE_MUSIC").first().getOrNull()?.tracks ?: emptyList()
+        }
+        val taggedTracks = ytTracks.map { it.copy(genre = genre) }
+        if (taggedTracks.isNotEmpty()) {
+            try {
+                val entities = taggedTracks.map { track ->
+                    DiscoveredTrackEntity(
+                        trackId = track.id,
+                        title = track.title,
+                        artist = track.artist,
+                        albumTitle = track.albumTitle,
+                        artworkUrl = track.artworkUrl,
+                        durationSeconds = track.durationSeconds,
+                        genre = track.genre,
+                        frequencyHz = track.frequencyHz,
+                        category = genre,
+                        source = track.source,
+                        youtubeVideoId = track.youtubeVideoId
+                    )
+                }
+                discoveryCacheDao.insertAllDiscovered(entities)
+            } catch (_: Exception) {}
+        }
+        return taggedTracks
+    }
 }

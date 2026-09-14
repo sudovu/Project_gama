@@ -1,4 +1,4 @@
-﻿package com.example.core.ui
+package com.example.core.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -27,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,7 +43,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,6 +56,7 @@ import com.example.ui.theme.GammaSecondary
 import com.example.ui.theme.GammaSurfaceElevated
 import com.example.ui.theme.GammaTextMuted
 import com.example.ui.theme.GammaTextPrimary
+import com.example.ui.theme.GammaTextSecondary
 
 /**
  * Professional continuous curved seekbar for the GAMMA Frequency Player.
@@ -62,22 +68,22 @@ fun GammaCurvedWaveformSeekbar(
     positionMs: Long,
     durationMs: Long,
     onSeek: (Long) -> Unit,
-    modifier: Modifier = Modifier,
-    visualizerBands: FloatArray = FloatArray(16) { 0.1f },
-    barCount: Int = 46
+    modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
     val safeDuration = durationMs.coerceAtLeast(1000L)
+    val currentDuration by rememberUpdatedState(safeDuration)
+    val currentOnSeek by rememberUpdatedState(onSeek)
 
     var isDragging by remember { mutableStateOf(false) }
     var dragProgress by remember { mutableFloatStateOf(0f) }
 
     val actualProgress = (positionMs.toFloat() / safeDuration).coerceIn(0f, 1f)
     val displayProgress = if (isDragging) dragProgress else actualProgress
-    val displayMs = (displayProgress * safeDuration).toLong()
+    val displayMs = if (isDragging) (dragProgress * safeDuration).toLong() else positionMs
 
     val animatedThumbRadius by animateFloatAsState(
-        targetValue = if (isDragging) 9f else 6f,
+        targetValue = if (isDragging) 8f else 6f,
         animationSpec = tween(durationMillis = 150),
         label = "thumbRadius"
     )
@@ -98,51 +104,12 @@ fun GammaCurvedWaveformSeekbar(
             .testTag("curved_waveform_seekbar"),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Floating scrub tooltip bubble when user is actively dragging
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(24.dp)
-        ) {
-            androidx.compose.animation.AnimatedVisibility(
-                visible = isDragging,
-                enter = fadeIn(tween(100)),
-                exit = fadeOut(tween(100))
-            ) {
-                val tooltipWidthPx = with(density) { 54.dp.toPx() }
-                val availableTrackW = (canvasWidthPx - 2 * horizontalPaddingPx).coerceAtLeast(1f)
-                val thumbCenterXPx = horizontalPaddingPx + displayProgress * availableTrackW
-                val targetXPx = (thumbCenterXPx - tooltipWidthPx / 2f).coerceIn(
-                    0f,
-                    (canvasWidthPx - tooltipWidthPx).coerceAtLeast(0f)
-                )
-
-                Box(
-                    modifier = Modifier
-                        .offset { IntOffset(x = targetXPx.toInt(), y = 0) }
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(GammaSurfaceElevated)
-                        .border(1.dp, GammaPrimary.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = formatTimeMs(displayMs),
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp
-                        ),
-                        color = GammaPrimary
-                    )
-                }
-            }
-        }
-
         // Continuous Curved Arc Canvas Track with Unified Rock-Solid Gestures
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(40.dp)
-                .pointerInput(safeDuration) {
+                .height(36.dp)
+                .pointerInput(Unit) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val w = size.width.toFloat()
@@ -155,8 +122,10 @@ fun GammaCurvedWaveformSeekbar(
                         var p = ((currentX - pad) / trackW).coerceIn(0f, 1f)
                         dragProgress = p
                         down.consume()
+                        currentOnSeek((p * currentDuration).toLong())
 
                         val pointerId = down.id
+                        var lastSeekTime = System.currentTimeMillis()
                         while (true) {
                             val event = awaitPointerEvent()
                             val change = event.changes.firstOrNull { it.id == pointerId } ?: break
@@ -168,10 +137,16 @@ fun GammaCurvedWaveformSeekbar(
                             p = ((currentX - pad) / trackW).coerceIn(0f, 1f)
                             dragProgress = p
                             change.consume()
+
+                            val now = System.currentTimeMillis()
+                            if (now - lastSeekTime >= 45L) {
+                                lastSeekTime = now
+                                currentOnSeek((p * currentDuration).toLong())
+                            }
                         }
                         isDragging = false
-                        val targetMs = (dragProgress * safeDuration).toLong()
-                        onSeek(targetMs)
+                        val targetMs = (dragProgress * currentDuration).toLong()
+                        currentOnSeek(targetMs)
                     }
                 }
         ) {
@@ -268,7 +243,7 @@ fun GammaCurvedWaveformSeekbar(
             )
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         // Time labels (Current vs Duration / Remaining)
         Row(
@@ -281,19 +256,29 @@ fun GammaCurvedWaveformSeekbar(
             Text(
                 text = formatTimeMs(displayMs),
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 0.5.sp
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp
                 ),
-                color = if (isDragging) GammaPrimary else GammaTextMuted
+                modifier = Modifier.widthIn(min = 52.dp),
+                maxLines = 1,
+                softWrap = false,
+                textAlign = TextAlign.Start,
+                color = if (isDragging) GammaPrimary else GammaTextSecondary
             )
 
             val remainingMs = (safeDuration - displayMs).coerceAtLeast(0L)
             Text(
                 text = "-${formatTimeMs(remainingMs)}",
                 style = MaterialTheme.typography.labelSmall.copy(
+                    fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Normal,
-                    letterSpacing = 0.5.sp
+                    fontSize = 12.sp
                 ),
+                modifier = Modifier.widthIn(min = 52.dp),
+                maxLines = 1,
+                softWrap = false,
+                textAlign = TextAlign.End,
                 color = GammaTextMuted
             )
         }
@@ -302,7 +287,12 @@ fun GammaCurvedWaveformSeekbar(
 
 private fun formatTimeMs(ms: Long): String {
     val totalSeconds = (ms / 1000).coerceAtLeast(0)
-    val minutes = totalSeconds / 60
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
     val seconds = totalSeconds % 60
-    return "%d:%02d".format(minutes, seconds)
+    return if (hours > 0) {
+        "%d:%02d:%02d".format(hours, minutes, seconds)
+    } else {
+        "%d:%02d".format(minutes, seconds)
+    }
 }

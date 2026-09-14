@@ -4,6 +4,7 @@ This directory archives all historical and current build releases of the GAMA Cy
 
 | Version | Release Date | Android Binary | Highlights |
 | :--- | :--- | :--- | :--- |
+| **[v1.6](./v1.6/)** | September 2026 | [`GAMA-v1.6.apk`](./v1.6/GAMA-v1.6.apk) | Rock-solid seekbar with zero remaining-time flicker, pure single-song filtering & recommendations (no 2-hour collections), unlimited genre radio stream |
 | **[v1.5](./v1.5/)** | September 2026 | [`GAMA-v1.5.apk`](./v1.5/GAMA-v1.5.apk) | Continuous curve-only seekbar with cyber thumb & gesture physics, borderless video action controls (no circles) |
 | **[v1.4](./v1.4/)** | September 2026 | [`GAMA-v1.4.apk`](./v1.4/GAMA-v1.4.apk) | Harmonic curved waveform seekbar, sleep timer with 30s audio fade-out, double-tap 5s skip HUD, hold 2x speed / rewind, 7-preset speed selector, queue reordering |
 | **[v1.3](./v1.3/)** | September 2026 | [`GAMA-v1.3.apk`](./v1.3/GAMA-v1.3.apk) | Live external account authorization intents for Spotify & Google / YouTube Music, Open App actions, in-app profile edit dialogs |
@@ -33,7 +34,10 @@ versions/
 ├── v1.4/
 │   ├── GAMA-v1.4.apk       # Universal release APK (v1.4)
 │   └── README.md           # v1.4 release notes & changelog
-└── v1.5/
-    ├── GAMA-v1.5.apk       # Universal release APK (v1.5)
-    └── README.md           # v1.5 release notes & changelog
+├── v1.5/
+│   ├── GAMA-v1.5.apk       # Universal release APK (v1.5)
+│   └── README.md           # v1.5 release notes & changelog
+└── v1.6/
+    ├── GAMA-v1.6.apk       # Universal release APK (v1.6)
+    └── README.md           # v1.6 release notes & changelog
 ```

@@ -54,6 +54,7 @@ class PlaybackManager(private val context: Context) {
 
     private var candidateProvider: (suspend () -> List<Track>)? = null
     private var cachedCandidates: List<Track> = CuratedFrequencies.allTracks
+    private var isTransitioningTrack = false
 
     // Audio Focus listener
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
@@ -144,18 +145,25 @@ class PlaybackManager(private val context: Context) {
         val updatedHistory = (_playbackState.value.playedTracksHistory + playableTrack).takeLast(30)
         val profile = SmartQueueEngine.analyzePlayedTracks(updatedHistory)
 
-        val shouldAutoAppend = _playbackState.value.isSmartQueueEnabled && (queue.size - 1 - index <= 1)
+        val isSingleOrTiny = queue.size <= 2
+        val shouldAutoAppend = _playbackState.value.isSmartQueueEnabled && ((queue.size - 1 - index <= 2) || isSingleOrTiny)
         val finalQueue = if (shouldAutoAppend) {
-            val recommendations = SmartQueueEngine.generateRecommendations(
+            val countNeeded = if (isSingleOrTiny) 8 else 4
+            val recommendations = SmartQueueEngine.generateGenreRecommendations(
+                targetTrack = playableTrack,
                 playedTracks = updatedHistory,
                 candidatePool = getAvailableCandidates(),
                 currentQueue = queue,
-                count = 3
+                count = countNeeded
             )
-            queue + recommendations
+            (queue + recommendations).distinctBy { it.id }
         } else {
             queue
         }
+
+        isTransitioningTrack = true
+        val trackDurationMs = (playableTrack.durationSeconds * 1000L).coerceAtLeast(1000L)
+        audioEngine.setExternalPosition(0L, trackDurationMs)
 
         _playbackState.update { current ->
             current.copy(
@@ -165,7 +173,7 @@ class PlaybackManager(private val context: Context) {
                 isPlaying = true,
                 isBuffering = false,
                 positionMs = 0L,
-                durationMs = playableTrack.durationSeconds * 1000L,
+                durationMs = trackDurationMs,
                 errorMessage = null,
                 playedTracksHistory = updatedHistory,
                 smartQueueProfile = profile
@@ -271,6 +279,7 @@ class PlaybackManager(private val context: Context) {
         val track = _playbackState.value.currentTrack
         val duration = _playbackState.value.durationMs
         val clamped = positionMs.coerceIn(0L, duration.coerceAtLeast(1000L))
+        isTransitioningTrack = false
         _playbackState.update { it.copy(positionMs = clamped) }
         if (track != null && (track.localAudioUri.isNotEmpty() || track.streamUrl.isNotEmpty())) {
             audioEngine.seekTo(clamped)
@@ -395,35 +404,38 @@ class PlaybackManager(private val context: Context) {
             return
         }
 
-        val nextIndex = state.queueIndex + 1
+        // Advance to next track, skipping over collections/mixes to guarantee a good single song
+        var nextIndex = state.queueIndex + 1
+        while (nextIndex < queue.size && SmartQueueEngine.isCollectionOrMix(queue[nextIndex].title, queue[nextIndex].durationSeconds)) {
+            nextIndex++
+        }
+
         if (nextIndex < queue.size) {
             playTrack(queue[nextIndex], queue)
-            if (state.isSmartQueueEnabled && (queue.size - 1 - nextIndex <= 1)) {
-                appendSmartRecommendations(count = 3)
+            if (state.isSmartQueueEnabled && (queue.size - 1 - nextIndex <= 2)) {
+                appendSmartRecommendations(count = 5)
             }
-        } else if (state.isSmartQueueEnabled) {
-            val recommendations = SmartQueueEngine.generateRecommendations(
-                playedTracks = state.playedTracksHistory,
-                candidatePool = getAvailableCandidates(),
-                currentQueue = queue,
-                count = 3
-            )
-            if (recommendations.isNotEmpty()) {
-                val updatedQueue = queue + recommendations
-                playTrack(updatedQueue[nextIndex], updatedQueue)
-            } else if (state.repeatMode == RepeatMode.ALL) {
-                playTrack(queue[0], queue)
-            } else {
-                _playbackState.update { it.copy(isPlaying = false, positionMs = it.durationMs) }
-                audioEngine.pause()
-                playerBridge?.pauseVideo()
-            }
-        } else if (state.repeatMode == RepeatMode.ALL) {
-            playTrack(queue[0], queue)
         } else {
-            _playbackState.update { it.copy(isPlaying = false, positionMs = it.durationMs) }
-            audioEngine.pause()
-            playerBridge?.pauseVideo()
+            // Auto-append more tracks related to current genre so playlist NEVER ENDS!
+            val singlePool = getAvailableCandidates().filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
+            val recommendations = SmartQueueEngine.generateGenreRecommendations(
+                targetTrack = state.currentTrack,
+                playedTracks = state.playedTracksHistory,
+                candidatePool = singlePool,
+                currentQueue = queue,
+                count = 5
+            )
+            val updatedQueue = (queue + recommendations).distinctBy { it.id }
+            var finalNextIndex = state.queueIndex + 1
+            while (finalNextIndex < updatedQueue.size && SmartQueueEngine.isCollectionOrMix(updatedQueue[finalNextIndex].title, updatedQueue[finalNextIndex].durationSeconds)) {
+                finalNextIndex++
+            }
+            if (finalNextIndex < updatedQueue.size) {
+                playTrack(updatedQueue[finalNextIndex], updatedQueue)
+            } else if (queue.isNotEmpty()) {
+                val singleFallback = queue.firstOrNull { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) } ?: queue[0]
+                playTrack(singleFallback, queue)
+            }
         }
     }
 
@@ -528,7 +540,7 @@ class PlaybackManager(private val context: Context) {
         }
     }
 
-    fun appendSmartRecommendations(count: Int = 3): List<Track> {
+    fun appendSmartRecommendations(count: Int = 5): List<Track> {
         val state = _playbackState.value
         val history = if (state.playedTracksHistory.isNotEmpty()) {
             state.playedTracksHistory
@@ -536,16 +548,18 @@ class PlaybackManager(private val context: Context) {
             listOfNotNull(state.currentTrack)
         }
 
-        val recommendations = SmartQueueEngine.generateRecommendations(
+        val singlePool = getAvailableCandidates().filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
+        val recommendations = SmartQueueEngine.generateGenreRecommendations(
+            targetTrack = state.currentTrack,
             playedTracks = history,
-            candidatePool = getAvailableCandidates(),
+            candidatePool = singlePool,
             currentQueue = state.queue,
             count = count
         )
 
         if (recommendations.isNotEmpty()) {
             _playbackState.update { current ->
-                val newQueue = current.queue + recommendations
+                val newQueue = (current.queue + recommendations).distinctBy { it.id }
                 current.copy(queue = newQueue)
             }
         }
@@ -632,6 +646,7 @@ class PlaybackManager(private val context: Context) {
     fun onBridgePlayerStateChange(stateInt: Int) {
         when (stateInt) {
             1 -> { // Playing
+                isTransitioningTrack = false
                 _playbackState.update { it.copy(isPlaying = true, isBuffering = false) }
                 audioEngine.resumeVisualizer()
                 _playbackState.value.currentTrack?.let {
@@ -655,8 +670,16 @@ class PlaybackManager(private val context: Context) {
     }
 
     fun onBridgeTimeUpdate(currentTimeSec: Float, durationSec: Float) {
-        if (currentTimeSec <= 0f && durationSec <= 0f) return
-        val posMs = if (currentTimeSec > 0f) (currentTimeSec * 1000f).toLong() else _playbackState.value.positionMs
+        if (isTransitioningTrack) {
+            // While transitioning to a new track, ignore any stale trailing time from the old video (> 3 seconds)
+            if (currentTimeSec > 3f) {
+                return
+            }
+            if (currentTimeSec <= 1.5f && currentTimeSec >= 0f) {
+                isTransitioningTrack = false
+            }
+        }
+        val posMs = (currentTimeSec.coerceAtLeast(0f) * 1000f).toLong()
         val durMs = if (durationSec > 0f) (durationSec * 1000f).toLong() else _playbackState.value.durationMs
         audioEngine.setExternalPosition(posMs, durMs)
         _playbackState.update { state ->
@@ -752,16 +775,23 @@ class PlaybackManager(private val context: Context) {
                 if (state.isPlaying && !state.isBuffering) {
                     val bands = audioEngine.computeVisualizerBands(step)
                     val isYouTube = state.currentTrack?.let { it.youtubeVideoId.isNotEmpty() && it.localAudioUri.isEmpty() } ?: false
-                    val enginePos = audioEngine.getCurrentPositionMs()
-                    val newPos = if (enginePos > 0) {
-                        enginePos
-                    } else if (isYouTube) {
-                        state.positionMs
+                    val newPos = if (isYouTube) {
+                        if (isTransitioningTrack) {
+                            0L
+                        } else {
+                            val enginePos = audioEngine.getCurrentPositionMs()
+                            if (enginePos >= 0L) enginePos else state.positionMs
+                        }
                     } else {
-                        (state.positionMs + 120L).coerceAtMost(state.durationMs.coerceAtLeast(1000L))
+                        val enginePos = audioEngine.getCurrentPositionMs()
+                        if (enginePos > 0L) enginePos else (state.positionMs + 120L).coerceAtMost(state.durationMs.coerceAtLeast(1000L))
                     }
                     val engineDur = audioEngine.getDurationMs()
-                    val dur = if (engineDur > 1000L) engineDur else state.durationMs
+                    val dur = if (isYouTube) {
+                        if (state.durationMs > 1000L) state.durationMs else engineDur
+                    } else {
+                        if (engineDur > 1000L) engineDur else state.durationMs
+                    }
 
                     _playbackState.update {
                         it.copy(
@@ -771,7 +801,7 @@ class PlaybackManager(private val context: Context) {
                         )
                     }
 
-                    if (dur > 0 && newPos >= dur) {
+                    if (!isTransitioningTrack && dur > 3000L && newPos >= dur) {
                         onTrackFinished()
                     }
                 } else {

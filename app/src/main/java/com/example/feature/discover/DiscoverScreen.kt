@@ -173,207 +173,334 @@ fun DiscoverScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                     }
 
-                    // Dedicated Uploaded Signals Section (Discoverable Music!)
-                    if (feed.uploadedTracks.isNotEmpty()) {
-                        item {
-                            GammaSectionHeader(
-                                category = "Your Transmissions",
-                                title = "Uploaded Signals (${feed.uploadedTracks.size})"
-                            )
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.testTag("uploaded_tracks_row")
-                            ) {
-                                items(feed.uploadedTracks, key = { "up_disc_" + it.id }) { track ->
-                                    val isFav = state.favoriteIds.contains(track.id)
-                                    GammaQuickPickCard(
-                                        track = track.copy(isFavorite = isFav),
-                                        onClick = { onTrackClick(track, feed.uploadedTracks) }
-                                    )
+                    if (state.selectedMood == "All") {
+                        // --- FULL ALL-GENRE HOME DASHBOARD ---
+                        // Dedicated Uploaded Signals Section (Discoverable Music!)
+                        if (feed.uploadedTracks.isNotEmpty()) {
+                            item {
+                                GammaSectionHeader(
+                                    category = "Your Transmissions",
+                                    title = "Uploaded Signals (${feed.uploadedTracks.size})"
+                                )
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.testTag("uploaded_tracks_row")
+                                ) {
+                                    items(feed.uploadedTracks, key = { "up_disc_" + it.id }) { track ->
+                                        val isFav = state.favoriteIds.contains(track.id)
+                                        GammaQuickPickCard(
+                                            track = track.copy(isFavorite = isFav),
+                                            onClick = { onTrackClick(track, feed.uploadedTracks) }
+                                        )
+                                    }
                                 }
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-                    }
-
-                    // Quick Picks
-                    if (feed.quickPicks.isNotEmpty()) {
-                        item {
-                            GammaSectionHeader(
-                                category = "Trending Now",
-                                title = "Quick Picks"
-                            )
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.testTag("quick_picks_row")
-                            ) {
-                                items(feed.quickPicks, key = { it.id }) { track ->
-                                    GammaQuickPickCard(
-                                        track = track,
-                                        onClick = { onTrackClick(track, feed.quickPicks) }
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-                    }
-
-                    // Spotify Taste-Adapted Soundwaves
-                    if (isSpotifyLinked && spotifyTracks.isNotEmpty()) {
-                        item {
-                            GammaSectionHeader(
-                                category = "Spotify Sync (${spotifyTastes.take(2).joinToString(", ")})",
-                                title = "Taste Profile Matches"
-                            )
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.testTag("spotify_taste_row")
-                            ) {
-                                items(spotifyTracks, key = { "spotify_${it.id}" }) { track ->
-                                    GammaQuickPickCard(
-                                        track = track,
-                                        onClick = { onTrackClick(track, spotifyTracks) }
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-                    }
-
-                    // YouTube Music Taste-Adapted Resonances
-                    if (isGoogleLinked && ytTracks.isNotEmpty()) {
-                        item {
-                            GammaSectionHeader(
-                                category = "YouTube Music (${youtubeTastes.take(2).joinToString(", ")})",
-                                title = "Resonances For You"
-                            )
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.testTag("youtube_taste_row")
-                            ) {
-                                items(ytTracks, key = { "yt_${it.id}" }) { track ->
-                                    GammaQuickPickCard(
-                                        track = track,
-                                        onClick = { onTrackClick(track, ytTracks) }
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-                    }
-
-                    // Continue Listening (Recent)
-                    if (state.recentTracks.isNotEmpty()) {
-                        item {
-                            GammaSectionHeader(
-                                category = "Your Orbit",
-                                title = "Continue Listening"
-                            )
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.testTag("recent_tracks_row")
-                            ) {
-                                items(state.recentTracks.take(5), key = { it.id }) { track ->
-                                    val isFav = state.favoriteIds.contains(track.id)
-                                    GammaQuickPickCard(
-                                        track = track.copy(isFavorite = isFav),
-                                        onClick = { onTrackClick(track, state.recentTracks) }
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-                    }
-
-                    // Curated Playlists
-                    if (feed.featuredPlaylists.isNotEmpty()) {
-                        item {
-                            GammaSectionHeader(
-                                category = "Curated Soundwaves",
-                                title = "Featured Playlists"
-                            )
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                                modifier = Modifier.testTag("featured_playlists_row")
-                            ) {
-                                items(feed.featuredPlaylists, key = { it.id }) { playlist ->
-                                    GammaPlaylistCard(
-                                        playlist = playlist,
-                                        onClick = { onPlaylistClick(playlist.id) }
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-                    }
-
-                    // Trending Signals (Track List)
-                    item {
-                        GammaSectionHeader(
-                            category = "Featured Tracks",
-                            title = if (state.selectedMood == "All") "Trending Music" else "${state.selectedMood} Picks"
-                        )
-                    }
-
-                    items(displayedTracks.take(8), key = { it.id }) { track ->
-                        val isFav = state.favoriteIds.contains(track.id)
-                        val isCurr = track.id == currentPlayingTrackId
-                        Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                            GammaTrackRow(
-                                track = track.copy(isFavorite = isFav),
-                                isCurrentTrack = isCurr,
-                                isPlaying = isPlaying && isCurr,
-                                onClick = { onTrackClick(track, displayedTracks) },
-                                onFavoriteToggle = { viewModel.toggleFavorite(track) }
-                            )
-                        }
-                    }
-
-                    // Featured Albums
-                    if (feed.featuredAlbums.isNotEmpty()) {
-                        item {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            GammaSectionHeader(
-                                category = "Curated Releases",
-                                title = "Featured Albums"
-                            )
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(14.dp)
-                            ) {
-                                items(feed.featuredAlbums, key = { it.id }) { album ->
-                                    GammaAlbumCard(
-                                        album = album,
-                                        onClick = { onAlbumClick(album.id) }
-                                    )
-                                }
+                                Spacer(modifier = Modifier.height(16.dp))
                             }
                         }
-                    }
 
-                    // Featured Artists
-                    if (feed.featuredArtists.isNotEmpty()) {
+                        // Quick Picks
+                        if (feed.quickPicks.isNotEmpty()) {
+                            item {
+                                GammaSectionHeader(
+                                    category = "Trending Now",
+                                    title = "Quick Picks"
+                                )
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.testTag("quick_picks_row")
+                                ) {
+                                    items(feed.quickPicks, key = { it.id }) { track ->
+                                        GammaQuickPickCard(
+                                            track = track,
+                                            onClick = { onTrackClick(track, feed.quickPicks) }
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(16.dp))
+                            }
+                        }
+
+                        // Spotify Taste-Adapted Soundwaves
+                        if (isSpotifyLinked && spotifyTracks.isNotEmpty()) {
+                            item {
+                                GammaSectionHeader(
+                                    category = "Spotify Sync (${spotifyTastes.take(2).joinToString(", ")})",
+                                    title = "Taste Profile Matches"
+                                )
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.testTag("spotify_taste_row")
+                                ) {
+                                    items(spotifyTracks, key = { "spotify_${it.id}" }) { track ->
+                                        GammaQuickPickCard(
+                                            track = track,
+                                            onClick = { onTrackClick(track, spotifyTracks) }
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(16.dp))
+                            }
+                        }
+
+                        // YouTube Music Taste-Adapted Resonances
+                        if (isGoogleLinked && ytTracks.isNotEmpty()) {
+                            item {
+                                GammaSectionHeader(
+                                    category = "YouTube Music (${youtubeTastes.take(2).joinToString(", ")})",
+                                    title = "Resonances For You"
+                                )
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.testTag("youtube_taste_row")
+                                ) {
+                                    items(ytTracks, key = { "yt_${it.id}" }) { track ->
+                                        GammaQuickPickCard(
+                                            track = track,
+                                            onClick = { onTrackClick(track, ytTracks) }
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(16.dp))
+                            }
+                        }
+
+                        // Continue Listening (Recent)
+                        if (state.recentTracks.isNotEmpty()) {
+                            item {
+                                GammaSectionHeader(
+                                    category = "Your Orbit",
+                                    title = "Continue Listening"
+                                )
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.testTag("recent_tracks_row")
+                                ) {
+                                    items(state.recentTracks.take(5), key = { it.id }) { track ->
+                                        val isFav = state.favoriteIds.contains(track.id)
+                                        GammaQuickPickCard(
+                                            track = track.copy(isFavorite = isFav),
+                                            onClick = { onTrackClick(track, state.recentTracks) }
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(16.dp))
+                            }
+                        }
+
+                        // Curated Playlists
+                        if (feed.featuredPlaylists.isNotEmpty()) {
+                            item {
+                                GammaSectionHeader(
+                                    category = "Curated Soundwaves",
+                                    title = "Featured Playlists"
+                                )
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                    modifier = Modifier.testTag("featured_playlists_row")
+                                ) {
+                                    items(feed.featuredPlaylists, key = { it.id }) { playlist ->
+                                        GammaPlaylistCard(
+                                            playlist = playlist,
+                                            onClick = { onPlaylistClick(playlist.id) }
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(16.dp))
+                            }
+                        }
+
+                        // Trending Signals (Track List)
                         item {
-                            Spacer(modifier = Modifier.height(16.dp))
                             GammaSectionHeader(
-                                category = "Orbital Creators",
-                                title = "Featured Artists"
+                                category = "Featured Tracks",
+                                title = "Trending Music"
                             )
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                items(feed.featuredArtists, key = { it.id }) { artist ->
-                                    GammaArtistCard(
-                                        artist = artist,
-                                        onClick = { onArtistClick(artist.id) }
-                                    )
+                        }
+
+                        items(displayedTracks.take(8), key = { it.id }) { track ->
+                            val isFav = state.favoriteIds.contains(track.id)
+                            val isCurr = track.id == currentPlayingTrackId
+                            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                                GammaTrackRow(
+                                    track = track.copy(isFavorite = isFav),
+                                    isCurrentTrack = isCurr,
+                                    isPlaying = isPlaying && isCurr,
+                                    onClick = { onTrackClick(track, displayedTracks) },
+                                    onFavoriteToggle = { viewModel.toggleFavorite(track) }
+                                )
+                            }
+                        }
+
+                        // Featured Albums
+                        if (feed.featuredAlbums.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                GammaSectionHeader(
+                                    category = "Curated Releases",
+                                    title = "Featured Albums"
+                                )
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    items(feed.featuredAlbums, key = { it.id }) { album ->
+                                        GammaAlbumCard(
+                                            album = album,
+                                            onClick = { onAlbumClick(album.id) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Featured Artists
+                        if (feed.featuredArtists.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                GammaSectionHeader(
+                                    category = "Orbital Creators",
+                                    title = "Featured Artists"
+                                )
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    items(feed.featuredArtists, key = { it.id }) { artist ->
+                                        GammaArtistCard(
+                                            artist = artist,
+                                            onClick = { onArtistClick(artist.id) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // --- DEDICATED GENRE SCREEN (Hip-Hop, Rock & Metal, Pop Hits, Classics) ---
+                        // 1. Featured Picks for this genre (horizontal quick picks)
+                        if (displayedTracks.isNotEmpty()) {
+                            item {
+                                GammaSectionHeader(
+                                    category = "Vibe Frequency",
+                                    title = "${state.selectedMood} Anthems"
+                                )
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.testTag("genre_quick_picks_row")
+                                ) {
+                                    items(displayedTracks.take(6), key = { "genre_pick_${it.id}" }) { track ->
+                                        val isFav = state.favoriteIds.contains(track.id)
+                                        GammaQuickPickCard(
+                                            track = track.copy(isFavorite = isFav),
+                                            onClick = { onTrackClick(track, displayedTracks) }
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(16.dp))
+                            }
+                        }
+
+                        // 2. Complete tracklist for this genre
+                        item {
+                            GammaSectionHeader(
+                                category = "Unlimited Stream",
+                                title = "${state.selectedMood} Radio"
+                            )
+                        }
+
+                        items(displayedTracks, key = { it.id }) { track ->
+                            val isFav = state.favoriteIds.contains(track.id)
+                            val isCurr = track.id == currentPlayingTrackId
+                            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                                GammaTrackRow(
+                                    track = track.copy(isFavorite = isFav),
+                                    isCurrentTrack = isCurr,
+                                    isPlaying = isPlaying && isCurr,
+                                    onClick = { onTrackClick(track, displayedTracks) },
+                                    onFavoriteToggle = { viewModel.toggleFavorite(track) }
+                                )
+                            }
+                        }
+
+                        // 3. Matching Playlists for this genre
+                        val matchingPlaylists = feed.featuredPlaylists.filter {
+                            it.title.contains(state.selectedMood, ignoreCase = true) ||
+                            it.description.contains(state.selectedMood, ignoreCase = true)
+                        }
+                        if (matchingPlaylists.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                GammaSectionHeader(
+                                    category = "Genre Playlists",
+                                    title = "${state.selectedMood} Soundwaves"
+                                )
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    items(matchingPlaylists, key = { it.id }) { playlist ->
+                                        GammaPlaylistCard(
+                                            playlist = playlist,
+                                            onClick = { onPlaylistClick(playlist.id) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // 4. Matching Albums for this genre
+                        val matchingAlbums = feed.featuredAlbums.filter {
+                            it.genre.contains(state.selectedMood, ignoreCase = true) ||
+                            it.title.contains(state.selectedMood, ignoreCase = true)
+                        }
+                        if (matchingAlbums.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                GammaSectionHeader(
+                                    category = "Curated Albums",
+                                    title = "${state.selectedMood} Releases"
+                                )
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    items(matchingAlbums, key = { it.id }) { album ->
+                                        GammaAlbumCard(
+                                            album = album,
+                                            onClick = { onAlbumClick(album.id) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // 5. Matching Artists for this genre
+                        val matchingArtists = feed.featuredArtists.filter { artist ->
+                            artist.genres.any { it.contains(state.selectedMood, ignoreCase = true) }
+                        }
+                        if (matchingArtists.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                GammaSectionHeader(
+                                    category = "Genre Creators",
+                                    title = "${state.selectedMood} Artists"
+                                )
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    items(matchingArtists, key = { it.id }) { artist ->
+                                        GammaArtistCard(
+                                            artist = artist,
+                                            onClick = { onArtistClick(artist.id) }
+                                        )
+                                    }
                                 }
                             }
                         }

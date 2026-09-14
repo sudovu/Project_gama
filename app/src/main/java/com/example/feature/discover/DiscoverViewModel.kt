@@ -90,8 +90,30 @@ class DiscoverViewModel(
         }
     }
 
+    private val _loadedGenres = mutableSetOf<String>()
+
     fun selectMood(mood: String) {
         _selectedMood.value = mood
+        if (mood != "All" && !_loadedGenres.contains(mood)) {
+            _loadedGenres.add(mood)
+            viewModelScope.launch {
+                try {
+                    val genreYt = repository.getTracksForGenreFromYouTube(mood)
+                    if (genreYt.isNotEmpty()) {
+                        val current = _rawState.value
+                        if (current is DiscoverUiState.Success) {
+                            val existingMoodList = current.feed.moodPlaylists[mood] ?: emptyList()
+                            val mergedList = (genreYt + existingMoodList).distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
+                            val updatedMoodPlaylists = current.feed.moodPlaylists.toMutableMap()
+                            updatedMoodPlaylists[mood] = mergedList
+                            _rawState.value = current.copy(
+                                feed = current.feed.copy(moodPlaylists = updatedMoodPlaylists)
+                            )
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+        }
     }
 
     fun uploadTrack(

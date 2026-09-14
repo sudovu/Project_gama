@@ -243,6 +243,7 @@ fun createCompliantYouTubeWebView(context: Context, playbackManager: PlaybackMan
                         var pendingVideoId = '$initialVideoId';
                         var pendingPlay = true;
                         var timeInterval = null;
+                        var isVideoLoading = false;
 
                         window.onerror = function(msg, url, line) {
                             console.error("JS Error: " + msg + " at " + url + ":" + line);
@@ -320,6 +321,7 @@ fun createCompliantYouTubeWebView(context: Context, playbackManager: PlaybackMan
                         function onPlayerStateChange(event) {
                             console.log("onPlayerStateChange: " + event.data);
                             if (event.data === 1 && gammaPlayer) {
+                                isVideoLoading = false;
                                 try {
                                     gammaPlayer.unMute();
                                     gammaPlayer.setVolume(100);
@@ -342,18 +344,26 @@ fun createCompliantYouTubeWebView(context: Context, playbackManager: PlaybackMan
                             timeInterval = setInterval(function() {
                                 if (gammaPlayer && gammaPlayer.getCurrentTime && window.GammaBridge) {
                                     try {
+                                        if (isVideoLoading) {
+                                            window.GammaBridge.onTimeUpdate(0, 0);
+                                            return;
+                                        }
                                         var cur = gammaPlayer.getCurrentTime() || 0;
                                         var dur = gammaPlayer.getDuration() || 0;
                                         window.GammaBridge.onTimeUpdate(cur, dur);
                                     } catch (e) {}
                                 }
-                            }, 300);
+                            }, 250);
                         }
 
                         window.loadGammaVideo = function(videoId) {
                             console.log("loadGammaVideo: " + videoId);
+                            isVideoLoading = true;
                             pendingVideoId = videoId;
                             pendingPlay = true;
+                            if (window.GammaBridge && window.GammaBridge.onTimeUpdate) {
+                                try { window.GammaBridge.onTimeUpdate(0, 0); } catch(e) {}
+                            }
                             if (gammaPlayer && isPlayerReady && gammaPlayer.loadVideoById) {
                                 try {
                                     gammaPlayer.loadVideoById(videoId, 0);

@@ -22,4 +22,10 @@ class GammaContainer(context: Context) {
         discoveryCacheDao = database.discoveryCacheDao()
     )
     val playbackManager: PlaybackManager = PlaybackManager(context)
+
+    init {
+        playbackManager.setCandidateProvider {
+            musicRepository.getAllCandidateTracks()
+        }
+    }
 }

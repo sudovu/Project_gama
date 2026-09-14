@@ -427,7 +427,6 @@ fun GammaPlayerScreen(
                 onSeek = { targetMs ->
                     viewModel.seekTo(targetMs)
                 },
-                visualizerBands = playback.visualizerBands,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 4.dp)

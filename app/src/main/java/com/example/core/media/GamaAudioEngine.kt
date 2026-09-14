@@ -217,11 +217,15 @@ class GamaAudioEngine(private val context: Context) {
         }
     }
 
+    @Volatile
+    private var externalDurationMs: Long = 0L
+
     var onTrackCompletedListener: (() -> Unit)? = null
 
     fun playTrack(track: Track) {
         currentTrack = track
         currentPlaybackPositionMs = 0L
+        externalDurationMs = if (track.durationSeconds > 0) track.durationSeconds * 1000L else 0L
 
         if (track.localAudioUri.isNotEmpty()) {
             playViaMediaPlayer(track.localAudioUri)
@@ -236,6 +240,9 @@ class GamaAudioEngine(private val context: Context) {
 
     fun setExternalPosition(currentMs: Long, durationMs: Long) {
         currentPlaybackPositionMs = currentMs
+        if (durationMs > 1000L) {
+            externalDurationMs = durationMs
+        }
     }
 
     fun resumeVisualizer() {
@@ -261,10 +268,11 @@ class GamaAudioEngine(private val context: Context) {
 
     fun getDurationMs(): Long {
         return try {
+            if (externalDurationMs > 1000L) return externalDurationMs
             val dur = mediaPlayer?.duration?.toLong() ?: 0L
             if (dur > 1000L) dur else (currentTrack?.durationSeconds?.toLong()?.times(1000L) ?: 0L)
         } catch (_: Exception) {
-            currentTrack?.durationSeconds?.toLong()?.times(1000L) ?: 0L
+            if (externalDurationMs > 1000L) externalDurationMs else (currentTrack?.durationSeconds?.toLong()?.times(1000L) ?: 0L)
         }
     }
 
