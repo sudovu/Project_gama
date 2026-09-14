@@ -1,9 +1,10 @@
-# GAMA Releases & Version History
+﻿# GAMA Releases & Version History
 
 This directory archives all historical and current build releases of the GAMA Cybernetic Music Frequency Platform, along with release notes and downloadable binary packages.
 
 | Version | Release Date | Android Binary | Highlights |
 | :--- | :--- | :--- | :--- |
+| **[v1.4](./v1.4/)** | September 2026 | [`GAMA-v1.4.apk`](./v1.4/GAMA-v1.4.apk) | Harmonic curved waveform seekbar, sleep timer with 30s audio fade-out, double-tap 5s skip HUD, hold 2x speed / rewind, 7-preset speed selector, queue reordering |
 | **[v1.3](./v1.3/)** | September 2026 | [`GAMA-v1.3.apk`](./v1.3/GAMA-v1.3.apk) | Live external account authorization intents for Spotify & Google / YouTube Music, Open App actions, in-app profile edit dialogs |
 | **[v1.2](./v1.2/)** | September 2026 | [`GAMA-v1.2.apk`](./v1.2/GAMA-v1.2.apk) | Moved Developed By section to bottom, restored & upgraded 5-band real-time hardware Equalizer & DSP |
 | **[v1.1](./v1.1/)** | September 2026 | [`GAMA-v1.1.apk`](./v1.1/GAMA-v1.1.apk) | Discreet mini controls, pure music playback when video closed, persistence on next track, Spotify & Google taste sync, multi-platform playlist importer |
@@ -25,7 +26,10 @@ versions/
 ├── v1.2/
 │   ├── GAMA-v1.2.apk       # Universal release APK (v1.2)
 │   └── README.md           # v1.2 release notes & changelog
-└── v1.3/
-    ├── GAMA-v1.3.apk       # Universal release APK (v1.3)
-    └── README.md           # v1.3 release notes & changelog
+├── v1.3/
+│   ├── GAMA-v1.3.apk       # Universal release APK (v1.3)
+│   └── README.md           # v1.3 release notes & changelog
+└── v1.4/
+    ├── GAMA-v1.4.apk       # Universal release APK (v1.4)
+    └── README.md           # v1.4 release notes & changelog
 ```

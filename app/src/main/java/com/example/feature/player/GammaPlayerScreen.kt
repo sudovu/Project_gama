@@ -27,8 +27,13 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Favorite
@@ -43,8 +48,14 @@ import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import com.example.core.ui.GammaCurvedWaveformSeekbar
+import com.example.core.ui.GammaGestureOverlay
 import com.example.domain.model.TuningPreset
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -116,9 +127,14 @@ fun GammaPlayerScreen(
     var showQueueSheet by remember { mutableStateOf(false) }
     var showSpecsSheet by remember { mutableStateOf(false) }
     var showEqualizerSheet by remember { mutableStateOf(false) }
+    var showSleepTimerSheet by remember { mutableStateOf(false) }
+    var showSpeedSheet by remember { mutableStateOf(false) }
     val queueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val specsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val equalizerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sleepTimerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val speedSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var originalSpeedBeforeBoost by remember { mutableFloatStateOf(1.0f) }
 
     // Breathing artwork pulse when playing
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -179,51 +195,105 @@ fun GammaPlayerScreen(
                     )
                 }
 
-                // Frequency badge
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(GammaSurfaceElevated)
-                        .border(1.dp, GammaGlowCyan, CircleShape)
-                        .clickable { showSpecsSheet = true }
-                        .padding(horizontal = 14.dp, vertical = 6.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .background(GammaPrimary, CircleShape)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "${track?.genre ?: "Music"} • NOW PLAYING",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = GammaPrimary
-                        )
+                // Frequency badge or Sleep Timer countdown pill
+                if (playback.isSleepTimerActive) {
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(GammaSurfaceElevated)
+                            .border(1.dp, GammaPrimary, CircleShape)
+                            .clickable { showSleepTimerSheet = true }
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                            .testTag("sleep_timer_active_badge")
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Timer,
+                                contentDescription = "Sleep timer active",
+                                tint = GammaPrimary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "SLEEP: ${playback.formattedSleepTimer}",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = GammaPrimary
+                            )
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(GammaSurfaceElevated)
+                            .border(1.dp, GammaGlowCyan, CircleShape)
+                            .clickable { showSpecsSheet = true }
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .background(GammaPrimary, CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "${track?.genre ?: "Music"} • NOW PLAYING",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = GammaPrimary
+                            )
+                        }
                     }
                 }
 
-                IconButton(
-                    onClick = { showSpecsSheet = true },
-                    modifier = Modifier.testTag("player_info_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = "Track specs",
-                        tint = GammaTextSecondary
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Sleep Timer button
+                    IconButton(
+                        onClick = { showSleepTimerSheet = true },
+                        modifier = Modifier.testTag("player_sleep_timer_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Bedtime,
+                            contentDescription = "Sleep timer",
+                            tint = if (playback.isSleepTimerActive) GammaPrimary else GammaTextSecondary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { showSpecsSheet = true },
+                        modifier = Modifier.testTag("player_info_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "Track specs",
+                            tint = GammaTextSecondary
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Hero Artwork or YouTube Video Area
+            // Hero Artwork or YouTube Video Area with Gesture Overlay
             val isYouTubePlaying = track?.let { it.youtubeVideoId.isNotEmpty() && it.localAudioUri.isEmpty() } ?: false
-            Box(
+            GammaGestureOverlay(
+                onSkipBackward5 = { viewModel.seekBy(-5000L) },
+                onSkipForward5 = { viewModel.seekBy(5000L) },
+                onContinuousRewind = { viewModel.seekBy(-2000L) },
+                onFastForwardStart = {
+                    originalSpeedBeforeBoost = playback.playbackSpeed
+                    viewModel.setPlaybackSpeed(2.0f)
+                },
+                onFastForwardEnd = {
+                    viewModel.setPlaybackSpeed(originalSpeedBeforeBoost)
+                },
+                onSingleTap = {
+                    viewModel.togglePlayPause()
+                },
                 modifier = Modifier
                     .size(width = 300.dp, height = 210.dp)
-                    .scale(if (playback.isPlaying) pulseScale else 1.0f),
-                contentAlignment = Alignment.Center
+                    .scale(if (playback.isPlaying) pulseScale else 1.0f)
             ) {
                 if (!isYouTubePlaying || isVideoClosed) {
                     // Background aura ring
@@ -350,51 +420,18 @@ fun GammaPlayerScreen(
                 }
             }
 
-            // Seekbar
-            Column(modifier = Modifier.fillMaxWidth()) {
-                val currentMs = if (isUserSeeking) seekPositionMs.toLong() else playback.positionMs
-                val maxMs = playback.durationMs.coerceAtLeast(1000L)
-                val sliderValue = currentMs.toFloat().coerceIn(0f, maxMs.toFloat())
-
-                Slider(
-                    value = sliderValue,
-                    onValueChange = {
-                        isUserSeeking = true
-                        seekPositionMs = it
-                    },
-                    onValueChangeFinished = {
-                        viewModel.seekTo(seekPositionMs.toLong())
-                        isUserSeeking = false
-                    },
-                    valueRange = 0f..maxMs.toFloat(),
-                    colors = SliderDefaults.colors(
-                        thumbColor = GammaPrimary,
-                        activeTrackColor = GammaPrimary,
-                        inactiveTrackColor = GammaDivider
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("playback_slider")
-                )
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = formatTimeMs(currentMs),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = GammaTextMuted
-                    )
-                    Text(
-                        text = formatTimeMs(maxMs),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = GammaTextMuted
-                    )
-                }
-            }
+            // Curved Waveform Seekbar
+            GammaCurvedWaveformSeekbar(
+                positionMs = playback.positionMs,
+                durationMs = playback.durationMs,
+                onSeek = { targetMs ->
+                    viewModel.seekTo(targetMs)
+                },
+                visualizerBands = playback.visualizerBands,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp)
+            )
 
             // Control Deck (Shuffle, Prev, Hero Play/Pause, Next, Repeat)
             Row(
@@ -488,12 +525,14 @@ fun GammaPlayerScreen(
                 }
             }
 
-            // Bottom Actions (Smart Queue & Equalizer Buttons)
+            // Bottom Actions (Smart Queue, Equalizer, Speed, Sleep Timer)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
                     .padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally)
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 // Smart Queue Button
                 Box(
@@ -506,7 +545,7 @@ fun GammaPlayerScreen(
                             shape = CircleShape
                         )
                         .clickable { showQueueSheet = true }
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
                         .testTag("open_queue_button")
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -514,29 +553,14 @@ fun GammaPlayerScreen(
                             imageVector = if (playback.isSmartQueueEnabled) Icons.Default.AutoAwesome else Icons.Default.QueueMusic,
                             contentDescription = null,
                             tint = if (playback.isSmartQueueEnabled) GammaPrimary else GammaTextMuted,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(15.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = if (playback.isSmartQueueEnabled) "Smart Queue (${playback.queue.size})" else "Queue (${playback.queue.size})",
+                            text = if (playback.isSmartQueueEnabled) "Smart (${playback.queue.size})" else "Queue (${playback.queue.size})",
                             style = MaterialTheme.typography.bodySmall,
                             color = GammaTextPrimary
                         )
-                        if (playback.isSmartQueueEnabled && playback.smartQueueProfile.totalAnalyzed > 0) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .background(GammaPrimary.copy(alpha = 0.2f))
-                                    .padding(horizontal = 5.dp, vertical = 1.dp)
-                            ) {
-                                Text(
-                                    text = playback.smartQueueProfile.dominantGenre,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = GammaPrimary
-                                )
-                            }
-                        }
                     }
                 }
 
@@ -551,7 +575,7 @@ fun GammaPlayerScreen(
                             shape = CircleShape
                         )
                         .clickable { showEqualizerSheet = true }
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
                         .testTag("open_equalizer_button")
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -559,13 +583,73 @@ fun GammaPlayerScreen(
                             imageVector = Icons.Default.Tune,
                             contentDescription = "Equalizer Tuning",
                             tint = if (playback.equalizerSettings.isEnabled) GammaPrimary else GammaTextMuted,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(15.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
                         Text(
                             text = "EQ: ${playback.equalizerSettings.currentPreset.displayName}",
                             style = MaterialTheme.typography.bodySmall,
                             color = GammaTextPrimary
+                        )
+                    }
+                }
+
+                // Playback Speed Button
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(if (playback.playbackSpeed != 1.0f) GammaSurfaceElevated else GammaSurface)
+                        .border(
+                            width = 1.dp,
+                            brush = if (playback.playbackSpeed != 1.0f) GammaFrequencyBrush else Brush.linearGradient(listOf(GammaDivider, GammaDivider)),
+                            shape = CircleShape
+                        )
+                        .clickable { showSpeedSheet = true }
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                        .testTag("open_speed_button")
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Speed,
+                            contentDescription = "Playback speed",
+                            tint = if (playback.playbackSpeed != 1.0f) GammaPrimary else GammaTextMuted,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = "%.2gx".format(playback.playbackSpeed),
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (playback.playbackSpeed != 1.0f) GammaPrimary else GammaTextPrimary
+                        )
+                    }
+                }
+
+                // Sleep Timer Button
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(if (playback.isSleepTimerActive) GammaSurfaceElevated else GammaSurface)
+                        .border(
+                            width = 1.dp,
+                            brush = if (playback.isSleepTimerActive) GammaFrequencyBrush else Brush.linearGradient(listOf(GammaDivider, GammaDivider)),
+                            shape = CircleShape
+                        )
+                        .clickable { showSleepTimerSheet = true }
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                        .testTag("open_sleep_timer_button")
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Bedtime,
+                            contentDescription = "Sleep timer",
+                            tint = if (playback.isSleepTimerActive) GammaPrimary else GammaTextMuted,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = if (playback.isSleepTimerActive) playback.formattedSleepTimer else "Sleep",
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = if (playback.isSleepTimerActive) FontWeight.Bold else FontWeight.Normal),
+                            color = if (playback.isSleepTimerActive) GammaPrimary else GammaTextPrimary
                         )
                     }
                 }
@@ -728,28 +812,42 @@ fun GammaPlayerScreen(
                 ) {
                     itemsIndexed(playback.queue) { index, queueTrack ->
                         val isCurr = index == playback.queueIndex
+
+                        // Header separating current track and Up Next queue
+                        if (index == playback.queueIndex + 1) {
+                            Text(
+                                text = "UP NEXT",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp
+                                ),
+                                color = GammaPrimary,
+                                modifier = Modifier.padding(top = 10.dp, bottom = 4.dp, start = 4.dp)
+                            )
+                        }
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(if (isCurr) GammaSurfaceHighlight else Color.Transparent)
                                 .clickable { viewModel.jumpToQueueIndex(index) }
-                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "${index + 1}",
-                                style = MaterialTheme.typography.labelSmall,
+                                text = if (isCurr) "▶" else "${index + 1}",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = if (isCurr) FontWeight.Bold else FontWeight.Normal),
                                 color = if (isCurr) GammaPrimary else GammaTextMuted,
-                                modifier = Modifier.width(24.dp)
+                                modifier = Modifier.width(22.dp)
                             )
                             GammaArtwork(
                                 url = queueTrack.artworkUrl,
                                 contentDescription = null,
-                                modifier = Modifier.size(40.dp),
+                                modifier = Modifier.size(38.dp),
                                 shape = RoundedCornerShape(8.dp)
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = queueTrack.title,
@@ -783,9 +881,38 @@ fun GammaPlayerScreen(
                                     )
                                 }
                             }
+
+                            // Reorder Controls (Move Up / Down)
+                            if (index > 0) {
+                                IconButton(
+                                    onClick = { viewModel.reorderQueue(index, index - 1) },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowUpward,
+                                        contentDescription = "Move up",
+                                        tint = GammaTextMuted,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                            if (index < playback.queue.lastIndex) {
+                                IconButton(
+                                    onClick = { viewModel.reorderQueue(index, index + 1) },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowDownward,
+                                        contentDescription = "Move down",
+                                        tint = GammaTextMuted,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+
                             IconButton(
                                 onClick = { viewModel.removeFromQueue(index) },
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.size(26.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
@@ -1023,6 +1150,297 @@ fun GammaPlayerScreen(
                     ),
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
+            }
+        }
+    }
+
+    // Sleep Timer Bottom Sheet
+    if (showSleepTimerSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSleepTimerSheet = false },
+            sheetState = sleepTimerSheetState,
+            containerColor = GammaSurfaceElevated
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Bedtime,
+                            contentDescription = null,
+                            tint = GammaPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Sleep Timer",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = GammaTextPrimary
+                        )
+                    }
+
+                    if (playback.isSleepTimerActive) {
+                        Text(
+                            text = "Turn Off",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = GammaPrimary,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    viewModel.cancelSleepTimer()
+                                    showSleepTimerSheet = false
+                                }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Active Timer Status Card
+                if (playback.isSleepTimerActive) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(GammaBackground)
+                            .border(1.5.dp, GammaFrequencyBrush, RoundedCornerShape(16.dp))
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "AUDIO WILL PAUSE IN",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    letterSpacing = 1.5.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                color = GammaTextSecondary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = playback.formattedSleepTimer,
+                                style = MaterialTheme.typography.displayMedium.copy(
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 36.sp
+                                ),
+                                color = GammaPrimary
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Button(
+                                    onClick = { viewModel.extendSleepTimer(15) },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = GammaSurfaceHighlight),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text("+15 Mins", color = GammaPrimary, fontWeight = FontWeight.Bold)
+                                }
+                                Button(
+                                    onClick = { viewModel.cancelSleepTimer() },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = GammaSurfaceHighlight),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text("Cancel", color = GammaTextSecondary)
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(18.dp))
+                }
+
+                Text(
+                    text = "SET SLEEP DURATION",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        letterSpacing = 1.sp,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = GammaTextSecondary,
+                    modifier = Modifier.align(Alignment.Start)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val presets = listOf(
+                    Pair("15 Minutes", 15),
+                    Pair("30 Minutes", 30),
+                    Pair("45 Minutes", 45),
+                    Pair("60 Minutes", 60)
+                )
+
+                presets.forEach { (label, minutes) ->
+                    val isSelected = playback.isSleepTimerActive && !playback.isSleepTimerEndOfTrack && (playback.sleepTimerInitialSeconds == minutes * 60L)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isSelected) GammaSurfaceHighlight else Color.Transparent)
+                            .clickable {
+                                viewModel.startSleepTimer(minutes, endOfTrack = false)
+                                showSleepTimerSheet = false
+                            }
+                            .padding(horizontal = 12.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            ),
+                            color = if (isSelected) GammaPrimary else GammaTextPrimary
+                        )
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = GammaPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+
+                // End of track option
+                val isEndOfTrackSelected = playback.isSleepTimerActive && playback.isSleepTimerEndOfTrack
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isEndOfTrackSelected) GammaSurfaceHighlight else Color.Transparent)
+                        .clickable {
+                            viewModel.startSleepTimer(0, endOfTrack = true)
+                            showSleepTimerSheet = false
+                        }
+                        .padding(horizontal = 12.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "End of Current Track",
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = if (isEndOfTrackSelected) FontWeight.Bold else FontWeight.Normal
+                            ),
+                            color = if (isEndOfTrackSelected) GammaPrimary else GammaTextPrimary
+                        )
+                        Text(
+                            text = "Pauses when this song finishes",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = GammaTextSecondary
+                        )
+                    }
+                    if (isEndOfTrackSelected) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = GammaPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "🌙 Music volume will gently fade out over the final 30 seconds before pausing.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = GammaTextMuted,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 20.dp, start = 8.dp, end = 8.dp)
+                )
+            }
+        }
+    }
+
+    // Playback Speed Bottom Sheet
+    if (showSpeedSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSpeedSheet = false },
+            sheetState = speedSheetState,
+            containerColor = GammaSurfaceElevated
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Speed,
+                        contentDescription = null,
+                        tint = GammaPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Playback Speed",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = GammaTextPrimary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                val speedOptions = listOf(
+                    Pair(0.5f, "0.5x (Slow study)"),
+                    Pair(0.75f, "0.75x (Slowed & reverb tempo)"),
+                    Pair(0.9f, "0.9x (Subtle chill)"),
+                    Pair(1.0f, "1.0x (Standard normal)"),
+                    Pair(1.25f, "1.25x (Brisk tempo)"),
+                    Pair(1.5f, "1.5x (Fast pace)"),
+                    Pair(2.0f, "2.0x (Double speed)")
+                )
+
+                speedOptions.forEach { (speed, label) ->
+                    val isSelected = kotlin.math.abs(playback.playbackSpeed - speed) < 0.05f
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isSelected) GammaSurfaceHighlight else Color.Transparent)
+                            .clickable {
+                                viewModel.setPlaybackSpeed(speed)
+                                showSpeedSheet = false
+                            }
+                            .padding(horizontal = 12.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            ),
+                            color = if (isSelected) GammaPrimary else GammaTextPrimary
+                        )
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = GammaPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }

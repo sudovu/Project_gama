@@ -83,6 +83,29 @@ class YouTubeWebViewBridge(
         }
     }
 
+    override fun setPlaybackRate(rate: Float) {
+        val js = "if(window.setGammaPlaybackRate){ window.setGammaPlaybackRate($rate); } else { window.pendingRate = $rate; }"
+        webView.post {
+            try {
+                webView.evaluateJavascript(js, null)
+            } catch (e: Exception) {
+                android.util.Log.e("YouTubeIFrame", "Error evaluating setPlaybackRate JS", e)
+            }
+        }
+    }
+
+    override fun setVolumePercent(volume: Int) {
+        val clamped = volume.coerceIn(0, 100)
+        val js = "if(window.setGammaVolume){ window.setGammaVolume($clamped); } else { window.pendingVolume = $clamped; }"
+        webView.post {
+            try {
+                webView.evaluateJavascript(js, null)
+            } catch (e: Exception) {
+                android.util.Log.e("YouTubeIFrame", "Error evaluating setVolumePercent JS", e)
+            }
+        }
+    }
+
     override fun applyEqualizer(bands: List<Float>, masterGain: Float, isEnabled: Boolean) {
         val b0 = bands.getOrElse(0) { 0f }
         val b1 = bands.getOrElse(1) { 0f }
@@ -285,6 +308,12 @@ fun createCompliantYouTubeWebView(context: Context, playbackManager: PlaybackMan
                                     window.setGammaEqualizer.apply(null, window.pendingEq);
                                 } catch(e) {}
                             }
+                            if (window.pendingRate && gammaPlayer && gammaPlayer.setPlaybackRate) {
+                                try { gammaPlayer.setPlaybackRate(window.pendingRate); } catch(e) {}
+                            }
+                            if (window.pendingVolume !== undefined && gammaPlayer && gammaPlayer.setVolume) {
+                                try { gammaPlayer.setVolume(window.pendingVolume); } catch(e) {}
+                            }
                             startTimeTracking();
                         }
 
@@ -368,6 +397,28 @@ fun createCompliantYouTubeWebView(context: Context, playbackManager: PlaybackMan
                                 try {
                                     gammaPlayer.seekTo(seconds, true);
                                 } catch (e) {}
+                            }
+                        };
+
+                        window.setGammaPlaybackRate = function(rate) {
+                            window.pendingRate = rate;
+                            if (gammaPlayer && isPlayerReady && gammaPlayer.setPlaybackRate) {
+                                try {
+                                    gammaPlayer.setPlaybackRate(rate);
+                                } catch(e) {
+                                    console.error("setPlaybackRate error: " + e);
+                                }
+                            }
+                        };
+
+                        window.setGammaVolume = function(vol) {
+                            window.pendingVolume = vol;
+                            if (gammaPlayer && isPlayerReady && gammaPlayer.setVolume) {
+                                try {
+                                    gammaPlayer.setVolume(vol);
+                                } catch(e) {
+                                    console.error("setVolume error: " + e);
+                                }
                             }
                         };
 

@@ -4,12 +4,14 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.media.PlaybackParams
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer as AndroidHardwareEqualizer
 import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.Virtualizer
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import com.example.domain.model.EqualizerSettings
 import com.example.domain.model.Track
@@ -156,6 +158,8 @@ class GamaAudioEngine(private val context: Context) {
     private var currentPlaybackPositionMs = 0L
     private var masterGainMultiplier = 1.0f
     private var isEqEnabled = true
+    private var currentSpeed = 1.0f
+    private var currentDucking = 1.0f
 
     private val currentBandGains = floatArrayOf(0f, 0f, 0f, 0f, 0f)
 
@@ -293,6 +297,27 @@ class GamaAudioEngine(private val context: Context) {
         } catch (_: Exception) {}
     }
 
+    fun setPlaybackSpeed(speed: Float) {
+        currentSpeed = speed.coerceIn(0.25f, 3.0f)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                mediaPlayer?.let { mp ->
+                    mp.playbackParams = mp.playbackParams.setSpeed(currentSpeed)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set playback speed on MediaPlayer: ${e.message}")
+        }
+    }
+
+    fun setVolumeDucking(duckFactor: Float) {
+        currentDucking = duckFactor.coerceIn(0f, 1f)
+        val finalVol = (masterGainMultiplier * currentDucking).coerceIn(0f, 1f)
+        try {
+            mediaPlayer?.setVolume(finalVol, finalVol)
+        } catch (_: Exception) {}
+    }
+
     private fun stopMediaPlayer() {
         try {
             hardwareEqualizer?.release()
@@ -325,6 +350,13 @@ class GamaAudioEngine(private val context: Context) {
 
                 setOnPreparedListener { mp ->
                     try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && currentSpeed != 1.0f) {
+                            try {
+                                mp.playbackParams = mp.playbackParams.setSpeed(currentSpeed)
+                            } catch (_: Exception) {}
+                        }
+                        val finalVol = (masterGainMultiplier * currentDucking).coerceIn(0f, 1f)
+                        mp.setVolume(finalVol, finalVol)
                         mp.start()
                         isEnginePlaying.set(true)
                         if (currentPlaybackPositionMs > 0) {
@@ -350,6 +382,13 @@ class GamaAudioEngine(private val context: Context) {
                     prepareAsync()
                 } else {
                     prepare()
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && currentSpeed != 1.0f) {
+                        try {
+                            playbackParams = playbackParams.setSpeed(currentSpeed)
+                        } catch (_: Exception) {}
+                    }
+                    val finalVol = (masterGainMultiplier * currentDucking).coerceIn(0f, 1f)
+                    setVolume(finalVol, finalVol)
                     start()
                     isEnginePlaying.set(true)
                     attachEqualizerToSession(audioSessionId)

@@ -167,7 +167,12 @@ data class PlaybackState(
     val equalizerSettings: EqualizerSettings = EqualizerSettings(),
     val isDownloading: Boolean = false,
     val downloadProgress: Float = 0f,
-    val downloadingTrackId: String? = null
+    val downloadingTrackId: String? = null,
+    val sleepTimerRemainingSeconds: Long? = null,
+    val sleepTimerInitialSeconds: Long? = null,
+    val isSleepTimerActive: Boolean = false,
+    val isSleepTimerEndOfTrack: Boolean = false,
+    val playbackSpeed: Float = 1.0f
 ) {
     val progress: Float
         get() = if (durationMs > 0) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
@@ -185,6 +190,14 @@ data class PlaybackState(
             val totalSeconds = (durationMs / 1000).toInt()
             val m = totalSeconds / 60
             val s = totalSeconds % 60
+            return "%d:%02d".format(m, s)
+        }
+
+    val formattedSleepTimer: String
+        get() {
+            val secs = sleepTimerRemainingSeconds ?: 0L
+            val m = secs / 60
+            val s = secs % 60
             return "%d:%02d".format(m, s)
         }
 
@@ -212,6 +225,11 @@ data class PlaybackState(
         if (isDownloading != other.isDownloading) return false
         if (downloadProgress != other.downloadProgress) return false
         if (downloadingTrackId != other.downloadingTrackId) return false
+        if (sleepTimerRemainingSeconds != other.sleepTimerRemainingSeconds) return false
+        if (sleepTimerInitialSeconds != other.sleepTimerInitialSeconds) return false
+        if (isSleepTimerActive != other.isSleepTimerActive) return false
+        if (isSleepTimerEndOfTrack != other.isSleepTimerEndOfTrack) return false
+        if (playbackSpeed != other.playbackSpeed) return false
 
         return true
     }
@@ -235,6 +253,11 @@ data class PlaybackState(
         result = 31 * result + isDownloading.hashCode()
         result = 31 * result + downloadProgress.hashCode()
         result = 31 * result + (downloadingTrackId?.hashCode() ?: 0)
+        result = 31 * result + (sleepTimerRemainingSeconds?.hashCode() ?: 0)
+        result = 31 * result + (sleepTimerInitialSeconds?.hashCode() ?: 0)
+        result = 31 * result + isSleepTimerActive.hashCode()
+        result = 31 * result + isSleepTimerEndOfTrack.hashCode()
+        result = 31 * result + playbackSpeed.hashCode()
         return result
     }
 }

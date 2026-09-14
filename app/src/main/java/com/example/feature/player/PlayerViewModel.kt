@@ -17,7 +17,9 @@ enum class PlayerSheetType {
     NONE,
     QUEUE,
     SPECS,
-    EQUALIZER
+    EQUALIZER,
+    SLEEP_TIMER,
+    SPEED
 }
 
 data class PlayerUiState(
@@ -97,6 +99,19 @@ class PlayerViewModel(
     fun downloadTrack(track: Track) {
         playbackManager.downloadTrack(track)
     }
+
+    fun seekBy(deltaMs: Long) = playbackManager.seekBy(deltaMs)
+
+    fun setPlaybackSpeed(speed: Float) = playbackManager.setPlaybackSpeed(speed)
+
+    fun startSleepTimer(minutes: Int, endOfTrack: Boolean = false) =
+        playbackManager.startSleepTimer(minutes, endOfTrack)
+
+    fun cancelSleepTimer() = playbackManager.cancelSleepTimer()
+
+    fun extendSleepTimer(extraMinutes: Int = 15) = playbackManager.extendSleepTimer(extraMinutes)
+
+    fun reorderQueue(fromIndex: Int, toIndex: Int) = playbackManager.reorderQueue(fromIndex, toIndex)
 
     companion object {
         fun provideFactory(

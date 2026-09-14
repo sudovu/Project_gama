@@ -28,6 +28,8 @@ interface YouTubePlayerBridge {
     fun playVideo()
     fun pauseVideo()
     fun seekToSeconds(seconds: Float)
+    fun setPlaybackRate(rate: Float)
+    fun setVolumePercent(volume: Int)
     fun applyEqualizer(bands: List<Float>, masterGain: Float, isEnabled: Boolean)
 }
 
@@ -47,6 +49,7 @@ class PlaybackManager(private val context: Context) {
 
     private var playerBridge: YouTubePlayerBridge? = null
     private var tickerJob: Job? = null
+    private var sleepTimerJob: Job? = null
     private var originalQueueBeforeShuffle: List<Track> = emptyList()
 
     private var candidateProvider: (suspend () -> List<Track>)? = null
@@ -76,7 +79,7 @@ class PlaybackManager(private val context: Context) {
     init {
         activeInstance = this
         audioEngine.onTrackCompletedListener = {
-            scope.launch { skipNext() }
+            scope.launch { onTrackFinished() }
         }
         startProgressTicker()
     }
@@ -170,10 +173,12 @@ class PlaybackManager(private val context: Context) {
         }
 
         // Play via Native GamaAudioEngine (handles local downloaded files or stops MediaPlayer for YouTube)
+        audioEngine.setPlaybackSpeed(_playbackState.value.playbackSpeed)
         audioEngine.playTrack(playableTrack)
 
         if (isYouTube) {
             playerBridge?.loadVideo(playableTrack.youtubeVideoId)
+            playerBridge?.setPlaybackRate(_playbackState.value.playbackSpeed)
             playerBridge?.playVideo()
         } else {
             playerBridge?.pauseVideo()
@@ -273,6 +278,110 @@ class PlaybackManager(private val context: Context) {
             audioEngine.setExternalPosition(clamped, duration)
             playerBridge?.seekToSeconds(clamped / 1000f)
         }
+    }
+
+    fun seekBy(deltaMs: Long) {
+        val current = _playbackState.value.positionMs
+        seekTo(current + deltaMs)
+    }
+
+    fun setPlaybackSpeed(speed: Float) {
+        val clamped = speed.coerceIn(0.25f, 3.0f)
+        _playbackState.update { it.copy(playbackSpeed = clamped) }
+        audioEngine.setPlaybackSpeed(clamped)
+        playerBridge?.setPlaybackRate(clamped)
+    }
+
+    // ==========================================
+    // SLEEP TIMER CONTROLS
+    // ==========================================
+
+    fun startSleepTimer(minutes: Int, endOfTrack: Boolean = false) {
+        cancelSleepTimer()
+        if (endOfTrack) {
+            _playbackState.update {
+                it.copy(
+                    isSleepTimerActive = true,
+                    isSleepTimerEndOfTrack = true,
+                    sleepTimerRemainingSeconds = null,
+                    sleepTimerInitialSeconds = null
+                )
+            }
+            return
+        }
+
+        if (minutes <= 0) return
+        val totalSeconds = minutes * 60L
+        _playbackState.update {
+            it.copy(
+                isSleepTimerActive = true,
+                isSleepTimerEndOfTrack = false,
+                sleepTimerRemainingSeconds = totalSeconds,
+                sleepTimerInitialSeconds = totalSeconds
+            )
+        }
+        audioEngine.setVolumeDucking(1.0f)
+
+        sleepTimerJob = scope.launch {
+            var remaining = totalSeconds
+            while (isActive && remaining > 0) {
+                delay(1000L)
+                remaining--
+                _playbackState.update { it.copy(sleepTimerRemainingSeconds = remaining) }
+
+                // In final 30 seconds, smoothly duck volume for a gentle fade out
+                if (remaining in 1..30) {
+                    val duckFactor = remaining / 30f
+                    audioEngine.setVolumeDucking(duckFactor)
+                    val ytVol = (100 * duckFactor).toInt()
+                    playerBridge?.setVolumePercent(ytVol)
+                }
+            }
+            if (isActive) {
+                pause()
+                audioEngine.setVolumeDucking(1.0f)
+                playerBridge?.setVolumePercent(100)
+                _playbackState.update {
+                    it.copy(
+                        isSleepTimerActive = false,
+                        isSleepTimerEndOfTrack = false,
+                        sleepTimerRemainingSeconds = null,
+                        sleepTimerInitialSeconds = null
+                    )
+                }
+            }
+        }
+    }
+
+    fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        audioEngine.setVolumeDucking(1.0f)
+        playerBridge?.setVolumePercent(100)
+        _playbackState.update {
+            it.copy(
+                isSleepTimerActive = false,
+                isSleepTimerEndOfTrack = false,
+                sleepTimerRemainingSeconds = null,
+                sleepTimerInitialSeconds = null
+            )
+        }
+    }
+
+    fun extendSleepTimer(extraMinutes: Int = 15) {
+        val currentRemaining = _playbackState.value.sleepTimerRemainingSeconds ?: 0L
+        val newTotal = (currentRemaining + extraMinutes * 60L).coerceAtLeast(extraMinutes * 60L)
+        startSleepTimer(minutes = ((newTotal + 59L) / 60L).toInt(), endOfTrack = false)
+    }
+
+    private fun onTrackFinished() {
+        val state = _playbackState.value
+        if (state.isSleepTimerActive && state.isSleepTimerEndOfTrack) {
+            pause()
+            cancelSleepTimer()
+            return
+        }
+        skipNext()
     }
 
     fun skipNext() {
@@ -540,7 +649,7 @@ class PlaybackManager(private val context: Context) {
                 _playbackState.update { it.copy(isBuffering = true) }
             }
             0 -> { // Ended
-                skipNext()
+                onTrackFinished()
             }
         }
     }
@@ -663,7 +772,7 @@ class PlaybackManager(private val context: Context) {
                     }
 
                     if (dur > 0 && newPos >= dur) {
-                        skipNext()
+                        onTrackFinished()
                     }
                 } else {
                     if (state.visualizerBands.any { it > 0.15f }) {
