@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
@@ -46,6 +47,7 @@ import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -53,10 +55,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -137,6 +141,22 @@ fun ProfileSettingsScreen(
     val developerEmail = "vhuwonmathers@gmail.com"
     val developerUsername = "sudovu"
     val developerPhone = "9869367788"
+
+    var showSpotifyEditDialog by remember { mutableStateOf(false) }
+    var editSpotifyUser by remember(spotifyUser) { mutableStateOf(if (spotifyUser.isNotEmpty()) spotifyUser else "vhuwon.mathers") }
+    var showGoogleEditDialog by remember { mutableStateOf(false) }
+    var editGoogleEmail by remember(googleEmail) { mutableStateOf(if (googleEmail.isNotEmpty()) googleEmail else "vhuwonmathers@gmail.com") }
+
+    val launchUrl: (String) -> Unit = { url ->
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (_: Exception) {
+            Toast.makeText(context, "Could not open external app/browser", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -716,11 +736,27 @@ fun ProfileSettingsScreen(
                                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                             color = GammaTextPrimary
                                         )
-                                        Text(
-                                            text = if (isSpotifyLinked) spotifyUser.ifEmpty { "Connected User" } else "Not Connected",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = if (isSpotifyLinked) Color(0xFF1DB954) else GammaTextMuted
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = if (isSpotifyLinked) spotifyUser.ifEmpty { "Connected User" } else "Not Connected",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = if (isSpotifyLinked) Color(0xFF1DB954) else GammaTextMuted
+                                            )
+                                            if (isSpotifyLinked) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Icon(
+                                                    imageVector = Icons.Default.Edit,
+                                                    contentDescription = "Edit handle",
+                                                    tint = GammaTextSecondary,
+                                                    modifier = Modifier
+                                                        .size(14.dp)
+                                                        .clickable {
+                                                            editSpotifyUser = if (spotifyUser.isNotEmpty()) spotifyUser else "vhuwon.mathers"
+                                                            showSpotifyEditDialog = true
+                                                        }
+                                                )
+                                            }
+                                        }
                                     }
                                 }
 
@@ -776,6 +812,17 @@ fun ProfileSettingsScreen(
                                 ) {
                                     OutlinedButton(
                                         onClick = {
+                                            launchUrl("https://open.spotify.com")
+                                        },
+                                        modifier = Modifier.weight(1f).height(38.dp),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF1DB954))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Open App", style = MaterialTheme.typography.labelSmall, color = Color(0xFF1DB954))
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
                                             tasteManager.syncAllTastes()
                                             Toast.makeText(context, "Spotify tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
                                         },
@@ -791,7 +838,7 @@ fun ProfileSettingsScreen(
                                             tasteManager.unlinkSpotify()
                                             Toast.makeText(context, "Spotify unlinked", Toast.LENGTH_SHORT).show()
                                         },
-                                        modifier = Modifier.weight(1f).height(38.dp),
+                                        modifier = Modifier.weight(0.9f).height(38.dp),
                                         shape = RoundedCornerShape(10.dp)
                                     ) {
                                         Text("Unlink", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF4D4D))
@@ -805,8 +852,11 @@ fun ProfileSettingsScreen(
                                 )
                                 Button(
                                     onClick = {
-                                        tasteManager.linkSpotify("Spotify User", listOf("Rock & Metal", "Alternative Rock", "Cyberpunk", "Nu Metal"))
-                                        Toast.makeText(context, "Spotify account linked! Taste profile synced.", Toast.LENGTH_SHORT).show()
+                                        val spotifyAuthUrl = "https://accounts.spotify.com/en/login?continue=https%3A%2F%2Fopen.spotify.com"
+                                        launchUrl(spotifyAuthUrl)
+                                        val username = if (spotifyUser.isNotEmpty()) spotifyUser else "vhuwon.mathers"
+                                        tasteManager.linkSpotify(username, listOf("Rock & Metal", "Alternative Rock", "Cyberpunk", "Nu Metal"))
+                                        Toast.makeText(context, "Opening Spotify for linking... Account synced!", Toast.LENGTH_LONG).show()
                                     },
                                     modifier = Modifier.fillMaxWidth().height(40.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954)),
@@ -862,11 +912,27 @@ fun ProfileSettingsScreen(
                                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                             color = GammaTextPrimary
                                         )
-                                        Text(
-                                            text = if (isGoogleLinked) googleEmail.ifEmpty { "Connected Account" } else "Not Connected",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = if (isGoogleLinked) Color(0xFFFF4D4D) else GammaTextMuted
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = if (isGoogleLinked) googleEmail.ifEmpty { "Connected Account" } else "Not Connected",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = if (isGoogleLinked) Color(0xFFFF4D4D) else GammaTextMuted
+                                            )
+                                            if (isGoogleLinked) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Icon(
+                                                    imageVector = Icons.Default.Edit,
+                                                    contentDescription = "Edit account email",
+                                                    tint = GammaTextSecondary,
+                                                    modifier = Modifier
+                                                        .size(14.dp)
+                                                        .clickable {
+                                                            editGoogleEmail = if (googleEmail.isNotEmpty()) googleEmail else "vhuwonmathers@gmail.com"
+                                                            showGoogleEditDialog = true
+                                                        }
+                                                )
+                                            }
+                                        }
                                     }
                                 }
 
@@ -922,6 +988,17 @@ fun ProfileSettingsScreen(
                                 ) {
                                     OutlinedButton(
                                         onClick = {
+                                            launchUrl("https://music.youtube.com")
+                                        },
+                                        modifier = Modifier.weight(1f).height(38.dp),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFFFF4D4D))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Open App", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF4D4D))
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
                                             tasteManager.syncAllTastes()
                                             Toast.makeText(context, "YouTube Music tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
                                         },
@@ -937,7 +1014,7 @@ fun ProfileSettingsScreen(
                                             tasteManager.unlinkGoogle()
                                             Toast.makeText(context, "Google unlinked", Toast.LENGTH_SHORT).show()
                                         },
-                                        modifier = Modifier.weight(1f).height(38.dp),
+                                        modifier = Modifier.weight(0.9f).height(38.dp),
                                         shape = RoundedCornerShape(10.dp)
                                     ) {
                                         Text("Unlink", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF4D4D))
@@ -951,8 +1028,11 @@ fun ProfileSettingsScreen(
                                 )
                                 Button(
                                     onClick = {
-                                        tasteManager.linkGoogle("user@gmail.com", listOf("432Hz Ambient", "Progressive Metal", "Synthwave", "Heavy Drums"))
-                                        Toast.makeText(context, "Google account linked! Taste profile synced.", Toast.LENGTH_SHORT).show()
+                                        val googleAuthUrl = "https://accounts.google.com/AccountChooser?service=youtube&continue=https%3A%2F%2Fmusic.youtube.com%2F"
+                                        launchUrl(googleAuthUrl)
+                                        val email = if (googleEmail.isNotEmpty()) googleEmail else "vhuwonmathers@gmail.com"
+                                        tasteManager.linkGoogle(email, listOf("432Hz Ambient", "Progressive Metal", "Synthwave", "Heavy Drums"))
+                                        Toast.makeText(context, "Opening Google to link YouTube Music... Account synced!", Toast.LENGTH_LONG).show()
                                     },
                                     modifier = Modifier.fillMaxWidth().height(40.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF0000)),
@@ -1041,6 +1121,94 @@ fun ProfileSettingsScreen(
                 )
             }
         }
+    }
+
+    if (showSpotifyEditDialog) {
+        AlertDialog(
+            onDismissRequest = { showSpotifyEditDialog = false },
+            title = {
+                Text("Edit Spotify Account", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = GammaTextPrimary)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Update the connected Spotify username or profile identifier to customize taste synchronization.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = GammaTextSecondary
+                    )
+                    OutlinedTextField(
+                        value = editSpotifyUser,
+                        onValueChange = { editSpotifyUser = it },
+                        label = { Text("Spotify Username") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val finalUser = editSpotifyUser.trim().ifEmpty { "vhuwon.mathers" }
+                        tasteManager.linkSpotify(finalUser, spotifyTastes.ifEmpty { listOf("Rock & Metal", "Alternative Rock", "Cyberpunk", "Nu Metal") })
+                        showSpotifyEditDialog = false
+                        Toast.makeText(context, "Spotify profile updated!", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954))
+                ) {
+                    Text("Save", color = Color.Black)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSpotifyEditDialog = false }) {
+                    Text("Cancel", color = GammaTextSecondary)
+                }
+            },
+            containerColor = GammaSurfaceElevated
+        )
+    }
+
+    if (showGoogleEditDialog) {
+        AlertDialog(
+            onDismissRequest = { showGoogleEditDialog = false },
+            title = {
+                Text("Edit Google Account", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = GammaTextPrimary)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Update the connected Google Account email to sync personalized YouTube Music taste preferences.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = GammaTextSecondary
+                    )
+                    OutlinedTextField(
+                        value = editGoogleEmail,
+                        onValueChange = { editGoogleEmail = it },
+                        label = { Text("Google Account Email") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val finalEmail = editGoogleEmail.trim().ifEmpty { "vhuwonmathers@gmail.com" }
+                        tasteManager.linkGoogle(finalEmail, youtubeTastes.ifEmpty { listOf("432Hz Ambient", "Progressive Metal", "Synthwave", "Heavy Drums") })
+                        showGoogleEditDialog = false
+                        Toast.makeText(context, "Google profile updated!", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF0000))
+                ) {
+                    Text("Save", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGoogleEditDialog = false }) {
+                    Text("Cancel", color = GammaTextSecondary)
+                }
+            },
+            containerColor = GammaSurfaceElevated
+        )
     }
 }
 
