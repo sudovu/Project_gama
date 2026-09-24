@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -24,10 +25,12 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
@@ -45,6 +48,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -196,7 +200,69 @@ fun DiscoverScreen(
                             selectedMood = state.selectedMood,
                             onMoodSelect = { viewModel.selectMood(it) }
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    // Shuffle All Recommended Action Bar
+                    item {
+                        val allRecommendedTracks = remember(feed, spotifyTracks, ytTracks) {
+                            (feed.quickPicks + feed.trendingTracks + spotifyTracks + ytTracks)
+                                .distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
+                        }
+
+                        if (allRecommendedTracks.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 2.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (state.selectedMood == "All") "Recommended Stream" else "${state.selectedMood} Mix",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = GammaTextSecondary
+                                )
+
+                                Surface(
+                                    onClick = {
+                                        val pool = if (state.selectedMood == "All") {
+                                            allRecommendedTracks
+                                        } else {
+                                            feed.moodPlaylists[state.selectedMood] ?: allRecommendedTracks
+                                        }
+                                        if (pool.isNotEmpty()) {
+                                            val shuffled = pool.shuffled()
+                                            onTrackClick(shuffled.first(), shuffled)
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = GammaPrimary.copy(alpha = 0.12f),
+                                    border = BorderStroke(1.dp, GammaPrimary.copy(alpha = 0.35f)),
+                                    modifier = Modifier.testTag("shuffle_all_recommended_btn")
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Shuffle,
+                                            contentDescription = "Shuffle All Recommended",
+                                            tint = GammaPrimary,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Text(
+                                            text = "Shuffle All",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = GammaPrimary
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
                     }
 
                     if (state.selectedMood == "All") {
@@ -230,7 +296,14 @@ fun DiscoverScreen(
                             item {
                                 GammaSectionHeader(
                                     category = "Trending Now",
-                                    title = "Quick Picks"
+                                    title = "Quick Picks",
+                                    actionText = "Shuffle",
+                                    onActionClick = {
+                                        val shuffled = feed.quickPicks.shuffled()
+                                        if (shuffled.isNotEmpty()) {
+                                            onTrackClick(shuffled.first(), shuffled)
+                                        }
+                                    }
                                 )
                                 LazyRow(
                                     contentPadding = PaddingValues(horizontal = 16.dp),

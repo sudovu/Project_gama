@@ -42,7 +42,21 @@ class MusicRepository(
 
     fun getDiscoverFeed(): Flow<Result<DiscoverFeed>> = combine(
         flow {
-            // 1. Attempt to fetch fresh discover feed from provider
+            // Fast Start: Emit cached discovery feed or curated feed immediately (<50ms) so user never waits for UI
+            val cachedTracks = try {
+                discoveryCacheDao.getAllDiscoveredSync()
+            } catch (_: Exception) {
+                emptyList()
+            }
+
+            if (cachedTracks.isNotEmpty()) {
+                val cachedFeed = buildFeedFromCached(cachedTracks)
+                emit(Result.success(cachedFeed))
+            } else {
+                emit(Result.success(buildCuratedInitialFeed()))
+            }
+
+            // Fresh online fetch from provider in background
             val providerResult = try {
                 provider.getDiscoverFeed()
             } catch (e: Exception) {
@@ -56,20 +70,6 @@ class MusicRepository(
                     cacheFeedTracks(feed)
                 } catch (_: Exception) {}
                 emit(providerResult)
-            } else {
-                // Offline fallback: load cached discovery metadata from Room
-                val cachedTracks = try {
-                    discoveryCacheDao.getAllDiscoveredSync()
-                } catch (_: Exception) {
-                    emptyList()
-                }
-
-                if (cachedTracks.isNotEmpty()) {
-                    val cachedFeed = buildFeedFromCached(cachedTracks)
-                    emit(Result.success(cachedFeed))
-                } else {
-                    emit(providerResult)
-                }
             }
         },
         getUploadedTracks()
@@ -82,6 +82,63 @@ class MusicRepository(
                 } else feed.quickPicks
             )
         }
+    }
+
+    suspend fun refreshDiscoverFeed(): Result<DiscoverFeed> {
+        val providerResult = try {
+            provider.getDiscoverFeed()
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+
+        return if (providerResult.isSuccess) {
+            val feed = providerResult.getOrThrow()
+            try {
+                cacheFeedTracks(feed)
+            } catch (_: Exception) {}
+            val uploaded = try {
+                uploadedTrackDao.getAllUploaded().first().map { it.toDomain() }
+            } catch (_: Exception) {
+                emptyList()
+            }
+            Result.success(
+                feed.copy(
+                    uploadedTracks = uploaded,
+                    quickPicks = if (uploaded.isNotEmpty()) {
+                        (uploaded + feed.quickPicks).distinctBy { it.id }
+                    } else feed.quickPicks
+                )
+            )
+        } else {
+            val cachedTracks = try {
+                discoveryCacheDao.getAllDiscoveredSync()
+            } catch (_: Exception) {
+                emptyList()
+            }
+            if (cachedTracks.isNotEmpty()) {
+                Result.success(buildFeedFromCached(cachedTracks))
+            } else {
+                providerResult
+            }
+        }
+    }
+
+    private fun buildCuratedInitialFeed(): DiscoverFeed {
+        val all = CuratedFrequencies.allTracks
+        val moodMap = mapOf(
+            "Hip-Hop" to all.filter { it.genre.contains("Rap", ignoreCase = true) || it.genre.contains("Hip-Hop", ignoreCase = true) },
+            "Rock & Metal" to all.filter { it.genre.contains("Rock", ignoreCase = true) || it.genre.contains("Metal", ignoreCase = true) },
+            "Pop Hits" to all.filter { it.genre.contains("Pop", ignoreCase = true) },
+            "Classics" to all.filter { it.genre.contains("Classic", ignoreCase = true) }
+        )
+        return DiscoverFeed(
+            quickPicks = all.take(8),
+            trendingTracks = all.take(15),
+            featuredPlaylists = CuratedFrequencies.playlists,
+            featuredAlbums = CuratedFrequencies.albums,
+            featuredArtists = CuratedFrequencies.artists,
+            moodPlaylists = moodMap
+        )
     }
 
     fun search(query: String): Flow<Result<SearchResults>> {

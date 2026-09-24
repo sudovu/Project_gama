@@ -6,6 +6,8 @@ import com.example.core.media.SmartQueueEngine
 import com.example.data.provider.YouTubeProvider
 import com.example.domain.model.Track
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -105,39 +107,51 @@ class TastePreferenceManager(context: Context) {
                 "best music hits official video"
             )
 
-            if (_isSpotifyLinked.value) {
-                val tastes = _spotifyTastes.value
-                val fetched = mutableListOf<Track>()
-                for (taste in tastes.take(4)) {
-                    try {
-                        val suffix = querySuffixes.random()
-                        val res = youtubeProvider.searchWithScope("$taste $suffix", "YOUTUBE_MUSIC")
-                        res.getOrNull()?.tracks?.let { list ->
-                            val singles = list.filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
-                            fetched.addAll(singles.take(6).map { it.copy(genre = taste) })
-                        }
-                    } catch (_: Exception) {}
-                }
-                if (fetched.isNotEmpty()) {
-                    _spotifyTracks.value = fetched.distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
-                }
-            }
+            val querySuffix = querySuffixes.random()
 
-            if (_isGoogleLinked.value) {
-                val tastes = _youtubeTastes.value
-                val fetched = mutableListOf<Track>()
-                for (taste in tastes.take(4)) {
-                    try {
-                        val suffix = querySuffixes.random()
-                        val res = youtubeProvider.searchWithScope("$taste $suffix", "YOUTUBE_MUSIC")
-                        res.getOrNull()?.tracks?.let { list ->
-                            val singles = list.filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
-                            fetched.addAll(singles.take(6).map { it.copy(genre = taste) })
+            coroutineScope {
+                if (_isSpotifyLinked.value) {
+                    val tastes = _spotifyTastes.value.take(2)
+                    val deferred = tastes.map { taste ->
+                        async {
+                            try {
+                                val res = youtubeProvider.searchWithScope("$taste $querySuffix", "YOUTUBE_MUSIC")
+                                res.getOrNull()?.tracks
+                                    ?.filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
+                                    ?.take(6)
+                                    ?.map { it.copy(genre = taste) }
+                                    ?: emptyList()
+                            } catch (_: Exception) {
+                                emptyList()
+                            }
                         }
-                    } catch (_: Exception) {}
+                    }
+                    val allFetched = deferred.flatMap { it.await() }
+                    if (allFetched.isNotEmpty()) {
+                        _spotifyTracks.value = allFetched.distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
+                    }
                 }
-                if (fetched.isNotEmpty()) {
-                    _googleTracks.value = fetched.distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
+
+                if (_isGoogleLinked.value) {
+                    val tastes = _youtubeTastes.value.take(2)
+                    val deferred = tastes.map { taste ->
+                        async {
+                            try {
+                                val res = youtubeProvider.searchWithScope("$taste $querySuffix", "YOUTUBE_MUSIC")
+                                res.getOrNull()?.tracks
+                                    ?.filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
+                                    ?.take(6)
+                                    ?.map { it.copy(genre = taste) }
+                                    ?: emptyList()
+                            } catch (_: Exception) {
+                                emptyList()
+                            }
+                        }
+                    }
+                    val allFetched = deferred.flatMap { it.await() }
+                    if (allFetched.isNotEmpty()) {
+                        _googleTracks.value = allFetched.distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
+                    }
                 }
             }
 

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -66,7 +67,7 @@ class SearchViewModel(
     private val _searchTrigger = MutableStateFlow("")
 
     val uiState: StateFlow<SearchUiState> = combine(
-        _query.debounce(300).distinctUntilChanged(),
+        _query.debounce(200).distinctUntilChanged(),
         _searchTrigger,
         _searchScope,
         repository.getFavorites()
@@ -75,17 +76,17 @@ class SearchViewModel(
         Triple(effectiveQuery, scope, favorites.map { it.id }.toSet())
     }.flatMapLatest { (q, scope, favIds) ->
         if (q.isBlank()) {
-            flowOf(SearchUiState.Idle)
+            flowOf<SearchUiState>(SearchUiState.Idle)
         } else {
-            repository.searchWithScope(q, scope.code).map { result ->
-                result.fold(
-                    onSuccess = { results ->
-                        SearchUiState.Success(results = results, favoriteIds = favIds)
-                    },
-                    onFailure = { err ->
-                        SearchUiState.Error(err.message ?: "No songs found")
-                    }
-                )
+            flow<SearchUiState> {
+                emit(SearchUiState.Loading)
+                repository.searchWithScope(q, scope.code).collect { result ->
+                    val state = result.fold(
+                        onSuccess = { SearchUiState.Success(results = it, favoriteIds = favIds) },
+                        onFailure = { SearchUiState.Error(it.message ?: "No songs found") }
+                    )
+                    emit(state)
+                }
             }
         }
     }.stateIn(

@@ -97,12 +97,14 @@ class DiscoverViewModel(
         tasteManager: com.example.core.taste.TastePreferenceManager? = null,
         youtubeProvider: com.example.data.provider.YouTubeProvider? = null
     ) {
+        if (_isRefreshing.value) return
         viewModelScope.launch {
             _isRefreshing.value = true
             try {
-                val currentMood = _selectedMood.value
-                if (currentMood == "All") {
-                    repository.getDiscoverFeed().collect { result ->
+                kotlinx.coroutines.withTimeoutOrNull(6000L) {
+                    val currentMood = _selectedMood.value
+                    if (currentMood == "All") {
+                        val result = repository.refreshDiscoverFeed()
                         result.fold(
                             onSuccess = { feed ->
                                 _rawState.value = DiscoverUiState.Success(
@@ -118,23 +120,25 @@ class DiscoverViewModel(
                                 )
                             }
                         )
-                    }
-                    if (youtubeProvider != null && tasteManager != null) {
-                        try {
-                            tasteManager.syncLiveTastes(youtubeProvider)
-                        } catch (_: Exception) {}
-                    }
-                } else {
-                    // Force refresh genre stream from YouTube
-                    val genreYt = repository.getTracksForGenreFromYouTube(currentMood)
-                    if (genreYt.isNotEmpty()) {
-                        val current = _rawState.value
-                        if (current is DiscoverUiState.Success) {
-                            val updatedMoodPlaylists = current.feed.moodPlaylists.toMutableMap()
-                            updatedMoodPlaylists[currentMood] = genreYt.distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
-                            _rawState.value = current.copy(
-                                feed = current.feed.copy(moodPlaylists = updatedMoodPlaylists)
-                            )
+                        if (youtubeProvider != null && tasteManager != null) {
+                            launch {
+                                try {
+                                    tasteManager.syncLiveTastes(youtubeProvider)
+                                } catch (_: Exception) {}
+                            }
+                        }
+                    } else {
+                        // Force refresh genre stream from YouTube
+                        val genreYt = repository.getTracksForGenreFromYouTube(currentMood)
+                        if (genreYt.isNotEmpty()) {
+                            val current = _rawState.value
+                            if (current is DiscoverUiState.Success) {
+                                val updatedMoodPlaylists = current.feed.moodPlaylists.toMutableMap()
+                                updatedMoodPlaylists[currentMood] = genreYt.distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
+                                _rawState.value = current.copy(
+                                    feed = current.feed.copy(moodPlaylists = updatedMoodPlaylists)
+                                )
+                            }
                         }
                     }
                 }

@@ -8,7 +8,10 @@ import com.example.domain.model.Playlist
 import com.example.domain.model.SearchResults
 import com.example.domain.model.Track
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import android.util.LruCache
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -22,10 +25,12 @@ import java.util.regex.Pattern
 class YouTubeProvider(
     private val apiKey: String = "",
     private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(12, TimeUnit.SECONDS)
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(6, TimeUnit.SECONDS)
         .build()
 ) : MusicProvider {
+
+    private val searchCache = LruCache<String, SearchResults>(80)
 
     override val id: String = "youtube_authorized"
     override val displayName: String = "YouTube & YouTube Music"
@@ -88,13 +93,6 @@ class YouTubeProvider(
         try {
             // Pick dynamic rotating seed for trending so pull-to-refresh rotates fresh tracks like YouTube
             val trendingSeed = TRENDING_SEEDS.random()
-            val onlineTrending = try {
-                fetchInnerTubeVideos(trendingSeed, "ALL")
-                    .filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
-                    .take(20)
-            } catch (_: Exception) {
-                emptyList()
-            }
 
             // Pick random seeds from genre pools for variety
             val hipHopSeed = GENRE_QUERY_POOLS["Hip-Hop"]?.random() ?: "top hip hop rap hits single official music video"
@@ -102,11 +100,70 @@ class YouTubeProvider(
             val popSeed = GENRE_QUERY_POOLS["Pop Hits"]?.random() ?: "top pop hits single official music video"
             val classicsSeed = GENRE_QUERY_POOLS["Classics"]?.random() ?: "classic rock single official music video"
 
-            // Fetch dedicated YouTube music for genres (strictly single songs)
-            val hipHopYt = try { fetchInnerTubeVideos(hipHopSeed, "YOUTUBE_MUSIC").filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }.take(10).map { it.copy(genre = "Hip-Hop") } } catch (_: Exception) { emptyList() }
-            val rockYt = try { fetchInnerTubeVideos(rockSeed, "YOUTUBE_MUSIC").filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }.take(10).map { it.copy(genre = "Rock & Metal") } } catch (_: Exception) { emptyList() }
-            val popYt = try { fetchInnerTubeVideos(popSeed, "YOUTUBE_MUSIC").filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }.take(10).map { it.copy(genre = "Pop Hits") } } catch (_: Exception) { emptyList() }
-            val classicsYt = try { fetchInnerTubeVideos(classicsSeed, "YOUTUBE_MUSIC").filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }.take(10).map { it.copy(genre = "Classics") } } catch (_: Exception) { emptyList() }
+            // Concurrently fetch all 5 streams in parallel for sub-second feed generation
+            val onlineTrending: List<Track>
+            val hipHopYt: List<Track>
+            val rockYt: List<Track>
+            val popYt: List<Track>
+            val classicsYt: List<Track>
+
+            coroutineScope {
+                val trendingDef = async {
+                    try {
+                        fetchInnerTubeVideos(trendingSeed, "ALL")
+                            .filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
+                            .take(20)
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                }
+                val hipHopDef = async {
+                    try {
+                        fetchInnerTubeVideos(hipHopSeed, "YOUTUBE_MUSIC")
+                            .filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
+                            .take(10)
+                            .map { it.copy(genre = "Hip-Hop") }
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                }
+                val rockDef = async {
+                    try {
+                        fetchInnerTubeVideos(rockSeed, "YOUTUBE_MUSIC")
+                            .filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
+                            .take(10)
+                            .map { it.copy(genre = "Rock & Metal") }
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                }
+                val popDef = async {
+                    try {
+                        fetchInnerTubeVideos(popSeed, "YOUTUBE_MUSIC")
+                            .filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
+                            .take(10)
+                            .map { it.copy(genre = "Pop Hits") }
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                }
+                val classicsDef = async {
+                    try {
+                        fetchInnerTubeVideos(classicsSeed, "YOUTUBE_MUSIC")
+                            .filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
+                            .take(10)
+                            .map { it.copy(genre = "Classics") }
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                }
+
+                onlineTrending = trendingDef.await()
+                hipHopYt = hipHopDef.await()
+                rockYt = rockDef.await()
+                popYt = popDef.await()
+                classicsYt = classicsDef.await()
+            }
 
             val baseTracks = CuratedFrequencies.allTracks
             val allCombined = (onlineTrending + hipHopYt + rockYt + popYt + classicsYt + baseTracks).distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
@@ -170,6 +227,14 @@ class YouTubeProvider(
             return@withContext Result.success(SearchResults(query = "", searchScope = scope))
         }
 
+        val cacheKey = "${cleanQuery.lowercase()}_$scope"
+        synchronized(searchCache) {
+            val cached = searchCache.get(cacheKey)
+            if (cached != null) {
+                return@withContext Result.success(cached)
+            }
+        }
+
         // 1. Check if user entered a direct YouTube or YouTube Music URL or 11-char Video ID
         val directVideoId = extractYouTubeVideoId(cleanQuery)
         if (directVideoId != null) {
@@ -186,13 +251,15 @@ class YouTubeProvider(
                 frequencyHz = 432,
                 source = if (scope == "YOUTUBE_MUSIC") "youtube_music" else "youtube"
             )
-            return@withContext Result.success(
-                SearchResults(
-                    query = cleanQuery,
-                    tracks = listOf(directTrack),
-                    searchScope = scope
-                )
+            val res = SearchResults(
+                query = cleanQuery,
+                tracks = listOf(directTrack),
+                searchScope = scope
             )
+            synchronized(searchCache) {
+                searchCache.put(cacheKey, res)
+            }
+            return@withContext Result.success(res)
         }
 
         val ytTracks = mutableListOf<Track>()
@@ -248,12 +315,12 @@ class YouTubeProvider(
             } catch (_: Exception) {}
         }
 
-        // 3. YouTube InnerTube Search: live public search for songs and videos uploaded to YouTube
+        // 3. YouTube InnerTube Search: ultra-fast live public search for songs and videos
         val innerTubeResults = fetchInnerTubeVideos(cleanQuery, scope)
         ytTracks.addAll(innerTubeResults)
 
-        // 4. Secondary fallback: Web search scraper (extracts videoRenderer from ytInitialData)
-        if (ytTracks.size < 25) {
+        // 4. Secondary fallback: Web search scraper (only if InnerTube produced zero results)
+        if (ytTracks.isEmpty()) {
             val webResults = fetchWebSearchVideos(cleanQuery, scope)
             for (t in webResults) {
                 if (!ytTracks.any { it.youtubeVideoId == t.youtubeVideoId }) {
@@ -262,19 +329,17 @@ class YouTubeProvider(
             }
         }
 
-        // 5. Query broadening: if results are still sparse (< 25), query common music variations
-        if (ytTracks.size < 25) {
-            val variations = listOf("$cleanQuery songs", "$cleanQuery official music video", "$cleanQuery audio")
-            for (vQuery in variations) {
-                if (ytTracks.size >= 30) break
-                val moreTracks = fetchInnerTubeVideos(vQuery, scope)
+        // 5. Query broadening: only if results are very sparse (< 4), run 1 fast variation
+        if (ytTracks.size < 4) {
+            try {
+                val moreTracks = fetchInnerTubeVideos("$cleanQuery songs", scope)
                 for (t in moreTracks) {
-                    if (ytTracks.size >= 35) break
+                    if (ytTracks.size >= 15) break
                     if (!ytTracks.any { it.youtubeVideoId == t.youtubeVideoId }) {
                         ytTracks.add(t)
                     }
                 }
-            }
+            } catch (_: Exception) {}
         }
 
         // 6. Curated and local frequency matching
@@ -318,16 +383,20 @@ class YouTubeProvider(
             }
         }
 
-        Result.success(
-            SearchResults(
-                query = cleanQuery,
-                tracks = combinedTracks,
-                artists = matchedArtists,
-                albums = matchedAlbums,
-                playlists = matchedPlaylists,
-                searchScope = scope
-            )
+        val searchResults = SearchResults(
+            query = cleanQuery,
+            tracks = combinedTracks,
+            artists = matchedArtists,
+            albums = matchedAlbums,
+            playlists = matchedPlaylists,
+            searchScope = scope
         )
+
+        synchronized(searchCache) {
+            searchCache.put(cacheKey, searchResults)
+        }
+
+        Result.success(searchResults)
     }
 
     /**
