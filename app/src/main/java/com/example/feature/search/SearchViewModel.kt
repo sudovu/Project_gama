@@ -34,9 +34,9 @@ sealed interface SearchUiState {
 }
 
 enum class SearchScope(val displayName: String, val code: String) {
-    ALL("All Signals", "ALL"),
-    YOUTUBE("YouTube", "YOUTUBE"),
-    YOUTUBE_MUSIC("YouTube Music", "YOUTUBE_MUSIC"),
+    ALL("All Tracks", "ALL"),
+    YOUTUBE_MUSIC("Music Stream", "YOUTUBE_MUSIC"),
+    YOUTUBE("Video Audio", "YOUTUBE"),
     UPLOADED("Uploaded", "UPLOADED")
 }
 

@@ -35,11 +35,16 @@
         </intent>
         <package android:name="com.spotify.music" />
 
-        <!-- Web Browsers & YouTube Music -->
+        <!-- Web Browsers, YouTube & YouTube Music -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="vnd.youtube" />
+        </intent>
+        <package android:name="com.google.android.youtube" />
         <package android:name="com.google.android.apps.youtube.music" />
     </queries>
 

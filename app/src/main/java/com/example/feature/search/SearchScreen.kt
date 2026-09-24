@@ -334,12 +334,8 @@ fun SearchScreen(
                             if (nonUploadedTracks.isNotEmpty()) {
                                 item {
                                     GammaSectionHeader(
-                                        category = when (searchScope) {
-                                            SearchScope.YOUTUBE_MUSIC -> "YouTube Music Results"
-                                            SearchScope.YOUTUBE -> "YouTube Video Audio"
-                                            else -> "Matched Signals & Streams"
-                                        },
-                                        title = if (searchScope == SearchScope.YOUTUBE_MUSIC) "YouTube Music" else "Tracks"
+                                        category = "Search Results",
+                                        title = "Tracks"
                                     )
                                 }
                                 items(nonUploadedTracks, key = { it.id }) { track ->

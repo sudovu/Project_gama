@@ -110,14 +110,23 @@ fun GammaTrackRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = " • ${track.genre}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = GammaPrimary.copy(alpha = 0.8f),
-                    fontSize = 11.sp
-                )
+                val displayGenre = if (
+                    track.genre.equals("YouTube Music", ignoreCase = true) ||
+                    track.genre.equals("YouTube Audio", ignoreCase = true) ||
+                    track.genre.equals("YouTube", ignoreCase = true) ||
+                    track.genre.equals("Curated", ignoreCase = true)
+                ) "" else track.genre
 
-                // Source Badge
+                if (displayGenre.isNotBlank()) {
+                    Text(
+                        text = " • $displayGenre",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = GammaPrimary.copy(alpha = 0.8f),
+                        fontSize = 11.sp
+                    )
+                }
+
+                // Uploaded Badge
                 if (track.isUploaded) {
                     Spacer(modifier = Modifier.width(6.dp))
                     Box(
@@ -131,36 +140,6 @@ fun GammaTrackRow(
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
                             color = GammaSecondary
-                        )
-                    }
-                } else if (track.source == "youtube_music") {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color(0xFFFF0000).copy(alpha = 0.2f))
-                            .padding(horizontal = 5.dp, vertical = 1.dp)
-                    ) {
-                        Text(
-                            text = "YT MUSIC",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFF4E45)
-                        )
-                    }
-                } else if (track.source == "youtube") {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color(0xFFFF0000).copy(alpha = 0.15f))
-                            .padding(horizontal = 5.dp, vertical = 1.dp)
-                    ) {
-                        Text(
-                            text = "YOUTUBE",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFF5252)
                         )
                     }
                 }

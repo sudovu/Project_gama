@@ -4,6 +4,7 @@ This directory archives all historical and current build releases of the GAMA Cy
 
 | Version | Release Date | Android Binary | Highlights |
 | :--- | :--- | :--- | :--- |
+| **[v1.9](./v1.9/)** | September 2026 | [`GAMA-v1.9.apk`](./v1.9/GAMA-v1.9.apk) | Dynamic rotating seed suggestions on Discover pull-to-refresh like YouTube, broadened search results with clean source display, direct email ID Spotify & Google account linking, refined 64dp developer badge, official multi-tier YouTube app launching, and full binary synchronization |
 | **[v1.8](./v1.8/)** | September 2026 | [`GAMA-v1.8.apk`](./v1.8/GAMA-v1.8.apk) | Pull-to-refresh on Discover & YouTube streams, Android 11+ `<queries>` package visibility for Gmail & Spotify apps, multi-tier fallback intents, and direct dialog Open App shortcuts |
 | **[v1.7](./v1.7/)** | September 2026 | [`GAMA-v1.7.apk`](./v1.7/GAMA-v1.7.apk) | Uninterrupted background audio when closing video (single persistent node), custom sleep timer dialog (1–180m with -5m/+5m/+15m steppers), top bar clean-up (only Info icon), seamless in-app Spotify & Google taste sync |
 | **[v1.6](./v1.6/)** | September 2026 | [`GAMA-v1.6.apk`](./v1.6/GAMA-v1.6.apk) | Rock-solid seekbar with zero remaining-time flicker, pure single-song filtering & recommendations (no 2-hour collections), unlimited genre radio stream |
@@ -45,7 +46,10 @@ versions/
 ├── v1.7/
 │   ├── GAMA-v1.7.apk       # Universal release APK (v1.7)
 │   └── README.md           # v1.7 release notes & changelog
-└── v1.8/
-    ├── GAMA-v1.8.apk       # Universal release APK (v1.8)
-    └── README.md           # v1.8 release notes & changelog
+├── v1.8/
+│   ├── GAMA-v1.8.apk       # Universal release APK (v1.8)
+│   └── README.md           # v1.8 release notes & changelog
+└── v1.9/
+    ├── GAMA-v1.9.apk       # Universal release APK (v1.9)
+    └── README.md           # v1.9 release notes & changelog
 ```

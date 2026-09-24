@@ -41,26 +41,82 @@ class YouTubeProvider(
         )
     }
 
+    companion object {
+        private val TRENDING_SEEDS = listOf(
+            "Trending Music Hits Official",
+            "Billboard Hot 100 songs official music video",
+            "Global top hits official music video",
+            "Viral music tracks official video",
+            "Latest trending music video official",
+            "Top charting songs official video",
+            "Popular music singles official music video"
+        )
+
+        private val GENRE_QUERY_POOLS = mapOf(
+            "Hip-Hop" to listOf(
+                "top hip hop rap hits single official music video",
+                "trending rap music video official single",
+                "latest hip hop tracks official video",
+                "best new rap music single",
+                "hip hop official music video single"
+            ),
+            "Rock & Metal" to listOf(
+                "best rock metal songs single official music video",
+                "modern alternative rock hits official video",
+                "legendary rock anthems official music video",
+                "hard rock hits single official",
+                "metal alternative rock official video single"
+            ),
+            "Pop Hits" to listOf(
+                "top pop hits single official music video",
+                "global pop music charts official video",
+                "catchy pop singles official music video",
+                "trending dance pop hits official",
+                "billboard pop songs official music video"
+            ),
+            "Classics" to listOf(
+                "classic rock single official music video",
+                "timeless 80s 90s classic hits official",
+                "golden retro hits official music video",
+                "legendary classic songs official",
+                "vintage greatest hits official video"
+            )
+        )
+    }
+
     override suspend fun getDiscoverFeed(): Result<DiscoverFeed> = withContext(Dispatchers.IO) {
         try {
-            // Attempt to fetch fresh trending music videos from YouTube InnerTube
+            // Pick dynamic rotating seed for trending so pull-to-refresh rotates fresh tracks like YouTube
+            val trendingSeed = TRENDING_SEEDS.random()
             val onlineTrending = try {
-                fetchInnerTubeVideos("Trending Music Hits Official", "ALL").take(15)
+                fetchInnerTubeVideos(trendingSeed, "ALL")
+                    .filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
+                    .take(20)
             } catch (_: Exception) {
                 emptyList()
             }
 
+            // Pick random seeds from genre pools for variety
+            val hipHopSeed = GENRE_QUERY_POOLS["Hip-Hop"]?.random() ?: "top hip hop rap hits single official music video"
+            val rockSeed = GENRE_QUERY_POOLS["Rock & Metal"]?.random() ?: "best rock metal songs single official music video"
+            val popSeed = GENRE_QUERY_POOLS["Pop Hits"]?.random() ?: "top pop hits single official music video"
+            val classicsSeed = GENRE_QUERY_POOLS["Classics"]?.random() ?: "classic rock single official music video"
+
             // Fetch dedicated YouTube music for genres (strictly single songs)
-            val hipHopYt = try { fetchInnerTubeVideos("top hip hop rap hits single official music video", "YOUTUBE_MUSIC").filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }.take(10).map { it.copy(genre = "Hip-Hop") } } catch (_: Exception) { emptyList() }
-            val rockYt = try { fetchInnerTubeVideos("best rock metal songs single official music video", "YOUTUBE_MUSIC").filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }.take(10).map { it.copy(genre = "Rock & Metal") } } catch (_: Exception) { emptyList() }
-            val popYt = try { fetchInnerTubeVideos("top pop hits single official music video", "YOUTUBE_MUSIC").filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }.take(10).map { it.copy(genre = "Pop Hits") } } catch (_: Exception) { emptyList() }
-            val classicsYt = try { fetchInnerTubeVideos("classic rock single official music video", "YOUTUBE_MUSIC").filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }.take(10).map { it.copy(genre = "Classics") } } catch (_: Exception) { emptyList() }
+            val hipHopYt = try { fetchInnerTubeVideos(hipHopSeed, "YOUTUBE_MUSIC").filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }.take(10).map { it.copy(genre = "Hip-Hop") } } catch (_: Exception) { emptyList() }
+            val rockYt = try { fetchInnerTubeVideos(rockSeed, "YOUTUBE_MUSIC").filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }.take(10).map { it.copy(genre = "Rock & Metal") } } catch (_: Exception) { emptyList() }
+            val popYt = try { fetchInnerTubeVideos(popSeed, "YOUTUBE_MUSIC").filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }.take(10).map { it.copy(genre = "Pop Hits") } } catch (_: Exception) { emptyList() }
+            val classicsYt = try { fetchInnerTubeVideos(classicsSeed, "YOUTUBE_MUSIC").filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }.take(10).map { it.copy(genre = "Classics") } } catch (_: Exception) { emptyList() }
 
             val baseTracks = CuratedFrequencies.allTracks
             val allCombined = (onlineTrending + hipHopYt + rockYt + popYt + classicsYt + baseTracks).distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
 
-            val quickPicks = (onlineTrending.take(4) + baseTracks.shuffled()).distinctBy { it.id }.take(8)
-            val trending = allCombined.sortedByDescending { it.playCount.takeIf { c -> c > 0 } ?: 500000000L }
+            val quickPicks = (onlineTrending.shuffled().take(5) + baseTracks.shuffled()).distinctBy { it.id }.take(8)
+            val trending = if (onlineTrending.isNotEmpty()) {
+                onlineTrending.take(15)
+            } else {
+                allCombined.sortedByDescending { it.playCount.takeIf { c -> c > 0 } ?: 500000000L }
+            }
             val playlists = CuratedFrequencies.playlists
             val albums = CuratedFrequencies.albums
             val artists = CuratedFrequencies.artists
@@ -70,23 +126,23 @@ class YouTubeProvider(
                     it.genre.contains("Rap", ignoreCase = true) || 
                     it.genre.contains("Hip-Hop", ignoreCase = true) ||
                     it.artist in listOf("Eminem", "Kendrick Lamar", "Badshah", "Travis Scott", "50 Cent", "Dr. Dre")
-                }).distinctBy { it.youtubeVideoId.ifEmpty { it.id } }.sortedByDescending { it.playCount },
+                }).distinctBy { it.youtubeVideoId.ifEmpty { it.id } },
                 "Rock & Metal" to (rockYt + allCombined.filter { 
                     it.genre.contains("Rock", ignoreCase = true) || 
                     it.genre.contains("Metal", ignoreCase = true) || 
                     it.genre.contains("Grunge", ignoreCase = true) ||
                     it.artist in listOf("Linkin Park", "Slipknot", "Metallica", "AC/DC", "Nirvana", "Queen", "System Of A Down", "Evanescence")
-                }).distinctBy { it.youtubeVideoId.ifEmpty { it.id } }.sortedByDescending { it.playCount },
+                }).distinctBy { it.youtubeVideoId.ifEmpty { it.id } },
                 "Pop Hits" to (popYt + allCombined.filter { 
                     it.genre.contains("Pop", ignoreCase = true) || 
                     it.genre.contains("Soul", ignoreCase = true) || 
                     it.genre.contains("Funk", ignoreCase = true) ||
                     it.artist in listOf("The Weeknd", "Billie Eilish", "Ed Sheeran", "Taylor Swift", "Bruno Mars", "Adele", "Dua Lipa", "Imagine Dragons")
-                }).distinctBy { it.youtubeVideoId.ifEmpty { it.id } }.sortedByDescending { it.playCount },
+                }).distinctBy { it.youtubeVideoId.ifEmpty { it.id } },
                 "Classics" to (classicsYt + allCombined.filter { 
                     it.genre.contains("Classic", ignoreCase = true) || 
                     it.artist in listOf("Michael Jackson", "Queen", "Nirvana", "AC/DC", "Coldplay")
-                }).distinctBy { it.youtubeVideoId.ifEmpty { it.id } }.sortedByDescending { it.playCount }
+                }).distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
             )
 
             Result.success(
@@ -118,14 +174,14 @@ class YouTubeProvider(
         val directVideoId = extractYouTubeVideoId(cleanQuery)
         if (directVideoId != null) {
             val oembedTrack = fetchOEmbedMetadata(directVideoId)
-            val directTrack = oembedTrack?.copy(streamUrl = "") ?: Track(
+            val directTrack = oembedTrack?.copy(streamUrl = "", genre = "Music") ?: Track(
                 id = "yt_$directVideoId",
                 title = "YouTube Video: $directVideoId",
-                artist = if (scope == "YOUTUBE_MUSIC") "YouTube Music" else "YouTube Creator",
+                artist = if (scope == "YOUTUBE_MUSIC") "Music" else "Creator",
                 artworkUrl = "https://img.youtube.com/vi/$directVideoId/hqdefault.jpg",
                 youtubeVideoId = directVideoId,
                 streamUrl = "",
-                genre = if (scope == "YOUTUBE_MUSIC") "YouTube Music" else "YouTube Audio",
+                genre = "Music",
                 durationSeconds = 240,
                 frequencyHz = 432,
                 source = if (scope == "YOUTUBE_MUSIC") "youtube_music" else "youtube"
@@ -145,9 +201,9 @@ class YouTubeProvider(
         if (apiKey.isNotBlank()) {
             try {
                 val searchUrl = if (scope == "YOUTUBE_MUSIC") {
-                    "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=20&q=${URLEncoder.encode("$cleanQuery audio music", "UTF-8")}&key=${apiKey}"
+                    "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=25&q=${URLEncoder.encode("$cleanQuery audio music", "UTF-8")}&key=${apiKey}"
                 } else {
-                    "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=20&q=${URLEncoder.encode(cleanQuery, "UTF-8")}&key=${apiKey}"
+                    "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=25&q=${URLEncoder.encode(cleanQuery, "UTF-8")}&key=${apiKey}"
                 }
                 val request = Request.Builder().url(searchUrl).build()
                 val response = client.newCall(request).execute()
@@ -178,7 +234,7 @@ class YouTubeProvider(
                                             artworkUrl = thumbHigh,
                                             youtubeVideoId = videoId,
                                             streamUrl = "",
-                                            genre = if (scope == "YOUTUBE_MUSIC") "YouTube Music" else "YouTube Audio",
+                                            genre = "Music",
                                             durationSeconds = 240,
                                             frequencyHz = 432,
                                             source = if (scope == "YOUTUBE_MUSIC") "youtube_music" else "youtube"
@@ -193,18 +249,35 @@ class YouTubeProvider(
         }
 
         // 3. YouTube InnerTube Search: live public search for songs and videos uploaded to YouTube
-        if (ytTracks.isEmpty()) {
-            val innerTubeResults = fetchInnerTubeVideos(cleanQuery, scope)
-            ytTracks.addAll(innerTubeResults)
-        }
+        val innerTubeResults = fetchInnerTubeVideos(cleanQuery, scope)
+        ytTracks.addAll(innerTubeResults)
 
         // 4. Secondary fallback: Web search scraper (extracts videoRenderer from ytInitialData)
-        if (ytTracks.isEmpty()) {
+        if (ytTracks.size < 25) {
             val webResults = fetchWebSearchVideos(cleanQuery, scope)
-            ytTracks.addAll(webResults)
+            for (t in webResults) {
+                if (!ytTracks.any { it.youtubeVideoId == t.youtubeVideoId }) {
+                    ytTracks.add(t)
+                }
+            }
         }
 
-        // 5. Curated and local frequency matching
+        // 5. Query broadening: if results are still sparse (< 25), query common music variations
+        if (ytTracks.size < 25) {
+            val variations = listOf("$cleanQuery songs", "$cleanQuery official music video", "$cleanQuery audio")
+            for (vQuery in variations) {
+                if (ytTracks.size >= 30) break
+                val moreTracks = fetchInnerTubeVideos(vQuery, scope)
+                for (t in moreTracks) {
+                    if (ytTracks.size >= 35) break
+                    if (!ytTracks.any { it.youtubeVideoId == t.youtubeVideoId }) {
+                        ytTracks.add(t)
+                    }
+                }
+            }
+        }
+
+        // 6. Curated and local frequency matching
         val matchedTracks = CuratedFrequencies.allTracks.filter {
             it.title.contains(cleanQuery, ignoreCase = true) ||
                     it.artist.contains(cleanQuery, ignoreCase = true) ||
@@ -262,12 +335,16 @@ class YouTubeProvider(
      * Strictly filters for good single songs and discards collections/compilations/mixes.
      */
     suspend fun fetchTracksForGenre(genre: String): List<Track> = withContext(Dispatchers.IO) {
-        val query = when (genre) {
-            "Hip-Hop" -> "top hip hop rap hits single official music video"
-            "Rock & Metal" -> "best rock metal songs single official music video"
-            "Pop Hits" -> "top pop hits songs single official music video"
-            "Classics" -> "classic rock hits songs single official music video"
-            else -> "$genre single official music video"
+        val pool = GENRE_QUERY_POOLS[genre]
+        val query = if (!pool.isNullOrEmpty()) {
+            pool.random()
+        } else {
+            val variants = listOf(
+                "$genre single official music video",
+                "best $genre songs single official",
+                "top $genre hits official video"
+            )
+            variants.random()
         }
         val ytTracks = try {
             val results = fetchInnerTubeVideos(query, "YOUTUBE_MUSIC").ifEmpty {
@@ -361,17 +438,17 @@ class YouTubeProvider(
             val regexTracks = mutableListOf<Track>()
             while (matcher.find() && regexTracks.size < 20) {
                 val vid = matcher.group(1) ?: continue
-                val title = matcher.group(2) ?: "YouTube Track"
+                val title = matcher.group(2) ?: "Track"
                 if (!regexTracks.any { it.youtubeVideoId == vid } && !SmartQueueEngine.isCollectionOrMix(title, 240)) {
                     regexTracks.add(
                         Track(
                             id = "yt_$vid",
                             title = cleanTitle(title),
-                            artist = "YouTube Artist",
+                            artist = "Artist",
                             artworkUrl = "https://img.youtube.com/vi/$vid/hqdefault.jpg",
                             youtubeVideoId = vid,
                             streamUrl = "",
-                            genre = if (scope == "YOUTUBE_MUSIC") "YouTube Music" else "YouTube Audio",
+                            genre = if (scope == "YOUTUBE_MUSIC") "Music" else "Audio",
                             durationSeconds = 240,
                             frequencyHz = 432,
                             source = if (scope == "YOUTUBE_MUSIC") "youtube_music" else "youtube"
@@ -406,9 +483,9 @@ class YouTubeProvider(
                 val ownerObj = vr.optJSONObject("ownerText") ?: vr.optJSONObject("shortBylineText")
                 val ownerRuns = ownerObj?.optJSONArray("runs")
                 val artist = if (ownerRuns != null && ownerRuns.length() > 0) {
-                    ownerRuns.optJSONObject(0)?.optString("text") ?: "YouTube Artist"
+                    ownerRuns.optJSONObject(0)?.optString("text") ?: "Artist"
                 } else {
-                    ownerObj?.optString("simpleText") ?: "YouTube Artist"
+                    ownerObj?.optString("simpleText") ?: "Artist"
                 }
 
                 val lengthObj = vr.optJSONObject("lengthText")
@@ -430,7 +507,7 @@ class YouTubeProvider(
                             artworkUrl = thumbUrl,
                             youtubeVideoId = videoId,
                             streamUrl = "",
-                            genre = if (scope == "YOUTUBE_MUSIC") "YouTube Music" else "YouTube Audio",
+                            genre = if (scope == "YOUTUBE_MUSIC") "Music" else "Audio",
                             durationSeconds = durationSec,
                             frequencyHz = 432,
                             source = if (scope == "YOUTUBE_MUSIC") "youtube_music" else "youtube"
@@ -452,7 +529,7 @@ class YouTubeProvider(
             if (videoId.isNotEmpty() && !out.any { it.youtubeVideoId == videoId }) {
                 val flexColumns = mr.optJSONArray("flexColumns")
                 var title = ""
-                var artist = "YouTube Music"
+                var artist = "Artist"
                 if (flexColumns != null && flexColumns.length() > 0) {
                     val col0 = flexColumns.optJSONObject(0)
                         ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
@@ -488,7 +565,7 @@ class YouTubeProvider(
                             artworkUrl = "https://img.youtube.com/vi/$videoId/hqdefault.jpg",
                             youtubeVideoId = videoId,
                             streamUrl = "",
-                            genre = "YouTube Music",
+                            genre = "Music",
                             durationSeconds = 210,
                             frequencyHz = 432,
                             source = "youtube_music"
@@ -556,7 +633,7 @@ class YouTubeProvider(
                     artist = cleanTitle(author),
                     artworkUrl = thumb,
                     youtubeVideoId = videoId,
-                    genre = "YouTube Stream",
+                    genre = "Music",
                     durationSeconds = 240,
                     frequencyHz = 432,
                     source = "youtube"
@@ -577,11 +654,11 @@ class YouTubeProvider(
                 val videoId = trackId.removePrefix("yt_")
                 val fetched = fetchOEmbedMetadata(videoId) ?: Track(
                     id = trackId,
-                    title = "YouTube Video Stream",
-                    artist = "YouTube Music",
+                    title = "Video Stream",
+                    artist = "Artist",
                     artworkUrl = "https://img.youtube.com/vi/$videoId/hqdefault.jpg",
                     youtubeVideoId = videoId,
-                    genre = "YouTube Stream",
+                    genre = "Music",
                     durationSeconds = 240,
                     frequencyHz = 432,
                     source = "youtube"
@@ -628,12 +705,16 @@ class YouTubeProvider(
             return trimmed
         }
         val pattern = Pattern.compile(
-            "(?:https?:\\/\\/)?(?:www\\.|m\\.|music\\.)?(?:youtube\\.com\\/(?:[^\\/\\n\\s]+\\/\\S+\\/|(?:v|e(?:mbed)?)\\/|.*[?&]v=)|youtu\\.be\\/)([a-zA-Z0-9_-]{11})"
+            "(?:https?:\\/\\/)?(?:www\\.|m\\.|music\\.)?(?:youtube\\.com\\/(?:watch\\?.*?v=|embed\\/|v\\/|shorts\\/|live\\/|e\\/)|youtu\\.be\\/)([a-zA-Z0-9_-]{11})"
         )
         val matcher = pattern.matcher(trimmed)
         return if (matcher.find()) {
             matcher.group(1)
-        } else null
+        } else {
+            val paramPattern = Pattern.compile("[?&]v=([a-zA-Z0-9_-]{11})")
+            val paramMatcher = paramPattern.matcher(trimmed)
+            if (paramMatcher.find()) paramMatcher.group(1) else null
+        }
     }
 
     private fun cleanTitle(title: String): String {

@@ -98,15 +98,23 @@ class TastePreferenceManager(context: Context) {
     suspend fun syncLiveTastes(youtubeProvider: YouTubeProvider) = withContext(Dispatchers.IO) {
         _isSyncing.value = true
         try {
+            val querySuffixes = listOf(
+                "hits single official music video",
+                "top songs official video",
+                "popular tracks official single",
+                "best music hits official video"
+            )
+
             if (_isSpotifyLinked.value) {
                 val tastes = _spotifyTastes.value
                 val fetched = mutableListOf<Track>()
-                for (taste in tastes.take(3)) {
+                for (taste in tastes.take(4)) {
                     try {
-                        val res = youtubeProvider.searchWithScope("$taste hits single official music video", "YOUTUBE_MUSIC")
+                        val suffix = querySuffixes.random()
+                        val res = youtubeProvider.searchWithScope("$taste $suffix", "YOUTUBE_MUSIC")
                         res.getOrNull()?.tracks?.let { list ->
                             val singles = list.filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
-                            fetched.addAll(singles.take(3))
+                            fetched.addAll(singles.take(6).map { it.copy(genre = taste) })
                         }
                     } catch (_: Exception) {}
                 }
@@ -118,12 +126,13 @@ class TastePreferenceManager(context: Context) {
             if (_isGoogleLinked.value) {
                 val tastes = _youtubeTastes.value
                 val fetched = mutableListOf<Track>()
-                for (taste in tastes.take(3)) {
+                for (taste in tastes.take(4)) {
                     try {
-                        val res = youtubeProvider.searchWithScope("$taste tracks single official music video", "YOUTUBE_MUSIC")
+                        val suffix = querySuffixes.random()
+                        val res = youtubeProvider.searchWithScope("$taste $suffix", "YOUTUBE_MUSIC")
                         res.getOrNull()?.tracks?.let { list ->
                             val singles = list.filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
-                            fetched.addAll(singles.take(3))
+                            fetched.addAll(singles.take(6).map { it.copy(genre = taste) })
                         }
                     } catch (_: Exception) {}
                 }

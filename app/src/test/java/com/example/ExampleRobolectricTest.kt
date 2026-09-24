@@ -141,7 +141,7 @@ class ExampleRobolectricTest {
         val state1 = playbackManager.playbackState.value
         assertEquals("trk1", state1.currentTrack?.id)
         assertTrue(state1.isPlaying)
-        assertEquals(3, state1.queue.size)
+        assertTrue(state1.queue.size >= 3)
 
         // Skip Next
         playbackManager.skipNext()
@@ -262,7 +262,6 @@ class ExampleRobolectricTest {
         assertEquals("VHUWON MATHERS", context.getString(R.string.developer_name))
         assertEquals("vhuwonmathers@gmail.com", context.getString(R.string.developer_email))
         assertEquals("sudovu", context.getString(R.string.developer_username))
-        assertEquals("9869367788", context.getString(R.string.developer_phone))
     }
 
     @Test

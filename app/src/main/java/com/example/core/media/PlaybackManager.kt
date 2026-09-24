@@ -671,13 +671,16 @@ class PlaybackManager(private val context: Context) {
 
     fun onBridgeTimeUpdate(currentTimeSec: Float, durationSec: Float) {
         if (isTransitioningTrack) {
-            // While transitioning to a new track, ignore any stale trailing time from the old video (> 3 seconds)
-            if (currentTimeSec > 3f) {
-                return
-            }
             if (currentTimeSec <= 1.5f && currentTimeSec >= 0f) {
                 isTransitioningTrack = false
+            } else if (currentTimeSec > 3f && _playbackState.value.positionMs == 0L) {
+                // If direct seek or fast start occurs
+                isTransitioningTrack = false
             }
+        }
+        // Zero reset glitch from unstarted/hidden webview must be ignored if playback already progressed
+        if (currentTimeSec <= 0f && durationSec <= 0f && _playbackState.value.positionMs > 0L) {
+            return
         }
         val posMs = (currentTimeSec.coerceAtLeast(0f) * 1000f).toLong()
         val durMs = if (durationSec > 0f) (durationSec * 1000f).toLong() else _playbackState.value.durationMs

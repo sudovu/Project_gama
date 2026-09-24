@@ -36,11 +36,14 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sensors
@@ -149,10 +152,9 @@ fun ProfileSettingsScreen(
     val developerName = "VHUWON MATHERS"
     val developerEmail = "vhuwonmathers@gmail.com"
     val developerUsername = "sudovu"
-    val developerPhone = "9869367788"
 
     var showSpotifyConnectDialog by remember { mutableStateOf(false) }
-    var editSpotifyUser by remember(spotifyUser) { mutableStateOf(if (spotifyUser.isNotEmpty()) spotifyUser else "vhuwon.mathers") }
+    var editSpotifyUser by remember(spotifyUser) { mutableStateOf(if (spotifyUser.isNotEmpty()) spotifyUser else "vhuwonmathers@gmail.com") }
     var selectedSpotifyTastes by remember(spotifyTastes) { mutableStateOf(spotifyTastes.toSet()) }
 
     var showGoogleConnectDialog by remember { mutableStateOf(false) }
@@ -248,32 +250,59 @@ fun ProfileSettingsScreen(
         }
     }
 
-    val launchYouTubeMusic: () -> Unit = {
+    val launchYouTubeApp: () -> Unit = {
         var opened = false
-        // 1. Try YouTube Music app package
+        // 1. Try official YouTube app package directly
         try {
-            val ytMusicIntent = context.packageManager.getLaunchIntentForPackage("com.google.android.apps.youtube.music")
-            if (ytMusicIntent != null) {
-                ytMusicIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(ytMusicIntent)
-                Toast.makeText(context, "Opening YouTube Music app...", Toast.LENGTH_SHORT).show()
+            val ytIntent = context.packageManager.getLaunchIntentForPackage("com.google.android.youtube")
+            if (ytIntent != null) {
+                ytIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(ytIntent)
+                Toast.makeText(context, "Opening YouTube...", Toast.LENGTH_SHORT).show()
                 opened = true
             }
         } catch (_: Exception) {}
 
-        // 2. Fallback to YouTube Music Web
+        // 2. Try YouTube Music app package
         if (!opened) {
             try {
-                val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com")).apply {
+                val ytMusicIntent = context.packageManager.getLaunchIntentForPackage("com.google.android.apps.youtube.music")
+                if (ytMusicIntent != null) {
+                    ytMusicIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(ytMusicIntent)
+                    Toast.makeText(context, "Opening YouTube Music...", Toast.LENGTH_SHORT).show()
+                    opened = true
+                }
+            } catch (_: Exception) {}
+        }
+
+        // 3. Try standard Android YouTube URI scheme
+        if (!opened) {
+            try {
+                val uriIntent = Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:")).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(uriIntent)
+                Toast.makeText(context, "Opening YouTube...", Toast.LENGTH_SHORT).show()
+                opened = true
+            } catch (_: Exception) {}
+        }
+
+        // 4. Fallback to YouTube Web
+        if (!opened) {
+            try {
+                val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com")).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 context.startActivity(webIntent)
-                Toast.makeText(context, "Opening YouTube Music Web...", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Opening YouTube in Browser...", Toast.LENGTH_SHORT).show()
+                opened = true
             } catch (_: Exception) {
-                Toast.makeText(context, "Could not open YouTube Music", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Could not open YouTube", Toast.LENGTH_SHORT).show()
             }
         }
     }
+    val launchYouTubeMusic: () -> Unit = launchYouTubeApp
 
     val launchUrl: (String) -> Unit = { url ->
         try {
@@ -372,7 +401,7 @@ fun ProfileSettingsScreen(
                                     color = GammaTextPrimary
                                 )
                                 Text(
-                                    text = "Version 1.2.0 (Official Release)",
+                                    text = "Version 1.9.0 (Build 19)",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = GammaPrimary
                                 )
@@ -925,6 +954,14 @@ fun ProfileSettingsScreen(
                             }
 
                             if (isSpotifyLinked) {
+                                if (spotifyUser.isNotEmpty()) {
+                                    Text(
+                                        text = "Linked Email: $spotifyUser",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                        color = Color(0xFF1DB954)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
                                 Text(
                                     text = "Referenced Taste Profile:",
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
@@ -1129,6 +1166,14 @@ fun ProfileSettingsScreen(
                             }
 
                             if (isGoogleLinked) {
+                                if (googleEmail.isNotEmpty()) {
+                                    Text(
+                                        text = "Linked Email: $googleEmail",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                        color = Color(0xFFFF4D4D)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
                                 Text(
                                     text = "Referenced Taste Profile:",
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
@@ -1160,7 +1205,7 @@ fun ProfileSettingsScreen(
                                 ) {
                                     OutlinedButton(
                                         onClick = {
-                                            launchYouTubeMusic()
+                                            launchYouTubeApp()
                                         },
                                         modifier = Modifier.weight(1f).height(38.dp),
                                         shape = RoundedCornerShape(10.dp)
@@ -1230,7 +1275,7 @@ fun ProfileSettingsScreen(
                                     }
                                     OutlinedButton(
                                         onClick = {
-                                            launchYouTubeMusic()
+                                            launchYouTubeApp()
                                         },
                                         modifier = Modifier.height(40.dp),
                                         shape = RoundedCornerShape(10.dp),
@@ -1314,10 +1359,10 @@ fun ProfileSettingsScreen(
                     developerName = developerName,
                     developerUsername = developerUsername,
                     developerEmail = developerEmail,
-                    developerPhone = developerPhone,
                     context = context,
                     clipboardManager = clipboardManager,
-                    onLaunchEmail = launchEmail
+                    onLaunchEmail = launchEmail,
+                    onLaunchUrl = launchUrl
                 )
             }
         }
@@ -1353,14 +1398,16 @@ fun ProfileSettingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        "Enter your Spotify handle and select your favorite genres. GAMA adapts your soundwave feed with live synced tracks!",
+                        "Input your Spotify account email ID and select your favorite genres. GAMA adapts your soundwave feed with live synced tracks!",
                         style = MaterialTheme.typography.bodySmall,
                         color = GammaTextSecondary
                     )
                     OutlinedTextField(
                         value = editSpotifyUser,
                         onValueChange = { editSpotifyUser = it },
-                        label = { Text("Spotify Username / Profile") },
+                        label = { Text("Spotify Account Email ID") },
+                        placeholder = { Text("e.g. yourname@gmail.com") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1396,7 +1443,7 @@ fun ProfileSettingsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        val finalUser = editSpotifyUser.trim().ifEmpty { "vhuwon.mathers" }
+                        val finalUser = editSpotifyUser.trim().ifEmpty { "vhuwonmathers@gmail.com" }
                         val finalTastes = selectedSpotifyTastes.toList().ifEmpty { listOf("Rock & Metal", "Cyberpunk", "Alternative Rock") }
                         tasteManager.linkSpotify(finalUser, finalTastes)
                         if (youtubeProvider != null) {
@@ -1448,7 +1495,7 @@ fun ProfileSettingsScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        if (isGoogleLinked) "Edit YouTube Music Profile" else "Connect Google & YouTube Music",
+                        if (isGoogleLinked) "Edit YouTube Music Profile" else "Connect Google & YouTube Account",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = GammaTextPrimary
                     )
@@ -1460,14 +1507,16 @@ fun ProfileSettingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        "Enter your Google Account email and choose your favorite musical resonances. Real single tracks will sync to your Discover feed.",
+                        "Input your Google / YouTube email ID and choose your favorite musical resonances. Real single tracks will sync to your Discover feed.",
                         style = MaterialTheme.typography.bodySmall,
                         color = GammaTextSecondary
                     )
                     OutlinedTextField(
                         value = editGoogleEmail,
                         onValueChange = { editGoogleEmail = it },
-                        label = { Text("Google Account Email") },
+                        label = { Text("Google / YouTube Email ID") },
+                        placeholder = { Text("e.g. yourname@gmail.com") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1522,7 +1571,7 @@ fun ProfileSettingsScreen(
             dismissButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
-                        onClick = { launchYouTubeMusic() },
+                        onClick = { launchYouTubeApp() },
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF0000)),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF0000))
                     ) {
@@ -1543,10 +1592,10 @@ private fun AboutDeveloperSection(
     developerName: String,
     developerUsername: String,
     developerEmail: String,
-    developerPhone: String,
     context: Context,
     clipboardManager: androidx.compose.ui.platform.ClipboardManager,
-    onLaunchEmail: (String, String) -> Unit
+    onLaunchEmail: (String, String) -> Unit,
+    onLaunchUrl: (String) -> Unit
 ) {
     Text(
         text = "ABOUT THE CREATOR",
@@ -1577,7 +1626,7 @@ private fun AboutDeveloperSection(
                     )
                 )
             )
-            .padding(20.dp)
+            .padding(18.dp)
             .testTag("about_developer_card")
     ) {
         Column(
@@ -1590,14 +1639,14 @@ private fun AboutDeveloperSection(
                     .clip(RoundedCornerShape(30.dp))
                     .background(GammaPrimary.copy(alpha = 0.15f))
                     .border(1.dp, GammaPrimary.copy(alpha = 0.4f), RoundedCornerShape(30.dp))
-                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                    .padding(horizontal = 14.dp, vertical = 5.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Default.Code,
                         contentDescription = null,
                         tint = GammaPrimary,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
@@ -1611,12 +1660,12 @@ private fun AboutDeveloperSection(
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Permanent Profile Picture with glowing dual neon rings
+            // Permanent Profile Picture with glowing dual neon rings (Sleek Compact Size)
             Box(
                 modifier = Modifier
-                    .size(116.dp)
+                    .size(64.dp)
                     .clip(CircleShape)
                     .background(
                         Brush.sweepGradient(
@@ -1628,7 +1677,7 @@ private fun AboutDeveloperSection(
                             )
                         )
                     )
-                    .padding(3.5.dp)
+                    .padding(2.dp)
                     .testTag("profile_avatar_permanent")
             ) {
                 Image(
@@ -1642,19 +1691,19 @@ private fun AboutDeveloperSection(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Full Developer Name (Bold & High Contrast)
             Text(
                 text = developerName,
-                style = MaterialTheme.typography.headlineMedium.copy(
+                style = MaterialTheme.typography.titleLarge.copy(
                     fontWeight = FontWeight.Black,
                     letterSpacing = 0.5.sp
                 ),
                 color = GammaTextPrimary
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             // Username Pill Badge
             Row(
@@ -1669,29 +1718,29 @@ private fun AboutDeveloperSection(
                     imageVector = Icons.Default.Verified,
                     contentDescription = "Verified Developer",
                     tint = GammaPrimary,
-                    modifier = Modifier.size(15.dp)
+                    modifier = Modifier.size(14.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "@$developerUsername",
-                    style = MaterialTheme.typography.labelLarge.copy(
+                    style = MaterialTheme.typography.labelMedium.copy(
                         fontWeight = FontWeight.Bold
                     ),
                     color = GammaPrimary
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             Text(
                 text = "Lead Software Engineer & Android Architect",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = GammaTextSecondary
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Detailed Contact Information Cards
+            // Detailed Contact Information Cards (No phone number)
             Column(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -1711,41 +1760,32 @@ private fun AboutDeveloperSection(
                     testTag = "about_email_card"
                 )
 
-                // Phone Contact Tile
+                // Portfolio & Releases Tile
                 DeveloperContactCard(
-                    icon = Icons.Default.Phone,
+                    icon = Icons.Default.Language,
                     iconTint = GammaSecondary,
-                    label = "PHONE NUMBER",
-                    value = developerPhone,
-                    subtitle = "+977 $developerPhone",
-                    actionLabel = "Call",
-                    actionIcon = Icons.Default.Call,
+                    label = "PORTFOLIO & ARCHIVE",
+                    value = "gautambhuwan.com.np",
+                    subtitle = "Engineering Topologies & APK Releases",
+                    actionLabel = "Visit",
+                    actionIcon = Icons.Default.OpenInNew,
                     onClick = {
-                        copyAndLaunch(
-                            context = context,
-                            clipboardManager = clipboardManager,
-                            label = "Phone",
-                            text = developerPhone,
-                            intent = Intent(Intent.ACTION_DIAL).apply {
-                                data = Uri.parse("tel:$developerPhone")
-                            }
-                        )
+                        onLaunchUrl("https://gautambhuwan.com.np/projects.html#gamma-releases")
                     },
-                    testTag = "about_phone_card"
+                    testTag = "about_website_card"
                 )
 
                 // Username / GitHub Handle Tile
                 DeveloperContactCard(
                     icon = Icons.Default.Person,
                     iconTint = Color(0xFFF59E0B),
-                    label = "USERNAME",
-                    value = developerUsername,
-                    subtitle = "GitHub & Cosmic Identity",
-                    actionLabel = "Copy",
-                    actionIcon = Icons.Default.ContentCopy,
+                    label = "GITHUB PROFILE",
+                    value = "@$developerUsername",
+                    subtitle = "GitHub Repositories & OSS Code",
+                    actionLabel = "Open",
+                    actionIcon = Icons.Default.OpenInNew,
                     onClick = {
-                        clipboardManager.setText(AnnotatedString(developerUsername))
-                        Toast.makeText(context, "Username copied: $developerUsername", Toast.LENGTH_SHORT).show()
+                        onLaunchUrl("https://github.com/sudovu")
                     },
                     testTag = "about_username_card"
                 )
@@ -1764,7 +1804,7 @@ private fun AboutDeveloperSection(
                             Developer: $developerName
                             Username: @$developerUsername
                             Email: $developerEmail
-                            Phone: $developerPhone
+                            Portfolio: https://gautambhuwan.com.np
                             Project: GAMMA Frequency Audio
                         """.trimIndent()
                         clipboardManager.setText(AnnotatedString(fullDetails))
