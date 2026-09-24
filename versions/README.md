@@ -1,9 +1,10 @@
-﻿# GAMA Releases & Version History
+# GAMA Releases & Version History
 
 This directory archives all historical and current build releases of the GAMA Cybernetic Music Frequency Platform, along with release notes and downloadable binary packages.
 
 | Version | Release Date | Android Binary | Highlights |
 | :--- | :--- | :--- | :--- |
+| **[v1.8](./v1.8/)** | September 2026 | [`GAMA-v1.8.apk`](./v1.8/GAMA-v1.8.apk) | Pull-to-refresh on Discover & YouTube streams, Android 11+ `<queries>` package visibility for Gmail & Spotify apps, multi-tier fallback intents, and direct dialog Open App shortcuts |
 | **[v1.7](./v1.7/)** | September 2026 | [`GAMA-v1.7.apk`](./v1.7/GAMA-v1.7.apk) | Uninterrupted background audio when closing video (single persistent node), custom sleep timer dialog (1–180m with -5m/+5m/+15m steppers), top bar clean-up (only Info icon), seamless in-app Spotify & Google taste sync |
 | **[v1.6](./v1.6/)** | September 2026 | [`GAMA-v1.6.apk`](./v1.6/GAMA-v1.6.apk) | Rock-solid seekbar with zero remaining-time flicker, pure single-song filtering & recommendations (no 2-hour collections), unlimited genre radio stream |
 | **[v1.5](./v1.5/)** | September 2026 | [`GAMA-v1.5.apk`](./v1.5/GAMA-v1.5.apk) | Continuous curve-only seekbar with cyber thumb & gesture physics, borderless video action controls (no circles) |
@@ -41,7 +42,10 @@ versions/
 ├── v1.6/
 │   ├── GAMA-v1.6.apk       # Universal release APK (v1.6)
 │   └── README.md           # v1.6 release notes & changelog
-└── v1.7/
-    ├── GAMA-v1.7.apk       # Universal release APK (v1.7)
-    └── README.md           # v1.7 release notes & changelog
+├── v1.7/
+│   ├── GAMA-v1.7.apk       # Universal release APK (v1.7)
+│   └── README.md           # v1.7 release notes & changelog
+└── v1.8/
+    ├── GAMA-v1.8.apk       # Universal release APK (v1.8)
+    └── README.md           # v1.8 release notes & changelog
 ```

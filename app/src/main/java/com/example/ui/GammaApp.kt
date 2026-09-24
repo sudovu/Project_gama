@@ -272,7 +272,8 @@ fun GammaApp(
                         },
                         onPlaylistClick = { playlistId ->
                             navController.navigate("playlist/$playlistId")
-                        }
+                        },
+                        youtubeProvider = container.youtubeProvider
                     )
                 }
 

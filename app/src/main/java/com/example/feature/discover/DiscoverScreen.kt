@@ -24,10 +24,15 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import com.example.data.provider.YouTubeProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,6 +76,7 @@ import com.example.ui.theme.GammaTextMuted
 import com.example.ui.theme.GammaTextPrimary
 import com.example.ui.theme.GammaTextSecondary
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DiscoverScreen(
     viewModel: DiscoverViewModel,
@@ -80,11 +86,13 @@ fun DiscoverScreen(
     onArtistClick: (String) -> Unit,
     onAlbumClick: (String) -> Unit,
     onPlaylistClick: (String) -> Unit,
+    youtubeProvider: YouTubeProvider? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
 
     val tasteManager = remember { TastePreferenceManager.getInstance(context) }
     val isSpotifyLinked by tasteManager.isSpotifyLinked.collectAsStateWithLifecycle()
@@ -143,12 +151,28 @@ fun DiscoverScreen(
                     tasteManager.getYouTubeAdaptedRecommendations(feed.quickPicks + feed.trendingTracks)
                 }
 
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .testTag("discover_list"),
-                    contentPadding = PaddingValues(bottom = 120.dp)
+                val pullRefreshState = rememberPullToRefreshState()
+                PullToRefreshBox(
+                    isRefreshing = isRefreshing,
+                    onRefresh = { viewModel.refresh(tasteManager, youtubeProvider) },
+                    state = pullRefreshState,
+                    modifier = Modifier.fillMaxSize(),
+                    indicator = {
+                        PullToRefreshDefaults.Indicator(
+                            state = pullRefreshState,
+                            isRefreshing = isRefreshing,
+                            modifier = Modifier.align(Alignment.TopCenter),
+                            containerColor = GammaSurfaceElevated,
+                            color = GammaPrimary
+                        )
+                    }
                 ) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("discover_list"),
+                        contentPadding = PaddingValues(bottom = 120.dp)
+                    ) {
                     // Top Bar / Header with Upload Action and Network Status
                     item {
                         DiscoverHeader(
@@ -510,6 +534,7 @@ fun DiscoverScreen(
                 }
             }
         }
+    }
     }
 }
 

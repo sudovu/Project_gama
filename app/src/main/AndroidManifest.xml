@@ -20,6 +20,29 @@
         android:xlargeScreens="true"
         android:anyDensity="true" />
 
+    <queries>
+        <!-- Email & Gmail Clients -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+        <package android:name="com.google.android.gm" />
+
+        <!-- Spotify App -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="spotify" />
+        </intent>
+        <package android:name="com.spotify.music" />
+
+        <!-- Web Browsers & YouTube Music -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <package android:name="com.google.android.apps.youtube.music" />
+    </queries>
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"

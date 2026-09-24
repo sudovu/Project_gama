@@ -90,6 +90,61 @@ class DiscoverViewModel(
         }
     }
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    fun refresh(
+        tasteManager: com.example.core.taste.TastePreferenceManager? = null,
+        youtubeProvider: com.example.data.provider.YouTubeProvider? = null
+    ) {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            try {
+                val currentMood = _selectedMood.value
+                if (currentMood == "All") {
+                    repository.getDiscoverFeed().collect { result ->
+                        result.fold(
+                            onSuccess = { feed ->
+                                _rawState.value = DiscoverUiState.Success(
+                                    feed = feed,
+                                    recentTracks = emptyList(),
+                                    favoriteIds = emptySet(),
+                                    selectedMood = "All"
+                                )
+                            },
+                            onFailure = { error ->
+                                _rawState.value = DiscoverUiState.Error(
+                                    error.message ?: "Failed to refresh music feed"
+                                )
+                            }
+                        )
+                    }
+                    if (youtubeProvider != null && tasteManager != null) {
+                        try {
+                            tasteManager.syncLiveTastes(youtubeProvider)
+                        } catch (_: Exception) {}
+                    }
+                } else {
+                    // Force refresh genre stream from YouTube
+                    val genreYt = repository.getTracksForGenreFromYouTube(currentMood)
+                    if (genreYt.isNotEmpty()) {
+                        val current = _rawState.value
+                        if (current is DiscoverUiState.Success) {
+                            val updatedMoodPlaylists = current.feed.moodPlaylists.toMutableMap()
+                            updatedMoodPlaylists[currentMood] = genreYt.distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
+                            _rawState.value = current.copy(
+                                feed = current.feed.copy(moodPlaylists = updatedMoodPlaylists)
+                            )
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+            } finally {
+                _isRefreshing.value = false
+            }
+        }
+    }
+
     private val _loadedGenres = mutableSetOf<String>()
 
     fun selectMood(mood: String) {

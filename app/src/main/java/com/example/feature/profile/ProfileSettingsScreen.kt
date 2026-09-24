@@ -159,6 +159,122 @@ fun ProfileSettingsScreen(
     var editGoogleEmail by remember(googleEmail) { mutableStateOf(if (googleEmail.isNotEmpty()) googleEmail else "vhuwonmathers@gmail.com") }
     var selectedGoogleTastes by remember(youtubeTastes) { mutableStateOf(youtubeTastes.toSet()) }
 
+    val launchEmail: (String, String) -> Unit = { email, subject ->
+        clipboardManager.setText(AnnotatedString(email))
+        val mailUri = Uri.parse("mailto:$email?subject=${Uri.encode(subject)}")
+        var launched = false
+
+        // 1. Try explicit Gmail app
+        try {
+            val gmailIntent = Intent(Intent.ACTION_SENDTO, mailUri).apply {
+                setPackage("com.google.android.gm")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(gmailIntent)
+            Toast.makeText(context, "Opening Gmail ($email copied)", Toast.LENGTH_SHORT).show()
+            launched = true
+        } catch (_: Exception) {}
+
+        // 2. Try generic email chooser
+        if (!launched) {
+            try {
+                val mailIntent = Intent(Intent.ACTION_SENDTO, mailUri).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                val chooser = Intent.createChooser(mailIntent, "Send Email via...").apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(chooser)
+                Toast.makeText(context, "Opening Email Client ($email copied)", Toast.LENGTH_SHORT).show()
+                launched = true
+            } catch (_: Exception) {}
+        }
+
+        // 3. Fallback to Web Gmail
+        if (!launched) {
+            try {
+                val webGmailUrl = "https://mail.google.com/mail/?view=cm&fs=1&to=${Uri.encode(email)}&su=${Uri.encode(subject)}"
+                val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(webGmailUrl)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(webIntent)
+                Toast.makeText(context, "Opening Gmail in Browser ($email copied)", Toast.LENGTH_SHORT).show()
+                launched = true
+            } catch (_: Exception) {}
+        }
+
+        if (!launched) {
+            Toast.makeText(context, "Email copied to clipboard: $email", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    val launchSpotify: (String?) -> Unit = { username ->
+        var opened = false
+        // 1. Try Spotify app package directly
+        try {
+            val spotifyPackageIntent = context.packageManager.getLaunchIntentForPackage("com.spotify.music")
+            if (spotifyPackageIntent != null) {
+                spotifyPackageIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(spotifyPackageIntent)
+                Toast.makeText(context, "Opening Spotify app...", Toast.LENGTH_SHORT).show()
+                opened = true
+            }
+        } catch (_: Exception) {}
+
+        // 2. Try Spotify URI scheme
+        if (!opened) {
+            try {
+                val uriString = if (!username.isNullOrBlank()) "spotify:user:$username" else "spotify:home"
+                val spotifyUriIntent = Intent(Intent.ACTION_VIEW, Uri.parse(uriString)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(spotifyUriIntent)
+                Toast.makeText(context, "Opening Spotify...", Toast.LENGTH_SHORT).show()
+                opened = true
+            } catch (_: Exception) {}
+        }
+
+        // 3. Fallback to Spotify Web
+        if (!opened) {
+            try {
+                val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com")).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(webIntent)
+                Toast.makeText(context, "Opening Spotify Web...", Toast.LENGTH_SHORT).show()
+            } catch (_: Exception) {
+                Toast.makeText(context, "Could not open Spotify", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    val launchYouTubeMusic: () -> Unit = {
+        var opened = false
+        // 1. Try YouTube Music app package
+        try {
+            val ytMusicIntent = context.packageManager.getLaunchIntentForPackage("com.google.android.apps.youtube.music")
+            if (ytMusicIntent != null) {
+                ytMusicIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(ytMusicIntent)
+                Toast.makeText(context, "Opening YouTube Music app...", Toast.LENGTH_SHORT).show()
+                opened = true
+            }
+        } catch (_: Exception) {}
+
+        // 2. Fallback to YouTube Music Web
+        if (!opened) {
+            try {
+                val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com")).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(webIntent)
+                Toast.makeText(context, "Opening YouTube Music Web...", Toast.LENGTH_SHORT).show()
+            } catch (_: Exception) {
+                Toast.makeText(context, "Could not open YouTube Music", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     val launchUrl: (String) -> Unit = { url ->
         try {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
@@ -166,7 +282,7 @@ fun ProfileSettingsScreen(
             }
             context.startActivity(intent)
         } catch (_: Exception) {
-            Toast.makeText(context, "Could not open external app/browser", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Could not open external browser", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -840,14 +956,14 @@ fun ProfileSettingsScreen(
                                 ) {
                                     OutlinedButton(
                                         onClick = {
-                                            launchUrl("https://open.spotify.com")
+                                            launchSpotify(spotifyUser)
                                         },
                                         modifier = Modifier.weight(1f).height(38.dp),
                                         shape = RoundedCornerShape(10.dp)
                                     ) {
                                         Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF1DB954))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Open App", style = MaterialTheme.typography.labelSmall, color = Color(0xFF1DB954))
+                                        Text("Open Spotify", style = MaterialTheme.typography.labelSmall, color = Color(0xFF1DB954))
                                     }
                                     OutlinedButton(
                                         onClick = {
@@ -890,19 +1006,36 @@ fun ProfileSettingsScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = GammaTextSecondary
                                 )
-                                Button(
-                                    onClick = {
-                                        editSpotifyUser = if (spotifyUser.isNotEmpty()) spotifyUser else "vhuwon.mathers"
-                                        selectedSpotifyTastes = spotifyTastes.toSet()
-                                        showSpotifyConnectDialog = true
-                                    },
-                                    modifier = Modifier.fillMaxWidth().height(40.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954)),
-                                    shape = RoundedCornerShape(10.dp)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Icon(imageVector = Icons.Default.Link, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.Black)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Link Spotify Account", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Color.Black)
+                                    Button(
+                                        onClick = {
+                                            editSpotifyUser = if (spotifyUser.isNotEmpty()) spotifyUser else "vhuwon.mathers"
+                                            selectedSpotifyTastes = spotifyTastes.toSet()
+                                            showSpotifyConnectDialog = true
+                                        },
+                                        modifier = Modifier.weight(1f).height(40.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954)),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(imageVector = Icons.Default.Link, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.Black)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Link Spotify Account", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Color.Black)
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            launchSpotify(null)
+                                        },
+                                        modifier = Modifier.height(40.dp),
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1DB954))
+                                    ) {
+                                        Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF1DB954))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Open", style = MaterialTheme.typography.labelSmall, color = Color(0xFF1DB954))
+                                    }
                                 }
                             }
                         }
@@ -1027,7 +1160,7 @@ fun ProfileSettingsScreen(
                                 ) {
                                     OutlinedButton(
                                         onClick = {
-                                            launchUrl("https://music.youtube.com")
+                                            launchYouTubeMusic()
                                         },
                                         modifier = Modifier.weight(1f).height(38.dp),
                                         shape = RoundedCornerShape(10.dp)
@@ -1077,19 +1210,36 @@ fun ProfileSettingsScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = GammaTextSecondary
                                 )
-                                Button(
-                                    onClick = {
-                                        editGoogleEmail = if (googleEmail.isNotEmpty()) googleEmail else "vhuwonmathers@gmail.com"
-                                        selectedGoogleTastes = youtubeTastes.toSet()
-                                        showGoogleConnectDialog = true
-                                    },
-                                    modifier = Modifier.fillMaxWidth().height(40.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF0000)),
-                                    shape = RoundedCornerShape(10.dp)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Icon(imageVector = Icons.Default.Link, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Link Google Account", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                                    Button(
+                                        onClick = {
+                                            editGoogleEmail = if (googleEmail.isNotEmpty()) googleEmail else "vhuwonmathers@gmail.com"
+                                            selectedGoogleTastes = youtubeTastes.toSet()
+                                            showGoogleConnectDialog = true
+                                        },
+                                        modifier = Modifier.weight(1f).height(40.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF0000)),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(imageVector = Icons.Default.Link, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Link Google Account", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            launchYouTubeMusic()
+                                        },
+                                        modifier = Modifier.height(40.dp),
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF0000))
+                                    ) {
+                                        Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFFFF4D4D))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Open", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF4D4D))
+                                    }
                                 }
                             }
                         }
@@ -1166,7 +1316,8 @@ fun ProfileSettingsScreen(
                     developerEmail = developerEmail,
                     developerPhone = developerPhone,
                     context = context,
-                    clipboardManager = clipboardManager
+                    clipboardManager = clipboardManager,
+                    onLaunchEmail = launchEmail
                 )
             }
         }
@@ -1262,8 +1413,17 @@ fun ProfileSettingsScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showSpotifyConnectDialog = false }) {
-                    Text("Cancel", color = GammaTextSecondary)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { launchSpotify(editSpotifyUser) },
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1DB954)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF1DB954))
+                    ) {
+                        Text("Open App", fontWeight = FontWeight.SemiBold)
+                    }
+                    TextButton(onClick = { showSpotifyConnectDialog = false }) {
+                        Text("Cancel", color = GammaTextSecondary)
+                    }
                 }
             },
             containerColor = GammaSurfaceElevated
@@ -1360,8 +1520,17 @@ fun ProfileSettingsScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showGoogleConnectDialog = false }) {
-                    Text("Cancel", color = GammaTextSecondary)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { launchYouTubeMusic() },
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF0000)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF0000))
+                    ) {
+                        Text("Open App", fontWeight = FontWeight.SemiBold)
+                    }
+                    TextButton(onClick = { showGoogleConnectDialog = false }) {
+                        Text("Cancel", color = GammaTextSecondary)
+                    }
                 }
             },
             containerColor = GammaSurfaceElevated
@@ -1376,7 +1545,8 @@ private fun AboutDeveloperSection(
     developerEmail: String,
     developerPhone: String,
     context: Context,
-    clipboardManager: androidx.compose.ui.platform.ClipboardManager
+    clipboardManager: androidx.compose.ui.platform.ClipboardManager,
+    onLaunchEmail: (String, String) -> Unit
 ) {
     Text(
         text = "ABOUT THE CREATOR",
@@ -1536,15 +1706,7 @@ private fun AboutDeveloperSection(
                     actionLabel = "Send Mail",
                     actionIcon = Icons.Default.OpenInNew,
                     onClick = {
-                        copyAndLaunch(
-                            context = context,
-                            clipboardManager = clipboardManager,
-                            label = "Email",
-                            text = developerEmail,
-                            intent = Intent(Intent.ACTION_SENDTO).apply {
-                                data = Uri.parse("mailto:$developerEmail")
-                            }
-                        )
+                        onLaunchEmail(developerEmail, "Hello Bhuwan (GAMMA App)")
                     },
                     testTag = "about_email_card"
                 )
@@ -1634,15 +1796,7 @@ private fun AboutDeveloperSection(
 
                 OutlinedButton(
                     onClick = {
-                        copyAndLaunch(
-                            context = context,
-                            clipboardManager = clipboardManager,
-                            label = "Email",
-                            text = developerEmail,
-                            intent = Intent(Intent.ACTION_SENDTO).apply {
-                                data = Uri.parse("mailto:$developerEmail?subject=Hello%20Bhuwan%20(GAMMA%20App)")
-                            }
-                        )
+                        onLaunchEmail(developerEmail, "Hello Bhuwan (GAMMA App)")
                     },
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
