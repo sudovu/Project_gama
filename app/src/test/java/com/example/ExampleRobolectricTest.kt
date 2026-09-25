@@ -187,7 +187,7 @@ class ExampleRobolectricTest {
         val failingProvider = object : MusicProvider {
             override val id: String = "offline_failing"
             override val displayName: String = "Offline Failing Provider"
-            override suspend fun getDiscoverFeed(): Result<DiscoverFeed> {
+            override suspend fun getDiscoverFeed(forceRefresh: Boolean): Result<DiscoverFeed> {
                 return Result.failure(IOException("No internet connection"))
             }
             override suspend fun search(query: String): Result<SearchResults> {

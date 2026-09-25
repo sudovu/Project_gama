@@ -14,6 +14,7 @@ import com.example.data.local.SearchHistoryEntity
 import com.example.data.local.UploadedTrackDao
 import com.example.data.local.UploadedTrackEntity
 import com.example.data.provider.CuratedFrequencies
+import com.example.data.provider.DailyTop100Registry
 import com.example.data.provider.MusicProvider
 import com.example.data.provider.YouTubeProvider
 import com.example.domain.model.Album
@@ -53,7 +54,11 @@ class MusicRepository(
                 val cachedFeed = buildFeedFromCached(cachedTracks)
                 emit(Result.success(cachedFeed))
             } else {
-                emit(Result.success(buildCuratedInitialFeed()))
+                val initialFeed = buildCuratedInitialFeed()
+                try {
+                    cacheFeedTracks(initialFeed)
+                } catch (_: Exception) {}
+                emit(Result.success(initialFeed))
             }
 
             // Fresh online fetch from provider in background
@@ -86,7 +91,7 @@ class MusicRepository(
 
     suspend fun refreshDiscoverFeed(): Result<DiscoverFeed> {
         val providerResult = try {
-            provider.getDiscoverFeed()
+            provider.getDiscoverFeed(forceRefresh = true)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -124,19 +129,20 @@ class MusicRepository(
     }
 
     private fun buildCuratedInitialFeed(): DiscoverFeed {
-        val all = CuratedFrequencies.allTracks
+        val dailyChart: List<Track> = DailyTop100Registry.getDailyTop100()
+        val all: List<Track> = CuratedFrequencies.allTracks
         val moodMap = mapOf(
-            "Hip-Hop" to all.filter { it.genre.contains("Rap", ignoreCase = true) || it.genre.contains("Hip-Hop", ignoreCase = true) },
-            "Rock & Metal" to all.filter { it.genre.contains("Rock", ignoreCase = true) || it.genre.contains("Metal", ignoreCase = true) },
-            "Pop Hits" to all.filter { it.genre.contains("Pop", ignoreCase = true) },
-            "Classics" to all.filter { it.genre.contains("Classic", ignoreCase = true) }
+            "Hip-Hop" to (dailyChart.filter { it.genre == "Hip-Hop" } + all.filter { it.genre.contains("Rap", ignoreCase = true) || it.genre.contains("Hip-Hop", ignoreCase = true) }).distinctBy { it.id },
+            "Rock & Metal" to (dailyChart.filter { it.genre == "Rock & Metal" } + all.filter { it.genre.contains("Rock", ignoreCase = true) || it.genre.contains("Metal", ignoreCase = true) }).distinctBy { it.id },
+            "Pop Hits" to (dailyChart.filter { it.genre == "Pop Hits" } + all.filter { it.genre.contains("Pop", ignoreCase = true) }).distinctBy { it.id },
+            "Classics" to (dailyChart.filter { it.genre == "Classics" } + all.filter { it.genre.contains("Classic", ignoreCase = true) }).distinctBy { it.id }
         )
         return DiscoverFeed(
-            quickPicks = all.take(8),
-            trendingTracks = all.take(15),
-            featuredPlaylists = CuratedFrequencies.playlists,
-            featuredAlbums = CuratedFrequencies.albums,
-            featuredArtists = CuratedFrequencies.artists,
+            quickPicks = dailyChart.take(8),
+            trendingTracks = dailyChart,
+            featuredPlaylists = CuratedFrequencies.getRotatingPlaylists(),
+            featuredAlbums = CuratedFrequencies.getRotatingAlbums(),
+            featuredArtists = CuratedFrequencies.getRotatingArtists(),
             moodPlaylists = moodMap
         )
     }

@@ -25,7 +25,7 @@ data class PlaybackCapability(
 interface MusicProvider {
     val id: String
     val displayName: String
-    suspend fun getDiscoverFeed(): Result<DiscoverFeed>
+    suspend fun getDiscoverFeed(forceRefresh: Boolean = false): Result<DiscoverFeed>
     suspend fun search(query: String): Result<SearchResults>
     suspend fun getTrack(trackId: String): Result<Track>
     suspend fun getArtist(artistId: String): Result<Artist>

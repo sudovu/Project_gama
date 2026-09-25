@@ -694,9 +694,9 @@ object CuratedFrequencies {
     val playlists: List<Playlist> = listOf(
         Playlist(
             id = "pl_global_hits",
-            title = "Global Hot Hits 2025",
+            title = "Global Hot Hits 2026",
             description = "The biggest chart-topping hits with millions of fans worldwide.",
-            artworkUrl = "https://img.youtube.com/vi/_Yhyp-_hX2s/hqdefault.jpg",
+            artworkUrl = "https://img.youtube.com/vi/b_pD_J86NfQ/hqdefault.jpg",
             trackCount = allTracks.size,
             isUserCreated = false,
             tracks = allTracks
@@ -713,20 +713,125 @@ object CuratedFrequencies {
         Playlist(
             id = "pl_rap_legends",
             title = "Hip-Hop & Rap Titans",
-            description = "Legendary bars, beats, and lyrical mastery from Eminem, 50 Cent, and Dr. Dre.",
+            description = "Legendary bars, beats, and lyrical mastery from Eminem, Kendrick Lamar, and Travis Scott.",
             artworkUrl = "https://img.youtube.com/vi/S9bCLPwzSC0/hqdefault.jpg",
-            trackCount = 4,
+            trackCount = 8,
             isUserCreated = false,
             tracks = allTracks.filter { it.genre.contains("Rap") || it.genre.contains("Hip-Hop") }
         ),
         Playlist(
             id = "pl_pop_electric",
             title = "Iconic Pop & Electropop",
-            description = "Irresistible melodies and production from The Weeknd, Billie Eilish, Bruno Mars, and Taylor Swift.",
+            description = "Irresistible melodies and production from Sabrina Carpenter, Lady Gaga, The Weeknd, and Billie Eilish.",
+            artworkUrl = "https://img.youtube.com/vi/eVli-tstM5E/hqdefault.jpg",
+            trackCount = 10,
+            isUserCreated = false,
+            tracks = allTracks.filter { it.genre.contains("Pop") || it.genre.contains("Soul") || it.genre.contains("Funk") }
+        ),
+        Playlist(
+            id = "pl_cyberpunk",
+            title = "Cyberpunk & Synthwave",
+            description = "Neon nocturnal synths, analog basslines, and retro-futuristic audio architecture.",
             artworkUrl = "https://img.youtube.com/vi/4NRXx6U8ABQ/hqdefault.jpg",
             trackCount = 6,
             isUserCreated = false,
-            tracks = allTracks.filter { it.genre.contains("Pop") || it.genre.contains("Soul") || it.genre.contains("Funk") }
+            tracks = allTracks.filter { it.genre.contains("Synth") || it.genre.contains("Cyberpunk") || it.genre.contains("Electronic") }
+        ),
+        Playlist(
+            id = "pl_nu_metal",
+            title = "Nu Metal & Heavy Alt-Rock",
+            description = "Drop tunings, crushing breakdowns, and aggressive energy from Linkin Park and Slipknot.",
+            artworkUrl = "https://img.youtube.com/vi/eVTXPUF4Oz4/hqdefault.jpg",
+            trackCount = 7,
+            isUserCreated = false,
+            tracks = allTracks.filter { it.genre.contains("Nu Metal") || it.genre.contains("Alternative Rock") || it.genre.contains("Heavy Metal") }
+        ),
+        Playlist(
+            id = "pl_edm",
+            title = "Festival EDM & Electro",
+            description = "Massive drops, euphoric builds, and high-energy festival anthems.",
+            artworkUrl = "https://img.youtube.com/vi/dX3k_QDnzHE/hqdefault.jpg",
+            trackCount = 6,
+            isUserCreated = false,
+            tracks = allTracks.filter { it.genre.contains("EDM") || it.genre.contains("Electronic") || it.genre.contains("Synth-Pop") }
+        ),
+        Playlist(
+            id = "pl_432hz",
+            title = "432Hz Natural Healing Tone",
+            description = "Harmonically tuned soundscapes resonated at 432Hz for deep cellular calm and equilibrium.",
+            artworkUrl = "https://img.youtube.com/vi/DyDfgMOUjCI/hqdefault.jpg",
+            trackCount = 12,
+            isUserCreated = false,
+            tracks = allTracks.filter { it.frequencyHz == 432 }
+        ),
+        Playlist(
+            id = "pl_lofi",
+            title = "Lo-Fi Beats to Relax & Study",
+            description = "Cozy vinyl crackle, tape-saturated keys, and chill instrumental rhythms.",
+            artworkUrl = "https://img.youtube.com/vi/p8782Z_V7lE/hqdefault.jpg",
+            trackCount = 8,
+            isUserCreated = false,
+            tracks = allTracks
+        ),
+        Playlist(
+            id = "pl_acoustic",
+            title = "Acoustic Sunsets & Indie Folk",
+            description = "Warm acoustic guitars, intimate storytelling, and honest campfire vocals.",
+            artworkUrl = "https://img.youtube.com/vi/t7bQwwqW-Hc/hqdefault.jpg",
+            trackCount = 6,
+            isUserCreated = false,
+            tracks = allTracks.filter { it.genre.contains("Acoustic") || it.genre.contains("Folk") }
+        ),
+        Playlist(
+            id = "pl_rnb",
+            title = "Midnight R&B & Neo-Soul",
+            description = "Silky basslines, velvet vocals, and late night atmospheric grooves.",
+            artworkUrl = "https://img.youtube.com/vi/95Wc7eI3s6c/hqdefault.jpg",
+            trackCount = 7,
+            isUserCreated = false,
+            tracks = allTracks.filter { it.genre.contains("R&B") || it.genre.contains("Soul") }
+        ),
+        Playlist(
+            id = "pl_phonk",
+            title = "Night Drift Phonk & Bass",
+            description = "Distorted 808s, cowbell melodies, and street racing drive energy.",
+            artworkUrl = "https://img.youtube.com/vi/22tVWwmTie8/hqdefault.jpg",
+            trackCount = 5,
+            isUserCreated = false,
+            tracks = allTracks.filter { it.genre.contains("Hip-Hop") || it.genre.contains("Rap") }
+        ),
+        Playlist(
+            id = "pl_classics",
+            title = "Timeless Golden Classics",
+            description = "The immortal legendary recordings that shaped modern music history.",
+            artworkUrl = "https://img.youtube.com/vi/fJ9rUzIMcZQ/hqdefault.jpg",
+            trackCount = 8,
+            isUserCreated = false,
+            tracks = allTracks.filter { it.genre.contains("Classic") || it.genre.contains("Rock") }
+        ),
+        Playlist(
+            id = "pl_daily_top",
+            title = "Daily Top 100 Chart Spotlight",
+            description = "Everyday verified chart leaders, hot climbers, and peak anthems.",
+            artworkUrl = "https://img.youtube.com/vi/V9PVRfjEBTI/hqdefault.jpg",
+            trackCount = 100,
+            isUserCreated = false,
+            tracks = allTracks
         )
     )
+
+    fun getRotatingPlaylists(seed: Long = System.currentTimeMillis()): List<Playlist> {
+        val rng = java.util.Random(seed)
+        return playlists.shuffled(rng)
+    }
+
+    fun getRotatingAlbums(seed: Long = System.currentTimeMillis()): List<Album> {
+        val rng = java.util.Random(seed)
+        return albums.shuffled(rng)
+    }
+
+    fun getRotatingArtists(seed: Long = System.currentTimeMillis()): List<Artist> {
+        val rng = java.util.Random(seed)
+        return artists.shuffled(rng)
+    }
 }

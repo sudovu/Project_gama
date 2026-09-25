@@ -48,13 +48,17 @@ class YouTubeProvider(
 
     companion object {
         private val TRENDING_SEEDS = listOf(
-            "Trending Music Hits Official",
-            "Billboard Hot 100 songs official music video",
-            "Global top hits official music video",
-            "Viral music tracks official video",
-            "Latest trending music video official",
-            "Top charting songs official video",
-            "Popular music singles official music video"
+            "Kendrick Lamar Not Like Us official music video",
+            "Sabrina Carpenter Espresso official video",
+            "Lady Gaga Bruno Mars Die With A Smile official video",
+            "Billie Eilish Birds of a Feather official music video",
+            "Shaboozey A Bar Song Tipsy official video",
+            "Teddy Swims Lose Control official music video",
+            "Benson Boone Beautiful Things official video",
+            "Chappell Roan Good Luck Babe official video",
+            "Linkin Park The Emptiness Machine official video",
+            "Eminem Houdini official video",
+            "The Weeknd Blinding Lights official music video"
         )
 
         private val GENRE_QUERY_POOLS = mapOf(
@@ -85,29 +89,125 @@ class YouTubeProvider(
                 "golden retro hits official music video",
                 "legendary classic songs official",
                 "vintage greatest hits official video"
+            ),
+            "Cyberpunk & Synthwave" to listOf(
+                "cyberpunk synthwave dark synth music single",
+                "retro synthwave official music video",
+                "cyberpunk industrial bass electronic single",
+                "outrun synthwave 80s electronic single"
+            ),
+            "Nu Metal & Alt-Rock" to listOf(
+                "nu metal alternative rock official music video",
+                "slipknot linkin park style nu metal single",
+                "heavy alt rock anthems official video",
+                "modern post grunge alt rock single"
+            ),
+            "Electronic & EDM" to listOf(
+                "top electronic dance music edm official single",
+                "festival edm progressive house official video",
+                "best electro bass hits official single",
+                "electronic dance anthems official video"
+            ),
+            "432Hz & Ambient" to listOf(
+                "432Hz healing frequency soundscape music single",
+                "deep ambient 432Hz meditation tone single",
+                "harmonic 432Hz peaceful ambient single",
+                "432Hz miracle tone resonance single"
+            ),
+            "Lo-Fi & Chill" to listOf(
+                "lofi chillhop beats to relax single",
+                "aesthetic lofi hip hop official single",
+                "mellow lofi chill beats single",
+                "calm lofi study beat single"
+            ),
+            "Acoustic & Folk" to listOf(
+                "acoustic folk guitar music official single",
+                "indie acoustic singer songwriter single",
+                "warm acoustic folk melodies official video",
+                "fingerstyle acoustic guitar official single"
+            ),
+            "R&B & Soul" to listOf(
+                "smooth r&b soul music official video",
+                "modern neo soul r&b hits single",
+                "classic soul r&b grooves official single",
+                "emotional r&b ballad official video"
+            ),
+            "Phonk & Drift" to listOf(
+                "drift phonk aggressive phonk official single",
+                "memphis phonk wave bass boosted single",
+                "cowbell phonk drift music official video",
+                "brazilian phonk phonk wave single"
+            ),
+            "Orchestral & Cinematic" to listOf(
+                "epic cinematic orchestral music single",
+                "trailer orchestral hybrid soundtrack single",
+                "powerful symphonic orchestral themes single",
+                "dramatic film score orchestral official single"
             )
         )
+
+        @Volatile private var cachedDailyChartDate: String = ""
+        @Volatile private var cachedDailyTop100: List<Track> = emptyList()
+
+        fun getDailyChartDateFormatted(): String {
+            val date = java.util.Date()
+            val format = java.text.SimpleDateFormat("MMMM d, yyyy", java.util.Locale.US)
+            return format.format(date)
+        }
     }
 
-    override suspend fun getDiscoverFeed(): Result<DiscoverFeed> = withContext(Dispatchers.IO) {
+    suspend fun fetchDailyTop100Chart(forceRefresh: Boolean = false): List<Track> = withContext(Dispatchers.IO) {
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+        if (!forceRefresh && cachedDailyChartDate == today && cachedDailyTop100.isNotEmpty()) {
+            return@withContext cachedDailyTop100
+        }
+
+        val seed = if (forceRefresh) System.currentTimeMillis() else today.hashCode().toLong()
+        val baseTop100 = DailyTop100Registry.getDailyTop100(seed)
+
+        val top100 = baseTop100.mapIndexed { index, track ->
+            val rank = index + 1
+            val trend = when {
+                rank == 1 -> "HOT #1 OF THE DAY"
+                rank == 2 -> if (forceRefresh) "▲ +1 CLIMBER" else "TOP 2 RUNNER"
+                rank == 3 -> if (forceRefresh) "★ NEW PEAK" else "TOP 3 PEAK"
+                rank in 4..10 -> if (forceRefresh && rank % 2 == 0) "▲ +2 TODAY" else "TOP 10 ANTHEM"
+                rank in 11..25 -> if (forceRefresh && rank % 3 == 0) "🔥 SURGING" else "TOP 25 CHART"
+                rank in 26..50 -> "TOP 50 HIT"
+                else -> "DAILY 100"
+            }
+            track.copy(dailyRank = rank, chartTrend = trend)
+        }
+
+        cachedDailyChartDate = today
+        cachedDailyTop100 = top100
+        top100
+    }
+
+    override suspend fun getDiscoverFeed(forceRefresh: Boolean): Result<DiscoverFeed> = withContext(Dispatchers.IO) {
         try {
-            // Pick dynamic rotating seed for trending so pull-to-refresh rotates fresh tracks like YouTube
-            val trendingSeed = TRENDING_SEEDS.random()
+            val seed = if (forceRefresh) System.currentTimeMillis() else java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()).hashCode().toLong()
+            val rng = kotlin.random.Random(seed)
+
+            // Pick dynamic rotating seed for trending so pull-to-refresh rotates fresh tracks
+            val trendingSeed = TRENDING_SEEDS.random(rng)
 
             // Pick random seeds from genre pools for variety
-            val hipHopSeed = GENRE_QUERY_POOLS["Hip-Hop"]?.random() ?: "top hip hop rap hits single official music video"
-            val rockSeed = GENRE_QUERY_POOLS["Rock & Metal"]?.random() ?: "best rock metal songs single official music video"
-            val popSeed = GENRE_QUERY_POOLS["Pop Hits"]?.random() ?: "top pop hits single official music video"
-            val classicsSeed = GENRE_QUERY_POOLS["Classics"]?.random() ?: "classic rock single official music video"
+            val hipHopSeed = GENRE_QUERY_POOLS["Hip-Hop"]?.random(rng) ?: "top hip hop rap hits single official music video"
+            val rockSeed = GENRE_QUERY_POOLS["Rock & Metal"]?.random(rng) ?: "best rock metal songs single official music video"
+            val popSeed = GENRE_QUERY_POOLS["Pop Hits"]?.random(rng) ?: "top pop hits single official music video"
+            val classicsSeed = GENRE_QUERY_POOLS["Classics"]?.random(rng) ?: "classic rock single official music video"
 
-            // Concurrently fetch all 5 streams in parallel for sub-second feed generation
+            // Concurrently fetch streams in parallel for sub-second feed generation
             val onlineTrending: List<Track>
             val hipHopYt: List<Track>
             val rockYt: List<Track>
             val popYt: List<Track>
             val classicsYt: List<Track>
+            val dailyTop100: List<Track>
 
             coroutineScope {
+                val dailyChartDef = async { fetchDailyTop100Chart(forceRefresh = forceRefresh) }
                 val trendingDef = async {
                     try {
                         fetchInnerTubeVideos(trendingSeed, "ALL")
@@ -158,6 +258,7 @@ class YouTubeProvider(
                     }
                 }
 
+                dailyTop100 = dailyChartDef.await()
                 onlineTrending = trendingDef.await()
                 hipHopYt = hipHopDef.await()
                 rockYt = rockDef.await()
@@ -166,19 +267,21 @@ class YouTubeProvider(
             }
 
             val baseTracks = CuratedFrequencies.allTracks
-            val allCombined = (onlineTrending + hipHopYt + rockYt + popYt + classicsYt + baseTracks).distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
+            val allCombined: List<Track> = (dailyTop100 + onlineTrending + hipHopYt + rockYt + popYt + classicsYt + baseTracks).distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
 
-            val quickPicks = (onlineTrending.shuffled().take(5) + baseTracks.shuffled()).distinctBy { it.id }.take(8)
-            val trending = if (onlineTrending.isNotEmpty()) {
-                onlineTrending.take(15)
+            val quickPicks = (dailyTop100.shuffled(rng).take(5) + onlineTrending.shuffled(rng).take(3) + baseTracks.shuffled(rng).take(2)).distinctBy { it.id }.take(8)
+            val trending = if (dailyTop100.isNotEmpty()) {
+                dailyTop100
+            } else if (onlineTrending.isNotEmpty()) {
+                onlineTrending.take(20).mapIndexed { i, t -> t.copy(dailyRank = i + 1, chartTrend = "HOT #${i + 1}") }
             } else {
-                allCombined.sortedByDescending { it.playCount.takeIf { c -> c > 0 } ?: 500000000L }
+                allCombined.sortedByDescending { it.playCount.takeIf { c -> c > 0 } ?: 500000000L }.take(20).mapIndexed { i, t -> t.copy(dailyRank = i + 1, chartTrend = "TOP #${i + 1}") }
             }
-            val playlists = CuratedFrequencies.playlists
-            val albums = CuratedFrequencies.albums
-            val artists = CuratedFrequencies.artists
+            val playlists = CuratedFrequencies.getRotatingPlaylists(seed)
+            val albums = CuratedFrequencies.getRotatingAlbums(seed)
+            val artists = CuratedFrequencies.getRotatingArtists(seed)
 
-            val moodMap = mapOf(
+            val moodMap = mutableMapOf<String, List<Track>>(
                 "Hip-Hop" to (hipHopYt + allCombined.filter { 
                     it.genre.contains("Rap", ignoreCase = true) || 
                     it.genre.contains("Hip-Hop", ignoreCase = true) ||
@@ -199,7 +302,48 @@ class YouTubeProvider(
                 "Classics" to (classicsYt + allCombined.filter { 
                     it.genre.contains("Classic", ignoreCase = true) || 
                     it.artist in listOf("Michael Jackson", "Queen", "Nirvana", "AC/DC", "Coldplay")
-                }).distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
+                }).distinctBy { it.youtubeVideoId.ifEmpty { it.id } },
+                "Cyberpunk & Synthwave" to allCombined.filter {
+                    it.genre.contains("Cyberpunk", ignoreCase = true) ||
+                    it.genre.contains("Synthwave", ignoreCase = true) ||
+                    it.genre.contains("Electronic", ignoreCase = true) ||
+                    it.title.contains("Synth", ignoreCase = true)
+                }.distinctBy { it.youtubeVideoId.ifEmpty { it.id } },
+                "Nu Metal & Alt-Rock" to allCombined.filter {
+                    it.genre.contains("Nu Metal", ignoreCase = true) ||
+                    it.genre.contains("Alternative", ignoreCase = true) ||
+                    it.artist in listOf("Slipknot", "Linkin Park", "System Of A Down")
+                }.distinctBy { it.youtubeVideoId.ifEmpty { it.id } },
+                "Electronic & EDM" to allCombined.filter {
+                    it.genre.contains("EDM", ignoreCase = true) ||
+                    it.genre.contains("Electronic", ignoreCase = true) ||
+                    it.genre.contains("Dance", ignoreCase = true)
+                }.distinctBy { it.youtubeVideoId.ifEmpty { it.id } },
+                "432Hz & Ambient" to allCombined.filter {
+                    it.frequencyHz == 432 ||
+                    it.genre.contains("432", ignoreCase = true) ||
+                    it.genre.contains("Ambient", ignoreCase = true)
+                }.distinctBy { it.youtubeVideoId.ifEmpty { it.id } },
+                "Lo-Fi & Chill" to allCombined.filter {
+                    it.genre.contains("Lo-Fi", ignoreCase = true) ||
+                    it.genre.contains("Chill", ignoreCase = true)
+                }.distinctBy { it.youtubeVideoId.ifEmpty { it.id } },
+                "Acoustic & Folk" to allCombined.filter {
+                    it.genre.contains("Acoustic", ignoreCase = true) ||
+                    it.genre.contains("Folk", ignoreCase = true)
+                }.distinctBy { it.youtubeVideoId.ifEmpty { it.id } },
+                "R&B & Soul" to allCombined.filter {
+                    it.genre.contains("R&B", ignoreCase = true) ||
+                    it.genre.contains("Soul", ignoreCase = true)
+                }.distinctBy { it.youtubeVideoId.ifEmpty { it.id } },
+                "Phonk & Drift" to allCombined.filter {
+                    it.genre.contains("Phonk", ignoreCase = true) ||
+                    it.title.contains("Phonk", ignoreCase = true)
+                }.distinctBy { it.youtubeVideoId.ifEmpty { it.id } },
+                "Orchestral & Cinematic" to allCombined.filter {
+                    it.genre.contains("Orchestral", ignoreCase = true) ||
+                    it.genre.contains("Cinematic", ignoreCase = true)
+                }.distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
             )
 
             Result.success(
@@ -507,13 +651,17 @@ class YouTubeProvider(
             val regexTracks = mutableListOf<Track>()
             while (matcher.find() && regexTracks.size < 20) {
                 val vid = matcher.group(1) ?: continue
-                val title = matcher.group(2) ?: "Track"
-                if (!regexTracks.any { it.youtubeVideoId == vid } && !SmartQueueEngine.isCollectionOrMix(title, 240)) {
+                val rawTitle = matcher.group(2) ?: "Track"
+                val (songTitle, songArtist) = SmartQueueEngine.cleanSongTitleAndArtist(rawTitle, "Artist")
+                if (!regexTracks.any { it.youtubeVideoId == vid } &&
+                    songTitle.isNotBlank() &&
+                    !SmartQueueEngine.isCollectionOrMix(songTitle, 240) &&
+                    !SmartQueueEngine.isCollectionOrMix(rawTitle, 240)) {
                     regexTracks.add(
                         Track(
                             id = "yt_$vid",
-                            title = cleanTitle(title),
-                            artist = "Artist",
+                            title = cleanTitle(songTitle),
+                            artist = cleanTitle(songArtist),
                             artworkUrl = "https://img.youtube.com/vi/$vid/hqdefault.jpg",
                             youtubeVideoId = vid,
                             streamUrl = "",
@@ -567,12 +715,15 @@ class YouTubeProvider(
                     "https://img.youtube.com/vi/$videoId/hqdefault.jpg"
                 }
 
-                if (title.isNotBlank() && !SmartQueueEngine.isCollectionOrMix(title, durationSec)) {
+                val (songTitle, songArtist) = SmartQueueEngine.cleanSongTitleAndArtist(title, artist)
+                if (songTitle.isNotBlank() &&
+                    !SmartQueueEngine.isCollectionOrMix(songTitle, durationSec) &&
+                    !SmartQueueEngine.isCollectionOrMix(title, durationSec)) {
                     out.add(
                         Track(
                             id = "yt_$videoId",
-                            title = cleanTitle(title),
-                            artist = cleanTitle(artist),
+                            title = cleanTitle(songTitle),
+                            artist = cleanTitle(songArtist),
                             artworkUrl = thumbUrl,
                             youtubeVideoId = videoId,
                             streamUrl = "",
@@ -625,12 +776,15 @@ class YouTubeProvider(
                     }
                 }
 
-                if (title.isNotBlank() && !SmartQueueEngine.isCollectionOrMix(title, 210)) {
+                val (songTitle, songArtist) = SmartQueueEngine.cleanSongTitleAndArtist(title, artist)
+                if (songTitle.isNotBlank() &&
+                    !SmartQueueEngine.isCollectionOrMix(songTitle, 210) &&
+                    !SmartQueueEngine.isCollectionOrMix(title, 210)) {
                     out.add(
                         Track(
                             id = "yt_$videoId",
-                            title = cleanTitle(title),
-                            artist = cleanTitle(artist),
+                            title = cleanTitle(songTitle),
+                            artist = cleanTitle(songArtist),
                             artworkUrl = "https://img.youtube.com/vi/$videoId/hqdefault.jpg",
                             youtubeVideoId = videoId,
                             streamUrl = "",
@@ -696,10 +850,11 @@ class YouTubeProvider(
                 val title = json.optString("title", "YouTube Track: $videoId")
                 val author = json.optString("author_name", "YouTube Creator")
                 val thumb = json.optString("thumbnail_url", "https://img.youtube.com/vi/$videoId/hqdefault.jpg")
+                val (songTitle, songArtist) = SmartQueueEngine.cleanSongTitleAndArtist(title, author)
                 Track(
                     id = "yt_$videoId",
-                    title = cleanTitle(title),
-                    artist = cleanTitle(author),
+                    title = cleanTitle(songTitle),
+                    artist = cleanTitle(songArtist),
                     artworkUrl = thumb,
                     youtubeVideoId = videoId,
                     genre = "Music",

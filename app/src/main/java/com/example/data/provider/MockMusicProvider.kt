@@ -22,21 +22,23 @@ class MockMusicProvider : MusicProvider {
         )
     }
 
-    override suspend fun getDiscoverFeed(): Result<DiscoverFeed> {
+    override suspend fun getDiscoverFeed(forceRefresh: Boolean): Result<DiscoverFeed> {
+        val dailyChart = DailyTop100Registry.getDailyTop100()
         return Result.success(
             DiscoverFeed(
-                quickPicks = CuratedFrequencies.allTracks.take(4),
-                trendingTracks = CuratedFrequencies.allTracks,
-                featuredPlaylists = CuratedFrequencies.playlists,
-                featuredAlbums = CuratedFrequencies.albums,
-                featuredArtists = CuratedFrequencies.artists,
+                quickPicks = dailyChart.take(4),
+                trendingTracks = dailyChart,
+                featuredPlaylists = CuratedFrequencies.getRotatingPlaylists(),
+                featuredAlbums = CuratedFrequencies.getRotatingAlbums(),
+                featuredArtists = CuratedFrequencies.getRotatingArtists(),
                 moodPlaylists = emptyMap()
             )
         )
     }
 
     override suspend fun search(query: String): Result<SearchResults> {
-        val tracks = CuratedFrequencies.allTracks.filter {
+        val allAvailable = (DailyTop100Registry.getDailyTop100() + CuratedFrequencies.allTracks).distinctBy { it.id }
+        val tracks = allAvailable.filter {
             it.title.contains(query, ignoreCase = true) || it.artist.contains(query, ignoreCase = true)
         }
         val artists = CuratedFrequencies.artists.filter { it.name.contains(query, ignoreCase = true) }
@@ -55,7 +57,8 @@ class MockMusicProvider : MusicProvider {
     }
 
     override suspend fun getTrack(trackId: String): Result<Track> {
-        val trk = CuratedFrequencies.allTracks.find { it.id == trackId }
+        val allAvailable = DailyTop100Registry.getDailyTop100() + CuratedFrequencies.allTracks
+        val trk = allAvailable.find { it.id == trackId }
         return if (trk != null) Result.success(trk) else Result.failure(NoSuchElementException("Track not found"))
     }
 

@@ -35,22 +35,66 @@ object SmartQueueEngine {
     }
 
     fun isCollectionOrMix(title: String, durationSeconds: Int = 0): Boolean {
-        // Single songs are typically 1.5 - 7.5 minutes (90s - 450s). Anything over 8 minutes (480s) is a collection/mix/album.
-        if (durationSeconds > 480 || (durationSeconds in 1..70)) return true
+        // Single songs are typically 1.5 - 10 minutes (90s - 600s). Epic singles like November Rain can reach 9-11 minutes. Anything over 12 minutes (720s) is a collection/mix/album.
+        if (durationSeconds > 720 || (durationSeconds in 1..70)) return true
 
-        val t = title.lowercase()
+        val t = title.lowercase().trim()
         val collectionKeywords = listOf(
             "full album", "album mix", "playlist", "collection", "compilation",
             "jukebox", "non stop", "nonstop", "discography", "mashup",
             "1 hour", "2 hour", "3 hour", "hours", "mix 20", "video mix",
             "top 10", "top 20", "top 30", "top 40", "top 50", "top 100",
             "best songs of", "greatest hits mix", "vol.", "vol ", "volume ",
-            "best of", "megamix"
+            "best of", "megamix", "today's top", "todays top", "top hits",
+            "top songs", "top tracks", "top music", "hit songs 20", "hits 20",
+            "billboard 20", "billboard hot", "chart hits", "music chart",
+            "top chart", "new songs 20", "songs 202", "music 202", "viral song",
+            "viral hits", "christmas music", "relaxing music", "study music",
+            "sleep music", "lofi live", "radio live", "radio stream", "24/7",
+            "hits of the day", "audio mix", "official audio mix"
         )
         if (collectionKeywords.any { t.contains(it) }) return true
-        if (t.contains("mix") && (durationSeconds > 360 || durationSeconds == 0)) return true
-        if (t.contains("greatest hits") && (durationSeconds > 360 || durationSeconds == 0)) return true
+        if (t.contains("mix") && (durationSeconds > 340 || durationSeconds == 0)) return true
+        if (t.contains("greatest hits") && (durationSeconds > 340 || durationSeconds == 0)) return true
         return false
+    }
+
+    /**
+     * Cleans raw YouTube video titles and parses them into genuine (Song Title, Artist Name) pairs.
+     * Removes noisy video badges like "(Official Music Video)", "[Official Audio]", etc.
+     */
+    fun cleanSongTitleAndArtist(rawTitle: String, rawAuthor: String): Pair<String, String> {
+        // Strip common YouTube badges in parentheses or brackets
+        val stripped = rawTitle
+            .replace(Regex("""(?i)\s*[\(\[\{](?:official\s*(?:music\s*)?video|official\s*audio|official\s*lyric\s*video|official\s*video|lyric\s*video|lyrics|audio|visualizer|video|4k|hd|hq|live|remastered|explicit)[\)\]\}]"""), "")
+            .replace(Regex("""(?i)\s*\|\|\s*official\s*(?:music\s*)?video.*"""), "")
+            .replace(Regex("""(?i)\s*\|\s*official\s*(?:music\s*)?video.*"""), "")
+            .replace(Regex("""(?i)\s*-\s*official\s*(?:music\s*)?video.*"""), "")
+            .trim()
+
+        val cleanAuthor = rawAuthor
+            .replace(Regex("""(?i)\s*-\s*topic"""), "")
+            .replace(Regex("""(?i)vevo$"""), "")
+            .replace(Regex("""(?i)\s*official.*"""), "")
+            .trim()
+            .ifEmpty { "Artist" }
+
+        // Common delimiter patterns: "Artist - Title", "Artist – Title", "Artist — Title", "Artist : Title"
+        val splitDelimiters = listOf(" - ", " – ", " — ", " : ")
+        for (delim in splitDelimiters) {
+            if (stripped.contains(delim)) {
+                val parts = stripped.split(delim, limit = 2)
+                val left = parts[0].trim()
+                val right = parts[1].trim()
+                if (left.isNotEmpty() && right.isNotEmpty()) {
+                    // Check which side is title vs artist:
+                    // If author is mentioned in left or author is short, left is artist, right is title
+                    return Pair(right, left)
+                }
+            }
+        }
+
+        return Pair(stripped.ifEmpty { rawTitle }, cleanAuthor)
     }
 
     fun getTrackMetaKey(track: Track): String {

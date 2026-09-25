@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.CircularProgressIndicator
@@ -53,6 +54,7 @@ fun GammaTrackRow(
     onDownloadClick: (() -> Unit)? = null,
     isDownloaded: Boolean = track.isDownloaded,
     isDownloading: Boolean = false,
+    onInfoClick: (() -> Unit)? = null,
     onMoreOptionsClick: (() -> Unit)? = null
 ) {
     val bg = if (isCurrentTrack) GammaSurfaceHighlight else GammaSurfaceElevated.copy(alpha = 0.6f)
@@ -67,6 +69,34 @@ fun GammaTrackRow(
             .testTag("track_row_${track.id}"),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // Daily Rank Indicator (Top 100 Chart)
+        if (track.dailyRank > 0) {
+            val rankColor = when (track.dailyRank) {
+                1 -> Color(0xFFFFD700)
+                2 -> Color(0xFFC0C0C0)
+                3 -> Color(0xFFCD7F32)
+                in 4..10 -> GammaPrimary
+                else -> GammaTextSecondary
+            }
+            Box(
+                modifier = Modifier
+                    .width(32.dp)
+                    .padding(end = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "#${track.dailyRank}",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Black,
+                            fontSize = if (track.dailyRank >= 100) 10.sp else 12.sp
+                        ),
+                        color = rankColor
+                    )
+                }
+            }
+        }
+
         // Artwork
         GammaArtwork(
             url = track.artworkUrl,
@@ -108,12 +138,15 @@ fun GammaTrackRow(
                     style = MaterialTheme.typography.bodyMedium,
                     color = GammaTextSecondary,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
                 )
                 val displayGenre = if (
                     track.genre.equals("YouTube Music", ignoreCase = true) ||
                     track.genre.equals("YouTube Audio", ignoreCase = true) ||
                     track.genre.equals("YouTube", ignoreCase = true) ||
+                    track.genre.equals("Audio", ignoreCase = true) ||
+                    track.genre.equals("Music", ignoreCase = true) ||
                     track.genre.equals("Curated", ignoreCase = true)
                 ) "" else track.genre
 
@@ -122,7 +155,25 @@ fun GammaTrackRow(
                         text = " • $displayGenre",
                         style = MaterialTheme.typography.labelSmall,
                         color = GammaPrimary.copy(alpha = 0.8f),
-                        fontSize = 11.sp
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                if (track.chartTrend.isNotBlank()) {
+                    Text(
+                        text = " • ${track.chartTrend}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = when (track.dailyRank) {
+                            1 -> Color(0xFFFFD700)
+                            in 2..3 -> GammaSecondary
+                            else -> GammaPrimary.copy(alpha = 0.85f)
+                        },
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
@@ -202,6 +253,21 @@ fun GammaTrackRow(
                     imageVector = Icons.Filled.Download,
                     contentDescription = "Download locally",
                     tint = GammaTextMuted
+                )
+            }
+        }
+
+        // Track Info Action
+        if (onInfoClick != null) {
+            IconButton(
+                onClick = onInfoClick,
+                modifier = Modifier.size(36.dp).testTag("info_button_${track.id}")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "Track Chart Info",
+                    tint = GammaTextSecondary,
+                    modifier = Modifier.size(17.dp)
                 )
             }
         }

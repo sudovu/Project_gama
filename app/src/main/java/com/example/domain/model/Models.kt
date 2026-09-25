@@ -18,7 +18,9 @@ data class Track(
     val isFavorite: Boolean = false,
     val isUploaded: Boolean = false,
     val source: String = "curated",
-    val isDownloaded: Boolean = false
+    val isDownloaded: Boolean = false,
+    val dailyRank: Int = 0,
+    val chartTrend: String = ""
 ) {
     val formattedDuration: String
         get() {

@@ -30,6 +30,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -43,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import com.example.core.media.SmartQueueEngine
+import com.example.core.ui.GammaDailyChartInfoDialog
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -133,6 +135,8 @@ fun DiscoverScreen(
     }
 
     var trackForPlaylist by remember { mutableStateOf<Track?>(null) }
+    var selectedChartTrackForInfo by remember { mutableStateOf<Track?>(null) }
+    var showAllTrending by remember { mutableStateOf(false) }
     val userPlaylists by viewModel.userPlaylists.collectAsStateWithLifecycle()
 
     if (trackForPlaylist != null) {
@@ -146,6 +150,18 @@ fun DiscoverScreen(
             },
             onCreatePlaylistAndAdd = { name ->
                 viewModel.createPlaylistAndAddTrack(name, selected)
+            }
+        )
+    }
+
+    if (selectedChartTrackForInfo != null) {
+        val selectedInfoTrack = selectedChartTrackForInfo!!
+        GammaDailyChartInfoDialog(
+            track = selectedInfoTrack,
+            onDismiss = { selectedChartTrackForInfo = null },
+            onPlayTrack = { trk ->
+                val current = (uiState as? DiscoverUiState.Success)?.feed?.trendingTracks ?: emptyList()
+                onTrackClick(trk, current)
             }
         )
     }
@@ -449,11 +465,12 @@ fun DiscoverScreen(
                             }
                         }
 
-                        // Trending Signals (Track List) with direct Shuffle button
+                        // Trending Signals (Daily Top 100 Chart) with direct Shuffle & Info buttons
+                        val trendingCount = if (showAllTrending) displayedTracks.size else 12.coerceAtMost(displayedTracks.size)
                         item {
                             GammaSectionHeader(
-                                category = "Featured Tracks",
-                                title = "Trending Music",
+                                category = "Daily Top 100 Chart • Updated for Today",
+                                title = "Trending Music (${displayedTracks.size} Songs)",
                                 actionText = "Shuffle",
                                 onActionClick = {
                                     if (displayedTracks.isNotEmpty()) {
@@ -463,7 +480,7 @@ fun DiscoverScreen(
                             )
                         }
 
-                        items(displayedTracks.take(8), key = { it.id }) { track ->
+                        items(displayedTracks.take(trendingCount), key = { it.id }) { track ->
                             val isFav = state.favoriteIds.contains(track.id)
                             val isCurr = track.id == currentPlayingTrackId
                             Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
@@ -473,8 +490,33 @@ fun DiscoverScreen(
                                     isPlaying = isPlaying && isCurr,
                                     onClick = { onTrackClick(track, displayedTracks) },
                                     onFavoriteToggle = { viewModel.toggleFavorite(track) },
+                                    onInfoClick = { selectedChartTrackForInfo = track },
                                     onMoreOptionsClick = { trackForPlaylist = track }
                                 )
+                            }
+                        }
+
+                        if (displayedTracks.size > 12) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { showAllTrending = !showAllTrending },
+                                        shape = RoundedCornerShape(20.dp),
+                                        border = BorderStroke(1.dp, GammaPrimary.copy(alpha = 0.5f))
+                                    ) {
+                                        Text(
+                                            text = if (showAllTrending) "Show Top 12 Songs" else "View All Top 100 Daily Songs (${displayedTracks.size})",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = GammaPrimary
+                                        )
+                                    }
+                                }
                             }
                         }
 
@@ -727,7 +769,22 @@ private fun MoodSelectorRow(
     selectedMood: String,
     onMoodSelect: (String) -> Unit
 ) {
-    val moods = listOf("All", "Hip-Hop", "Rock & Metal", "Pop Hits", "Classics")
+    val moods = listOf(
+        "All",
+        "Hip-Hop",
+        "Rock & Metal",
+        "Pop Hits",
+        "Cyberpunk & Synthwave",
+        "Nu Metal & Alt-Rock",
+        "Electronic & EDM",
+        "432Hz & Ambient",
+        "Lo-Fi & Chill",
+        "Acoustic & Folk",
+        "R&B & Soul",
+        "Phonk & Drift",
+        "Classics",
+        "Orchestral & Cinematic"
+    )
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)

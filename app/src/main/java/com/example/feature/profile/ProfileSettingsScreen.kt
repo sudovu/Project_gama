@@ -37,11 +37,15 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Warning
+import com.example.core.taste.EmailValidationStatus
+import com.example.core.taste.EmailValidator
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -154,6 +158,10 @@ fun ProfileSettingsScreen(
     val isSyncing by tasteManager.isSyncing.collectAsStateWithLifecycle()
     val isSpotifySyncing by tasteManager.isSpotifySyncing.collectAsStateWithLifecycle()
     val isGoogleSyncing by tasteManager.isGoogleSyncing.collectAsStateWithLifecycle()
+    val googleEmailStatus by tasteManager.googleEmailStatus.collectAsStateWithLifecycle()
+    val googleEmailMessage by tasteManager.googleEmailMessage.collectAsStateWithLifecycle()
+    val spotifyEmailStatus by tasteManager.spotifyEmailStatus.collectAsStateWithLifecycle()
+    val spotifyEmailMessage by tasteManager.spotifyEmailMessage.collectAsStateWithLifecycle()
 
     val developerName = "VHUWON MATHERS"
     val developerEmail = "info@gautambhuwan.com.np"
@@ -164,7 +172,7 @@ fun ProfileSettingsScreen(
     var selectedSpotifyTastes by remember(spotifyTastes) { mutableStateOf(spotifyTastes.toSet()) }
 
     var showGoogleConnectDialog by remember { mutableStateOf(false) }
-    var editGoogleEmail by remember(googleEmail) { mutableStateOf(if (googleEmail.isNotEmpty()) googleEmail else "vhuwonmathers@gmail.com") }
+    var editGoogleEmail by remember(googleEmail) { mutableStateOf(if (googleEmail.isNotEmpty() && googleEmail != "@gmail.com") googleEmail else "vhuwonmathers@gmail.com") }
     var selectedGoogleTastes by remember(youtubeTastes) { mutableStateOf(youtubeTastes.toSet()) }
 
     val launchEmail: (String, String) -> Unit = { email, subject ->
@@ -406,8 +414,8 @@ fun ProfileSettingsScreen(
                                     ),
                                     color = GammaTextPrimary
                                 )
-                                Text(
-                                    text = "Version 2.2.0 (Build 22)",
+                                 Text(
+                                    text = "Version 2.2.1 (Build 23)",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = GammaPrimary
                                 )
@@ -1146,11 +1154,24 @@ fun ProfileSettingsScreen(
 
                             if (isSpotifyLinked) {
                                 if (spotifyUser.isNotEmpty()) {
-                                    Text(
-                                        text = "Linked Email: $spotifyUser",
-                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                                        color = Color(0xFF1DB954)
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = if (spotifyUser.contains("@")) "Linked Email: $spotifyUser" else "Linked Account: $spotifyUser",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                            color = Color(0xFF1DB954)
+                                        )
+                                        EmailStatusBadge(
+                                            status = spotifyEmailStatus,
+                                            message = spotifyEmailMessage,
+                                            onVerifyClick = {
+                                                tasteManager.validateSpotifyEmailBackground()
+                                                Toast.makeText(context, "Validating Spotify account in background...", Toast.LENGTH_SHORT).show()
+                                            }
+                                        )
+                                    }
                                     Spacer(modifier = Modifier.height(4.dp))
                                 }
                                 Text(
@@ -1195,10 +1216,18 @@ fun ProfileSettingsScreen(
                                     }
                                     OutlinedButton(
                                         onClick = {
+                                            if (spotifyEmailStatus == EmailValidationStatus.INVALID) {
+                                                Toast.makeText(context, "Cannot sync: Spotify email is invalid ($spotifyEmailMessage). Please re-verify.", Toast.LENGTH_LONG).show()
+                                                return@OutlinedButton
+                                            }
                                             if (youtubeProvider != null) {
                                                 coroutineScope.launch {
                                                     tasteManager.syncSpotifyLiveTastes(youtubeProvider)
-                                                    Toast.makeText(context, "Spotify tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
+                                                    if (tasteManager.spotifyEmailStatus.value != EmailValidationStatus.INVALID) {
+                                                        Toast.makeText(context, "Spotify tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
+                                                    } else {
+                                                        Toast.makeText(context, "Sync skipped: email verification failed", Toast.LENGTH_SHORT).show()
+                                                    }
                                                 }
                                             } else {
                                                 tasteManager.syncSpotifyTastes()
@@ -1358,11 +1387,24 @@ fun ProfileSettingsScreen(
 
                             if (isGoogleLinked) {
                                 if (googleEmail.isNotEmpty()) {
-                                    Text(
-                                        text = "Linked Email: $googleEmail",
-                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                                        color = Color(0xFFFF4D4D)
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "Linked Email: $googleEmail",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                            color = Color(0xFFFF4D4D)
+                                        )
+                                        EmailStatusBadge(
+                                            status = googleEmailStatus,
+                                            message = googleEmailMessage,
+                                            onVerifyClick = {
+                                                tasteManager.validateGoogleEmailBackground()
+                                                Toast.makeText(context, "Validating Google email in background...", Toast.LENGTH_SHORT).show()
+                                            }
+                                        )
+                                    }
                                     Spacer(modifier = Modifier.height(4.dp))
                                 }
                                 Text(
@@ -1407,10 +1449,18 @@ fun ProfileSettingsScreen(
                                     }
                                     OutlinedButton(
                                         onClick = {
+                                            if (googleEmailStatus == EmailValidationStatus.INVALID) {
+                                                Toast.makeText(context, "Cannot sync: Google email is invalid ($googleEmailMessage). Please re-verify.", Toast.LENGTH_LONG).show()
+                                                return@OutlinedButton
+                                            }
                                             if (youtubeProvider != null) {
                                                 coroutineScope.launch {
                                                     tasteManager.syncYouTubeLiveTastes(youtubeProvider)
-                                                    Toast.makeText(context, "YouTube Music tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
+                                                    if (tasteManager.googleEmailStatus.value != EmailValidationStatus.INVALID) {
+                                                        Toast.makeText(context, "YouTube Music tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
+                                                    } else {
+                                                        Toast.makeText(context, "Sync skipped: email verification failed", Toast.LENGTH_SHORT).show()
+                                                    }
                                                 }
                                             } else {
                                                 tasteManager.syncGoogleTastes()
@@ -1565,6 +1615,12 @@ fun ProfileSettingsScreen(
             "Hip-Hop", "Synthwave", "Pop Classics", "Indie Rock",
             "Electronic / EDM", "Lo-Fi Beats", "432Hz Ambient", "Acoustic"
         )
+        val spotifyEmailError = if (editSpotifyUser.isNotBlank() && editSpotifyUser.contains("@")) {
+            EmailValidator.getSyntaxErrorMessage(editSpotifyUser)
+        } else if (editSpotifyUser.isBlank()) {
+            "Account identifier cannot be empty"
+        } else null
+
         AlertDialog(
             onDismissRequest = { showSpotifyConnectDialog = false },
             title = {
@@ -1593,13 +1649,20 @@ fun ProfileSettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = GammaTextSecondary
                     )
+
                     OutlinedTextField(
                         value = editSpotifyUser,
                         onValueChange = { editSpotifyUser = it },
-                        label = { Text("Spotify Account Email ID") },
+                        label = { Text("Spotify Account Email ID or Username") },
                         placeholder = { Text("e.g. yourname@gmail.com") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         singleLine = true,
+                        isError = spotifyEmailError != null,
+                        supportingText = {
+                            if (spotifyEmailError != null) {
+                                Text(spotifyEmailError, color = MaterialTheme.colorScheme.error)
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -1645,6 +1708,7 @@ fun ProfileSettingsScreen(
                         showSpotifyConnectDialog = false
                         Toast.makeText(context, "Spotify connected & music tastes syncing!", Toast.LENGTH_SHORT).show()
                     },
+                    enabled = spotifyEmailError == null,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954))
                 ) {
                     Text(if (isSpotifyLinked) "Save & Sync" else "Connect & Sync", color = Color.Black, fontWeight = FontWeight.Bold)
@@ -1674,6 +1738,12 @@ fun ProfileSettingsScreen(
             "Lo-Fi Chill", "Vocal Focus", "Orchestral", "Deep House",
             "Acoustic Folk", "Hip-Hop", "Electronic / EDM", "Pop Classics"
         )
+        val googleEmailError = if (editGoogleEmail.isNotBlank()) {
+            EmailValidator.getSyntaxErrorMessage(editGoogleEmail)
+        } else {
+            "Google email address cannot be empty"
+        }
+
         AlertDialog(
             onDismissRequest = { showGoogleConnectDialog = false },
             title = {
@@ -1702,6 +1772,7 @@ fun ProfileSettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = GammaTextSecondary
                     )
+
                     OutlinedTextField(
                         value = editGoogleEmail,
                         onValueChange = { editGoogleEmail = it },
@@ -1709,6 +1780,12 @@ fun ProfileSettingsScreen(
                         placeholder = { Text("e.g. yourname@gmail.com") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         singleLine = true,
+                        isError = googleEmailError != null,
+                        supportingText = {
+                            if (googleEmailError != null) {
+                                Text(googleEmailError, color = MaterialTheme.colorScheme.error)
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -1754,6 +1831,7 @@ fun ProfileSettingsScreen(
                         showGoogleConnectDialog = false
                         Toast.makeText(context, "Google connected & YouTube Music syncing!", Toast.LENGTH_SHORT).show()
                     },
+                    enabled = googleEmailError == null,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF0000))
                 ) {
                     Text(if (isGoogleLinked) "Save & Sync" else "Connect & Sync", color = Color.White, fontWeight = FontWeight.Bold)
@@ -2163,5 +2241,91 @@ private fun copyAndLaunch(
         context.startActivity(intent)
     } catch (_: Exception) {
         Toast.makeText(context, "$label copied: $text", Toast.LENGTH_SHORT).show()
+    }
+}
+
+@Composable
+private fun EmailStatusBadge(
+    status: EmailValidationStatus,
+    message: String,
+    onVerifyClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val bgColor: Color
+    val textColor: Color
+    val label: String
+    val icon: androidx.compose.ui.graphics.vector.ImageVector?
+
+    when (status) {
+        EmailValidationStatus.VERIFIED -> {
+            bgColor = Color(0xFF1DB954).copy(alpha = 0.15f)
+            textColor = Color(0xFF1DB954)
+            label = "Verified ✓"
+            icon = Icons.Default.CheckCircle
+        }
+        EmailValidationStatus.VALIDATING -> {
+            bgColor = Color(0xFFFFB300).copy(alpha = 0.15f)
+            textColor = Color(0xFFFFB300)
+            label = "Validating..."
+            icon = null
+        }
+        EmailValidationStatus.INVALID -> {
+            bgColor = Color(0xFFFF0000).copy(alpha = 0.15f)
+            textColor = Color(0xFFFF4D4D)
+            label = "Invalid Email ⚠"
+            icon = Icons.Default.ErrorOutline
+        }
+        EmailValidationStatus.UNVERIFIED -> {
+            bgColor = GammaSurfaceHighlight
+            textColor = GammaTextSecondary
+            label = "Unverified"
+            icon = null
+        }
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(bgColor)
+            .border(1.dp, textColor.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+            .clickable(enabled = status != EmailValidationStatus.VALIDATING, onClick = onVerifyClick)
+            .padding(horizontal = 7.dp, vertical = 2.dp)
+    ) {
+        if (status == EmailValidationStatus.VALIDATING) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(10.dp),
+                strokeWidth = 1.5.dp,
+                color = textColor
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+        } else if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = textColor,
+                modifier = Modifier.size(11.dp)
+            )
+            Spacer(modifier = Modifier.width(3.dp))
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            ),
+            color = textColor
+        )
+        if (status == EmailValidationStatus.INVALID || status == EmailValidationStatus.UNVERIFIED) {
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = "Verify",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Black
+                ),
+                color = textColor
+            )
+        }
     }
 }
