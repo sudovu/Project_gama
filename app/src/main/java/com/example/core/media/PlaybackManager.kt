@@ -156,9 +156,9 @@ class PlaybackManager(private val context: Context) {
                 currentQueue = queue,
                 count = countNeeded
             )
-            (queue + recommendations).distinctBy { it.id }
+            SmartQueueEngine.deduplicateTracks(queue + recommendations)
         } else {
-            queue
+            SmartQueueEngine.deduplicateTracks(queue)
         }
 
         isTransitioningTrack = true
@@ -205,6 +205,19 @@ class PlaybackManager(private val context: Context) {
         if (queue.isEmpty()) return
         val validIndex = startIndex.coerceIn(0, queue.lastIndex)
         playTrack(queue[validIndex], queue)
+    }
+
+    fun playQueueShuffled(queue: List<Track>, startTrack: Track? = null) {
+        if (queue.isEmpty()) return
+        val deduped = SmartQueueEngine.deduplicateTracks(queue)
+        val shuffled = deduped.shuffled()
+        val firstTrack = startTrack ?: shuffled.first()
+        val remaining = shuffled.filter { !SmartQueueEngine.areTracksEqual(it, firstTrack) }
+        val finalQueue = listOf(firstTrack) + remaining
+
+        originalQueueBeforeShuffle = deduped
+        playTrack(firstTrack, finalQueue)
+        _playbackState.update { it.copy(isShuffle = true) }
     }
 
     fun togglePlayPause() {
@@ -425,16 +438,16 @@ class PlaybackManager(private val context: Context) {
                 currentQueue = queue,
                 count = 5
             )
-            val updatedQueue = (queue + recommendations).distinctBy { it.id }
+            val updatedQueue = SmartQueueEngine.deduplicateTracks(queue + recommendations)
             var finalNextIndex = state.queueIndex + 1
             while (finalNextIndex < updatedQueue.size && SmartQueueEngine.isCollectionOrMix(updatedQueue[finalNextIndex].title, updatedQueue[finalNextIndex].durationSeconds)) {
                 finalNextIndex++
             }
             if (finalNextIndex < updatedQueue.size) {
                 playTrack(updatedQueue[finalNextIndex], updatedQueue)
-            } else if (queue.isNotEmpty()) {
-                val singleFallback = queue.firstOrNull { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) } ?: queue[0]
-                playTrack(singleFallback, queue)
+            } else if (state.repeatMode == RepeatMode.ALL && queue.isNotEmpty()) {
+                val nextT = if (state.isShuffle) queue.shuffled().first() else queue[0]
+                playTrack(nextT, queue)
             }
         }
     }
@@ -559,7 +572,7 @@ class PlaybackManager(private val context: Context) {
 
         if (recommendations.isNotEmpty()) {
             _playbackState.update { current ->
-                val newQueue = (current.queue + recommendations).distinctBy { it.id }
+                val newQueue = SmartQueueEngine.deduplicateTracks(current.queue + recommendations)
                 current.copy(queue = newQueue)
             }
         }

@@ -53,13 +53,71 @@ object SmartQueueEngine {
         return false
     }
 
+    fun getTrackMetaKey(track: Track): String {
+        val normTitle = track.title
+            .replace(Regex("\\s*[\\[\\(].*?[\\]\\)]"), "")
+            .replace(Regex("[^a-zA-Z0-9]"), "")
+            .lowercase()
+            .trim()
+        val normArtist = track.artist
+            .replace(Regex("[^a-zA-Z0-9]"), "")
+            .lowercase()
+            .trim()
+        return if (normTitle.isNotEmpty()) "${normArtist}_$normTitle" else ""
+    }
+
+    fun areTracksEqual(a: Track?, b: Track?): Boolean {
+        if (a == null || b == null) return false
+        if (a.id.isNotBlank() && a.id == b.id) return true
+        if (a.youtubeVideoId.isNotBlank() && a.youtubeVideoId == b.youtubeVideoId) return true
+        if (a.localAudioUri.isNotBlank() && a.localAudioUri == b.localAudioUri) return true
+        val metaA = getTrackMetaKey(a)
+        val metaB = getTrackMetaKey(b)
+        return metaA.isNotEmpty() && metaA == metaB
+    }
+
+    fun deduplicateTracks(tracks: List<Track>): List<Track> {
+        val seenIds = mutableSetOf<String>()
+        val seenYtIds = mutableSetOf<String>()
+        val seenUris = mutableSetOf<String>()
+        val seenMetaKeys = mutableSetOf<String>()
+        val result = ArrayList<Track>(tracks.size)
+
+        for (t in tracks) {
+            val id = t.id.trim()
+            val ytId = t.youtubeVideoId.trim()
+            val uri = t.localAudioUri.trim()
+            val metaKey = getTrackMetaKey(t)
+
+            val isDuplicate = (id.isNotEmpty() && id in seenIds) ||
+                    (ytId.isNotEmpty() && ytId in seenYtIds) ||
+                    (uri.isNotEmpty() && uri in seenUris) ||
+                    (metaKey.isNotEmpty() && metaKey in seenMetaKeys)
+
+            if (!isDuplicate) {
+                if (id.isNotEmpty()) seenIds.add(id)
+                if (ytId.isNotEmpty()) seenYtIds.add(ytId)
+                if (uri.isNotEmpty()) seenUris.add(uri)
+                if (metaKey.isNotEmpty()) seenMetaKeys.add(metaKey)
+                result.add(t)
+            }
+        }
+        return result
+    }
+
     fun scoreCandidate(
         candidate: Track,
         profile: SmartQueueProfile,
         currentQueue: List<Track>,
         playedIds: Set<String>
     ): Double {
-        if (currentQueue.any { it.id == candidate.id || (it.youtubeVideoId.isNotEmpty() && it.youtubeVideoId == candidate.youtubeVideoId) }) {
+        val candidateMeta = getTrackMetaKey(candidate)
+        if (currentQueue.any { 
+            it.id == candidate.id || 
+            (it.youtubeVideoId.isNotEmpty() && it.youtubeVideoId == candidate.youtubeVideoId) ||
+            (it.localAudioUri.isNotEmpty() && it.localAudioUri == candidate.localAudioUri) ||
+            (candidateMeta.isNotEmpty() && getTrackMetaKey(it) == candidateMeta)
+        }) {
             return -1000.0
         }
         if (isCollectionOrMix(candidate.title, candidate.durationSeconds)) {
@@ -114,13 +172,19 @@ object SmartQueueEngine {
 
         val profile = analyzePlayedTracks(playedTracks)
         val playedIds = playedTracks.map { it.id }.toSet()
-        val currentQueueIds = currentQueue.map { it.id }.toSet()
+        val currentQueueIds = currentQueue.map { it.id }.filter { it.isNotEmpty() }.toSet()
+        val currentVideoIds = currentQueue.map { it.youtubeVideoId }.filter { it.isNotEmpty() }.toSet()
+        val currentMetaKeys = currentQueue.map { getTrackMetaKey(it) }.filter { it.isNotEmpty() }.toSet()
+
+        fun isCandidateInQueue(c: Track): Boolean {
+            val meta = getTrackMetaKey(c)
+            return (c.id.isNotEmpty() && c.id in currentQueueIds) ||
+                    (c.youtubeVideoId.isNotEmpty() && c.youtubeVideoId in currentVideoIds) ||
+                    (meta.isNotEmpty() && meta in currentMetaKeys)
+        }
 
         val scoredCandidates = singlePool
-            .filter { candidate ->
-                candidate.id !in currentQueueIds &&
-                        (candidate.youtubeVideoId.isEmpty() || currentQueue.none { it.youtubeVideoId == candidate.youtubeVideoId })
-            }
+            .filter { candidate -> !isCandidateInQueue(candidate) }
             .map { candidate ->
                 val score = scoreCandidate(candidate, profile, currentQueue, playedIds)
                 candidate to score
@@ -128,16 +192,13 @@ object SmartQueueEngine {
             .filter { it.second > -500.0 }
             .sortedByDescending { it.second }
 
-        val selected = scoredCandidates.take(count).map { (track, _) ->
+        val selected = deduplicateTracks(scoredCandidates.take(count).map { (track, _) ->
             track.copy(source = "smart_recommendation")
-        }
+        })
 
         if (selected.isEmpty()) {
-            val fallback = singlePool
-                .filter { it.id != currentQueue.lastOrNull()?.id }
-                .take(count)
-                .map { it.copy(source = "smart_recommendation") }
-            return fallback
+            val unqueued = singlePool.filter { !isCandidateInQueue(it) }
+            return deduplicateTracks(unqueued).take(count).map { it.copy(source = "smart_recommendation") }
         }
 
         return selected
@@ -145,7 +206,7 @@ object SmartQueueEngine {
 
     /**
      * Generates endless recommendations strictly aligned with the target track's genre and artist.
-     * Guaranteed to return high-quality single songs and never collections or mixes.
+     * Guaranteed to return high-quality single songs and never collections or mixes, and never repeat songs in the queue.
      */
     fun generateGenreRecommendations(
         targetTrack: Track?,
@@ -159,15 +220,35 @@ object SmartQueueEngine {
 
         val activeGenre = targetTrack?.genre?.trim().orEmpty()
         val activeArtist = targetTrack?.artist?.trim().orEmpty()
-        val currentQueueIds = currentQueue.map { it.id }.toSet()
-        val currentVideoIds = currentQueue.mapNotNull { it.youtubeVideoId.takeIf { v -> v.isNotEmpty() } }.toSet()
-        val playedIds = playedTracks.map { it.id }.toSet()
 
-        // 1. Unplayed candidates matching the target genre or artist
+        val currentQueueIds = currentQueue.map { it.id }.filter { it.isNotEmpty() }.toSet()
+        val currentVideoIds = currentQueue.map { it.youtubeVideoId }.filter { it.isNotEmpty() }.toSet()
+        val currentUris = currentQueue.map { it.localAudioUri }.filter { it.isNotEmpty() }.toSet()
+        val currentMetaKeys = currentQueue.map { getTrackMetaKey(it) }.filter { it.isNotEmpty() }.toSet()
+
+        val playedIds = playedTracks.map { it.id }.filter { it.isNotEmpty() }.toSet()
+        val playedVideoIds = playedTracks.map { it.youtubeVideoId }.filter { it.isNotEmpty() }.toSet()
+        val playedMetaKeys = playedTracks.map { getTrackMetaKey(it) }.filter { it.isNotEmpty() }.toSet()
+
+        fun isCandidateInQueue(c: Track): Boolean {
+            val meta = getTrackMetaKey(c)
+            return (c.id.isNotEmpty() && c.id in currentQueueIds) ||
+                    (c.youtubeVideoId.isNotEmpty() && c.youtubeVideoId in currentVideoIds) ||
+                    (c.localAudioUri.isNotEmpty() && c.localAudioUri in currentUris) ||
+                    (meta.isNotEmpty() && meta in currentMetaKeys)
+        }
+
+        fun isCandidatePlayed(c: Track): Boolean {
+            val meta = getTrackMetaKey(c)
+            return (c.id.isNotEmpty() && c.id in playedIds) ||
+                    (c.youtubeVideoId.isNotEmpty() && c.youtubeVideoId in playedVideoIds) ||
+                    (meta.isNotEmpty() && meta in playedMetaKeys)
+        }
+
+        // 1. Unplayed candidates matching the target genre or artist NOT already in the queue
         val genreMatches = singlePool
             .filter { candidate ->
-                candidate.id !in currentQueueIds &&
-                (candidate.youtubeVideoId.isEmpty() || candidate.youtubeVideoId !in currentVideoIds) &&
+                !isCandidateInQueue(candidate) &&
                 (
                     (activeGenre.isNotEmpty() && (
                         candidate.genre.contains(activeGenre, ignoreCase = true) ||
@@ -176,23 +257,25 @@ object SmartQueueEngine {
                     (activeArtist.isNotEmpty() && candidate.artist.equals(activeArtist, ignoreCase = true))
                 )
             }
-            .sortedBy { if (playedIds.contains(it.id)) 1 else 0 }
+            .sortedBy { if (isCandidatePlayed(it)) 1 else 0 }
 
         if (genreMatches.isNotEmpty()) {
-            return genreMatches.take(count).map { it.copy(source = "genre_recommendation") }
+            return deduplicateTracks(genreMatches).take(count).map { it.copy(source = "genre_recommendation") }
         }
 
-        // 2. Fallback to standard smart profile recommendations
+        // 2. Fallback to standard smart profile recommendations NOT in queue
         val generalRecs = generateRecommendations(playedTracks, singlePool, currentQueue, count)
         if (generalRecs.isNotEmpty()) {
-            return generalRecs
+            return deduplicateTracks(generalRecs)
         }
 
-        // 3. Absolute fallback: never allow empty return when candidate pool exists (loop/recycle single songs)
-        return singlePool
-            .filter { it.id != currentQueue.lastOrNull()?.id }
-            .shuffled()
-            .take(count)
-            .map { it.copy(source = "genre_recommendation") }
+        // 3. Fallback: only pick candidates that are NOT currently in the queue
+        val unqueued = singlePool.filter { !isCandidateInQueue(it) }
+        if (unqueued.isNotEmpty()) {
+            return deduplicateTracks(unqueued).shuffled().take(count).map { it.copy(source = "genre_recommendation") }
+        }
+
+        // Strictly avoid repeating songs when every candidate is already in queue
+        return emptyList()
     }
 }

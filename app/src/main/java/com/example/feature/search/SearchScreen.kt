@@ -115,18 +115,6 @@ fun SearchScreen(
                     style = MaterialTheme.typography.headlineMedium,
                     color = GammaTextPrimary
                 )
-
-                // Internet status indicator / prompt trigger
-                IconButton(
-                    onClick = { showInternetDialog = true },
-                    modifier = Modifier.testTag("internet_status_icon")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Wifi,
-                        contentDescription = "Internet Access Status",
-                        tint = if (isOnline) GammaPrimary else GammaTextMuted
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))

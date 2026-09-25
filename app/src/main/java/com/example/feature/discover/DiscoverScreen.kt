@@ -40,7 +40,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.example.core.media.SmartQueueEngine
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -105,6 +108,9 @@ fun DiscoverScreen(
     val youtubeTastes by tasteManager.youtubeTastes.collectAsStateWithLifecycle()
     val liveSpotifyTracks by tasteManager.spotifyTracks.collectAsStateWithLifecycle()
     val liveGoogleTracks by tasteManager.googleTracks.collectAsStateWithLifecycle()
+    val isSpotifySyncing by tasteManager.isSpotifySyncing.collectAsStateWithLifecycle()
+    val isGoogleSyncing by tasteManager.isGoogleSyncing.collectAsStateWithLifecycle()
+    val coroutineScope = rememberCoroutineScope()
 
     var showUploadDialog by remember { mutableStateOf(false) }
     var showInternetDialog by remember { mutableStateOf(false) }
@@ -203,14 +209,77 @@ fun DiscoverScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    // Shuffle All Recommended Action Bar
+                    // Shuffle All Recommended Action Bar (Combines each genre seamlessly without duplicates)
                     item {
-                        val allRecommendedTracks = remember(feed, spotifyTracks, ytTracks) {
-                            (feed.quickPicks + feed.trendingTracks + spotifyTracks + ytTracks)
-                                .distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
+                        val allGenreCombinedTracks: List<Track> = remember(feed, spotifyTracks, ytTracks) {
+                            val genreMap = mutableMapOf<String, MutableList<Track>>()
+
+                            // 1. Every genre playlist from moodPlaylists (Hip-Hop, Rock & Metal, Pop Hits, Classics, etc.)
+                            feed.moodPlaylists.forEach { (genre, list) ->
+                                if (list.isNotEmpty()) {
+                                    genreMap.getOrPut(genre) { mutableListOf() }.addAll(list)
+                                }
+                            }
+
+                            // 2. Taste recommendations
+                            if (spotifyTracks.isNotEmpty()) {
+                                genreMap.getOrPut("Spotify Taste") { mutableListOf() }.addAll(spotifyTracks)
+                            }
+                            if (ytTracks.isNotEmpty()) {
+                                genreMap.getOrPut("YouTube Taste") { mutableListOf() }.addAll(ytTracks)
+                            }
+
+                            // 3. Quick Picks & Trending
+                            feed.quickPicks.forEach { t ->
+                                val g = t.genre.ifBlank { "Trending" }
+                                genreMap.getOrPut(g) { mutableListOf() }.add(t)
+                            }
+                            feed.trendingTracks.forEach { t ->
+                                val g = t.genre.ifBlank { "Trending" }
+                                genreMap.getOrPut(g) { mutableListOf() }.add(t)
+                            }
+
+                            // 4. Featured Playlists & Uploads
+                            feed.featuredPlaylists.forEach { pl ->
+                                pl.tracks.forEach { t ->
+                                    val g = t.genre.ifBlank { "Featured" }
+                                    genreMap.getOrPut(g) { mutableListOf() }.add(t)
+                                }
+                            }
+                            feed.uploadedTracks.forEach { t ->
+                                genreMap.getOrPut("Uploaded") { mutableListOf() }.add(t)
+                            }
+
+                            // Interleave across every genre for rich multi-genre diversity, then strictly deduplicate
+                            val interleaved = mutableListOf<Track>()
+                            val iterators = genreMap.values.map { it.shuffled().iterator() }.toMutableList()
+                            var hasMore = true
+                            while (hasMore) {
+                                hasMore = false
+                                for (it in iterators) {
+                                    if (it.hasNext()) {
+                                        interleaved.add(it.next())
+                                        hasMore = true
+                                    }
+                                }
+                            }
+                            SmartQueueEngine.deduplicateTracks(interleaved)
                         }
 
-                        if (allRecommendedTracks.isNotEmpty()) {
+                        if (allGenreCombinedTracks.isNotEmpty()) {
+                            val activePool: List<Track> = remember(state.selectedMood, allGenreCombinedTracks, feed) {
+                                if (state.selectedMood == "All") {
+                                    allGenreCombinedTracks
+                                } else {
+                                    val moodList = feed.moodPlaylists[state.selectedMood]
+                                    if (!moodList.isNullOrEmpty()) {
+                                        SmartQueueEngine.deduplicateTracks(moodList)
+                                    } else {
+                                        allGenreCombinedTracks
+                                    }
+                                }
+                            }
+
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -219,21 +288,15 @@ fun DiscoverScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = if (state.selectedMood == "All") "Recommended Stream" else "${state.selectedMood} Mix",
+                                    text = if (state.selectedMood == "All") "All-Genre Combined Stream" else "${state.selectedMood} Mix",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = GammaTextSecondary
                                 )
 
                                 Surface(
                                     onClick = {
-                                        val pool = if (state.selectedMood == "All") {
-                                            allRecommendedTracks
-                                        } else {
-                                            feed.moodPlaylists[state.selectedMood] ?: allRecommendedTracks
-                                        }
-                                        if (pool.isNotEmpty()) {
-                                            val shuffled = pool.shuffled()
-                                            onTrackClick(shuffled.first(), shuffled)
+                                        if (activePool.isNotEmpty()) {
+                                            viewModel.playShuffled(activePool)
                                         }
                                     },
                                     shape = RoundedCornerShape(20.dp),
@@ -248,12 +311,12 @@ fun DiscoverScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Rounded.Shuffle,
-                                            contentDescription = "Shuffle All Recommended",
+                                            contentDescription = "Shuffle All",
                                             tint = GammaPrimary,
                                             modifier = Modifier.size(15.dp)
                                         )
                                         Text(
-                                            text = "Shuffle All",
+                                            text = if (state.selectedMood == "All") "Shuffle All Genres (${activePool.size})" else "Shuffle ${state.selectedMood} (${activePool.size})",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.SemiBold,
                                             color = GammaPrimary
@@ -299,9 +362,8 @@ fun DiscoverScreen(
                                     title = "Quick Picks",
                                     actionText = "Shuffle",
                                     onActionClick = {
-                                        val shuffled = feed.quickPicks.shuffled()
-                                        if (shuffled.isNotEmpty()) {
-                                            onTrackClick(shuffled.first(), shuffled)
+                                        if (feed.quickPicks.isNotEmpty()) {
+                                            viewModel.playShuffled(feed.quickPicks)
                                         }
                                     }
                                 )
@@ -326,7 +388,15 @@ fun DiscoverScreen(
                             item {
                                 GammaSectionHeader(
                                     category = "Spotify Sync (${spotifyTastes.take(2).joinToString(", ")})",
-                                    title = "Taste Profile Matches"
+                                    title = "Taste Profile Matches",
+                                    actionText = if (isSpotifySyncing) "Syncing..." else "Sync",
+                                    onActionClick = {
+                                        if (youtubeProvider != null && !isSpotifySyncing) {
+                                            coroutineScope.launch {
+                                                tasteManager.syncSpotifyLiveTastes(youtubeProvider)
+                                            }
+                                        }
+                                    }
                                 )
                                 LazyRow(
                                     contentPadding = PaddingValues(horizontal = 16.dp),
@@ -349,7 +419,15 @@ fun DiscoverScreen(
                             item {
                                 GammaSectionHeader(
                                     category = "YouTube Music (${youtubeTastes.take(2).joinToString(", ")})",
-                                    title = "Resonances For You"
+                                    title = "Resonances For You",
+                                    actionText = if (isGoogleSyncing) "Syncing..." else "Sync",
+                                    onActionClick = {
+                                        if (youtubeProvider != null && !isGoogleSyncing) {
+                                            coroutineScope.launch {
+                                                tasteManager.syncYouTubeLiveTastes(youtubeProvider)
+                                            }
+                                        }
+                                    }
                                 )
                                 LazyRow(
                                     contentPadding = PaddingValues(horizontal = 16.dp),
@@ -675,23 +753,6 @@ private fun DiscoverHeader(
                         color = GammaSurfaceElevated
                     )
                 }
-            }
-
-            // Network indicator
-            Box(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(GammaSurfaceElevated)
-                    .clickable(onClick = onNetworkClick)
-                    .padding(8.dp)
-                    .testTag("network_indicator_badge")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Wifi,
-                    contentDescription = "Network Status",
-                    tint = if (isOnline) GammaPrimary else GammaTextMuted,
-                    modifier = Modifier.size(16.dp)
-                )
             }
         }
     }

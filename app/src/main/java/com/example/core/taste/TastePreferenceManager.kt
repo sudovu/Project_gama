@@ -41,6 +41,12 @@ class TastePreferenceManager(context: Context) {
     private val _googleTracks = MutableStateFlow<List<Track>>(emptyList())
     val googleTracks: StateFlow<List<Track>> = _googleTracks.asStateFlow()
 
+    private val _isSpotifySyncing = MutableStateFlow(false)
+    val isSpotifySyncing: StateFlow<Boolean> = _isSpotifySyncing.asStateFlow()
+
+    private val _isGoogleSyncing = MutableStateFlow(false)
+    val isGoogleSyncing: StateFlow<Boolean> = _isGoogleSyncing.asStateFlow()
+
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
@@ -97,72 +103,109 @@ class TastePreferenceManager(context: Context) {
         _googleTracks.value = emptyList()
     }
 
-    suspend fun syncLiveTastes(youtubeProvider: YouTubeProvider) = withContext(Dispatchers.IO) {
+    suspend fun syncSpotifyLiveTastes(youtubeProvider: YouTubeProvider) = withContext(Dispatchers.IO) {
+        _isSpotifySyncing.value = true
         _isSyncing.value = true
         try {
-            val querySuffixes = listOf(
-                "hits single official music video",
-                "top songs official video",
-                "popular tracks official single",
-                "best music hits official video"
-            )
-
-            val querySuffix = querySuffixes.random()
-
-            coroutineScope {
-                if (_isSpotifyLinked.value) {
-                    val tastes = _spotifyTastes.value.take(2)
-                    val deferred = tastes.map { taste ->
-                        async {
-                            try {
-                                val res = youtubeProvider.searchWithScope("$taste $querySuffix", "YOUTUBE_MUSIC")
-                                res.getOrNull()?.tracks
-                                    ?.filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
-                                    ?.take(6)
-                                    ?.map { it.copy(genre = taste) }
-                                    ?: emptyList()
-                            } catch (_: Exception) {
-                                emptyList()
-                            }
+            if (_isSpotifyLinked.value) {
+                val querySuffixes = listOf(
+                    "hits single official music video",
+                    "top songs official video",
+                    "popular tracks official single",
+                    "best music hits official video"
+                )
+                val querySuffix = querySuffixes.random()
+                val tastes = _spotifyTastes.value.take(2)
+                val deferred = tastes.map { taste ->
+                    async {
+                        try {
+                            val res = youtubeProvider.searchWithScope("$taste $querySuffix", "YOUTUBE_MUSIC")
+                            res.getOrNull()?.tracks
+                                ?.filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
+                                ?.take(6)
+                                ?.map { it.copy(genre = taste) }
+                                ?: emptyList()
+                        } catch (_: Exception) {
+                            emptyList()
                         }
-                    }
-                    val allFetched = deferred.flatMap { it.await() }
-                    if (allFetched.isNotEmpty()) {
-                        _spotifyTracks.value = allFetched.distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
                     }
                 }
-
-                if (_isGoogleLinked.value) {
-                    val tastes = _youtubeTastes.value.take(2)
-                    val deferred = tastes.map { taste ->
-                        async {
-                            try {
-                                val res = youtubeProvider.searchWithScope("$taste $querySuffix", "YOUTUBE_MUSIC")
-                                res.getOrNull()?.tracks
-                                    ?.filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
-                                    ?.take(6)
-                                    ?.map { it.copy(genre = taste) }
-                                    ?: emptyList()
-                            } catch (_: Exception) {
-                                emptyList()
-                            }
-                        }
-                    }
-                    val allFetched = deferred.flatMap { it.await() }
-                    if (allFetched.isNotEmpty()) {
-                        _googleTracks.value = allFetched.distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
-                    }
+                val allFetched = deferred.flatMap { it.await() }
+                if (allFetched.isNotEmpty()) {
+                    _spotifyTracks.value = SmartQueueEngine.deduplicateTracks(allFetched)
                 }
             }
-
             val now = System.currentTimeMillis()
             prefs.edit().putLong(KEY_LAST_SYNC, now).apply()
             _lastSyncTime.value = now
         } catch (e: Exception) {
-            android.util.Log.e("TastePreference", "Error syncing tastes", e)
+            android.util.Log.e("TastePreference", "Error syncing Spotify tastes", e)
         } finally {
-            _isSyncing.value = false
+            _isSpotifySyncing.value = false
+            _isSyncing.value = _isGoogleSyncing.value
         }
+    }
+
+    suspend fun syncYouTubeLiveTastes(youtubeProvider: YouTubeProvider) = withContext(Dispatchers.IO) {
+        _isGoogleSyncing.value = true
+        _isSyncing.value = true
+        try {
+            if (_isGoogleLinked.value) {
+                val querySuffixes = listOf(
+                    "hits single official music video",
+                    "top songs official video",
+                    "popular tracks official single",
+                    "best music hits official video"
+                )
+                val querySuffix = querySuffixes.random()
+                val tastes = _youtubeTastes.value.take(2)
+                val deferred = tastes.map { taste ->
+                    async {
+                        try {
+                            val res = youtubeProvider.searchWithScope("$taste $querySuffix", "YOUTUBE_MUSIC")
+                            res.getOrNull()?.tracks
+                                ?.filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
+                                ?.take(6)
+                                ?.map { it.copy(genre = taste) }
+                                ?: emptyList()
+                        } catch (_: Exception) {
+                            emptyList()
+                        }
+                    }
+                }
+                val allFetched = deferred.flatMap { it.await() }
+                if (allFetched.isNotEmpty()) {
+                    _googleTracks.value = SmartQueueEngine.deduplicateTracks(allFetched)
+                }
+            }
+            val now = System.currentTimeMillis()
+            prefs.edit().putLong(KEY_LAST_SYNC, now).apply()
+            _lastSyncTime.value = now
+        } catch (e: Exception) {
+            android.util.Log.e("TastePreference", "Error syncing YouTube tastes", e)
+        } finally {
+            _isGoogleSyncing.value = false
+            _isSyncing.value = _isSpotifySyncing.value
+        }
+    }
+
+    suspend fun syncLiveTastes(youtubeProvider: YouTubeProvider) = coroutineScope {
+        val d1 = async { syncSpotifyLiveTastes(youtubeProvider) }
+        val d2 = async { syncYouTubeLiveTastes(youtubeProvider) }
+        d1.await()
+        d2.await()
+    }
+
+    fun syncSpotifyTastes() {
+        val now = System.currentTimeMillis()
+        prefs.edit().putLong(KEY_LAST_SYNC, now).apply()
+        _lastSyncTime.value = now
+    }
+
+    fun syncGoogleTastes() {
+        val now = System.currentTimeMillis()
+        prefs.edit().putLong(KEY_LAST_SYNC, now).apply()
+        _lastSyncTime.value = now
     }
 
     fun syncAllTastes() {

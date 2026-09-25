@@ -204,6 +204,15 @@ class DiscoverViewModel(
         }
     }
 
+    fun playShuffled(queue: List<Track>) {
+        playbackManager.playQueueShuffled(queue)
+        playbackManager.playbackState.value.currentTrack?.let { track ->
+            viewModelScope.launch {
+                repository.recordRecent(track)
+            }
+        }
+    }
+
     fun toggleFavorite(track: Track) {
         viewModelScope.launch {
             repository.toggleFavorite(track)

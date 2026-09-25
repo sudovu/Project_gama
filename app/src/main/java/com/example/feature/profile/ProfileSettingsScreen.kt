@@ -148,6 +148,8 @@ fun ProfileSettingsScreen(
     val googleEmail by tasteManager.googleEmail.collectAsStateWithLifecycle()
     val youtubeTastes by tasteManager.youtubeTastes.collectAsStateWithLifecycle()
     val isSyncing by tasteManager.isSyncing.collectAsStateWithLifecycle()
+    val isSpotifySyncing by tasteManager.isSpotifySyncing.collectAsStateWithLifecycle()
+    val isGoogleSyncing by tasteManager.isGoogleSyncing.collectAsStateWithLifecycle()
 
     val developerName = "VHUWON MATHERS"
     val developerEmail = "vhuwonmathers@gmail.com"
@@ -401,7 +403,7 @@ fun ProfileSettingsScreen(
                                     color = GammaTextPrimary
                                 )
                                 Text(
-                                    text = "Version 2.0.0 (Build 20)",
+                                    text = "Version 2.1.0 (Build 21)",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = GammaPrimary
                                 )
@@ -1006,25 +1008,25 @@ fun ProfileSettingsScreen(
                                         onClick = {
                                             if (youtubeProvider != null) {
                                                 coroutineScope.launch {
-                                                    tasteManager.syncLiveTastes(youtubeProvider)
+                                                    tasteManager.syncSpotifyLiveTastes(youtubeProvider)
                                                     Toast.makeText(context, "Spotify tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
                                                 }
                                             } else {
-                                                tasteManager.syncAllTastes()
+                                                tasteManager.syncSpotifyTastes()
                                                 Toast.makeText(context, "Spotify tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
                                             }
                                         },
-                                        enabled = !isSyncing,
+                                        enabled = !isSpotifySyncing,
                                         modifier = Modifier.weight(1f).height(38.dp),
                                         shape = RoundedCornerShape(10.dp)
                                     ) {
-                                        if (isSyncing) {
+                                        if (isSpotifySyncing) {
                                             CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp, color = Color(0xFF1DB954))
                                         } else {
                                             Icon(imageVector = Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF1DB954))
                                         }
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text(if (isSyncing) "Syncing..." else "Sync Taste", style = MaterialTheme.typography.labelSmall, color = Color(0xFF1DB954))
+                                        Text(if (isSpotifySyncing) "Syncing..." else "Sync Taste", style = MaterialTheme.typography.labelSmall, color = Color(0xFF1DB954))
                                     }
                                     OutlinedButton(
                                         onClick = {
@@ -1218,25 +1220,25 @@ fun ProfileSettingsScreen(
                                         onClick = {
                                             if (youtubeProvider != null) {
                                                 coroutineScope.launch {
-                                                    tasteManager.syncLiveTastes(youtubeProvider)
+                                                    tasteManager.syncYouTubeLiveTastes(youtubeProvider)
                                                     Toast.makeText(context, "YouTube Music tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
                                                 }
                                             } else {
-                                                tasteManager.syncAllTastes()
+                                                tasteManager.syncGoogleTastes()
                                                 Toast.makeText(context, "YouTube Music tastes updated & applied to Discover!", Toast.LENGTH_SHORT).show()
                                             }
                                         },
-                                        enabled = !isSyncing,
+                                        enabled = !isGoogleSyncing,
                                         modifier = Modifier.weight(1f).height(38.dp),
                                         shape = RoundedCornerShape(10.dp)
                                     ) {
-                                        if (isSyncing) {
+                                        if (isGoogleSyncing) {
                                             CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp, color = Color(0xFFFF4D4D))
                                         } else {
                                             Icon(imageVector = Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFFFF4D4D))
                                         }
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text(if (isSyncing) "Syncing..." else "Sync Taste", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF4D4D))
+                                        Text(if (isGoogleSyncing) "Syncing..." else "Sync Taste", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF4D4D))
                                     }
                                     OutlinedButton(
                                         onClick = {
