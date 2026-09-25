@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.History
@@ -491,11 +492,20 @@ fun LibraryScreen(
                                 icon = Icons.AutoMirrored.Filled.QueueMusic
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            GammaPrimaryButton(
-                                text = "Create Playlist",
-                                icon = Icons.Default.Add,
-                                onClick = { showCreateDialog = true }
-                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                GammaPrimaryButton(
+                                    text = "Create Playlist",
+                                    icon = Icons.Default.Add,
+                                    onClick = { showCreateDialog = true }
+                                )
+                                GammaSecondaryButton(
+                                    text = "Import Playlist",
+                                    icon = Icons.Default.CloudDownload,
+                                    onClick = { showImportDialog = true }
+                                )
+                            }
                         }
                     } else {
                         LazyColumn(
@@ -504,10 +514,34 @@ fun LibraryScreen(
                                 .testTag("user_playlists_list"),
                             contentPadding = PaddingValues(bottom = 120.dp)
                         ) {
+                            item {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    GammaPrimaryButton(
+                                        text = "Create Playlist",
+                                        icon = Icons.Default.Add,
+                                        onClick = { showCreateDialog = true },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    GammaSecondaryButton(
+                                        text = "Import Playlist",
+                                        icon = Icons.Default.CloudDownload,
+                                        onClick = { showImportDialog = true },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                            }
+
                             items(uiState.playlists, key = { it.id }) { playlist ->
                                 UserPlaylistRow(
                                     playlist = playlist,
-                                    onClick = { onPlaylistClick(playlist.id) }
+                                    onClick = { onPlaylistClick(playlist.id) },
+                                    onDownloadClick = { viewModel.downloadPlaylist(playlist.id) }
                                 )
                             }
                         }
@@ -623,7 +657,8 @@ fun LibraryScreen(
 @Composable
 private fun UserPlaylistRow(
     playlist: Playlist,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDownloadClick: (() -> Unit)? = null
 ) {
     Row(
         modifier = Modifier
@@ -656,6 +691,19 @@ private fun UserPlaylistRow(
                 style = MaterialTheme.typography.bodyMedium,
                 color = GammaTextSecondary
             )
+        }
+
+        if (onDownloadClick != null) {
+            IconButton(
+                onClick = onDownloadClick,
+                modifier = Modifier.testTag("download_playlist_${playlist.id}")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Download,
+                    contentDescription = "Download entire playlist",
+                    tint = GammaPrimary
+                )
+            }
         }
     }
 }

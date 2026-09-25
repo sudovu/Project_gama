@@ -189,6 +189,18 @@ class LibraryViewModel(
         }
     }
 
+    fun downloadPlaylist(playlistId: String) {
+        viewModelScope.launch {
+            repository.getPlaylist(playlistId).collect { result ->
+                result.onSuccess { playlist ->
+                    playlist.tracks.forEach { track ->
+                        playbackManager.downloadTrack(track)
+                    }
+                }
+            }
+        }
+    }
+
     fun clearHistory() {
         viewModelScope.launch {
             repository.clearHistory()

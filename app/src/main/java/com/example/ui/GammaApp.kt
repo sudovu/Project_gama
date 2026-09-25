@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -175,7 +176,8 @@ fun GammaApp(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(GammaBackground)
+                            .background(GammaSurfaceElevated)
+                            .navigationBarsPadding()
                     ) {
                         // Floating docked mini-player
                         GammaMiniPlayer(
@@ -197,9 +199,10 @@ fun GammaApp(
                             containerColor = GammaSurfaceElevated,
                             contentColor = GammaTextPrimary,
                             tonalElevation = 8.dp,
+                            windowInsets = WindowInsets(0, 0, 0, 0),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(64.dp)
+                                .height(58.dp)
                                 .border(1.dp, GammaDivider.copy(alpha = 0.5f))
                         ) {
                             bottomNavItems.forEach { (screen, icon) ->

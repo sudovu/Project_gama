@@ -96,6 +96,19 @@ class PlaylistViewModel(
         }
     }
 
+    fun addTrack(track: Track) {
+        viewModelScope.launch {
+            repository.addTrackToPlaylist(playlistId, track)
+            loadPlaylist()
+        }
+    }
+
+    fun downloadAll(tracks: List<Track>) {
+        tracks.forEach { track ->
+            playbackManager.downloadTrack(track)
+        }
+    }
+
     fun deletePlaylist(onComplete: () -> Unit) {
         viewModelScope.launch {
             repository.deletePlaylist(playlistId)

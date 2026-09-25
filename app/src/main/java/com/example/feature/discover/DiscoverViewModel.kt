@@ -213,6 +213,25 @@ class DiscoverViewModel(
         }
     }
 
+    val userPlaylists: StateFlow<List<com.example.domain.model.Playlist>> = repository.getUserPlaylists().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    fun addTrackToPlaylist(playlistId: String, track: Track) {
+        viewModelScope.launch {
+            repository.addTrackToPlaylist(playlistId, track)
+        }
+    }
+
+    fun createPlaylistAndAddTrack(name: String, track: Track) {
+        viewModelScope.launch {
+            val playlistId = repository.createPlaylist(name, "Personal soundwave playlist")
+            repository.addTrackToPlaylist(playlistId, track)
+        }
+    }
+
     fun toggleFavorite(track: Track) {
         viewModelScope.launch {
             repository.toggleFavorite(track)

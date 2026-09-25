@@ -55,6 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.core.ui.GammaAddToPlaylistDialog
 import com.example.core.ui.GammaAlbumCard
 import com.example.core.ui.GammaArtistCard
 import com.example.core.ui.GammaErrorState
@@ -128,6 +129,24 @@ fun DiscoverScreen(
         GammaInternetAccessDialog(
             onDismiss = { showInternetDialog = false },
             onRetry = { viewModel.loadFeed() }
+        )
+    }
+
+    var trackForPlaylist by remember { mutableStateOf<Track?>(null) }
+    val userPlaylists by viewModel.userPlaylists.collectAsStateWithLifecycle()
+
+    if (trackForPlaylist != null) {
+        val selected = trackForPlaylist!!
+        GammaAddToPlaylistDialog(
+            track = selected,
+            userPlaylists = userPlaylists,
+            onDismiss = { trackForPlaylist = null },
+            onAddToPlaylist = { playlistId ->
+                viewModel.addTrackToPlaylist(playlistId, selected)
+            },
+            onCreatePlaylistAndAdd = { name ->
+                viewModel.createPlaylistAndAddTrack(name, selected)
+            }
         )
     }
 
@@ -383,68 +402,6 @@ fun DiscoverScreen(
                             }
                         }
 
-                        // Spotify Taste-Adapted Soundwaves
-                        if (isSpotifyLinked && spotifyTracks.isNotEmpty()) {
-                            item {
-                                GammaSectionHeader(
-                                    category = "Spotify Sync (${spotifyTastes.take(2).joinToString(", ")})",
-                                    title = "Taste Profile Matches",
-                                    actionText = if (isSpotifySyncing) "Syncing..." else "Sync",
-                                    onActionClick = {
-                                        if (youtubeProvider != null && !isSpotifySyncing) {
-                                            coroutineScope.launch {
-                                                tasteManager.syncSpotifyLiveTastes(youtubeProvider)
-                                            }
-                                        }
-                                    }
-                                )
-                                LazyRow(
-                                    contentPadding = PaddingValues(horizontal = 16.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    modifier = Modifier.testTag("spotify_taste_row")
-                                ) {
-                                    items(spotifyTracks, key = { "spotify_${it.id}" }) { track ->
-                                        GammaQuickPickCard(
-                                            track = track,
-                                            onClick = { onTrackClick(track, spotifyTracks) }
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(16.dp))
-                            }
-                        }
-
-                        // YouTube Music Taste-Adapted Resonances
-                        if (isGoogleLinked && ytTracks.isNotEmpty()) {
-                            item {
-                                GammaSectionHeader(
-                                    category = "YouTube Music (${youtubeTastes.take(2).joinToString(", ")})",
-                                    title = "Resonances For You",
-                                    actionText = if (isGoogleSyncing) "Syncing..." else "Sync",
-                                    onActionClick = {
-                                        if (youtubeProvider != null && !isGoogleSyncing) {
-                                            coroutineScope.launch {
-                                                tasteManager.syncYouTubeLiveTastes(youtubeProvider)
-                                            }
-                                        }
-                                    }
-                                )
-                                LazyRow(
-                                    contentPadding = PaddingValues(horizontal = 16.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    modifier = Modifier.testTag("youtube_taste_row")
-                                ) {
-                                    items(ytTracks, key = { "yt_${it.id}" }) { track ->
-                                        GammaQuickPickCard(
-                                            track = track,
-                                            onClick = { onTrackClick(track, ytTracks) }
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(16.dp))
-                            }
-                        }
-
                         // Continue Listening (Recent)
                         if (state.recentTracks.isNotEmpty()) {
                             item {
@@ -492,11 +449,17 @@ fun DiscoverScreen(
                             }
                         }
 
-                        // Trending Signals (Track List)
+                        // Trending Signals (Track List) with direct Shuffle button
                         item {
                             GammaSectionHeader(
                                 category = "Featured Tracks",
-                                title = "Trending Music"
+                                title = "Trending Music",
+                                actionText = "Shuffle",
+                                onActionClick = {
+                                    if (displayedTracks.isNotEmpty()) {
+                                        viewModel.playShuffled(displayedTracks)
+                                    }
+                                }
                             )
                         }
 
@@ -509,7 +472,8 @@ fun DiscoverScreen(
                                     isCurrentTrack = isCurr,
                                     isPlaying = isPlaying && isCurr,
                                     onClick = { onTrackClick(track, displayedTracks) },
-                                    onFavoriteToggle = { viewModel.toggleFavorite(track) }
+                                    onFavoriteToggle = { viewModel.toggleFavorite(track) },
+                                    onMoreOptionsClick = { trackForPlaylist = track }
                                 )
                             }
                         }

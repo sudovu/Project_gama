@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AlertDialog
@@ -169,7 +170,7 @@ fun PlaylistScreen(
 
                                 if (playlist.tracks.isNotEmpty()) {
                                     Row(
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         GammaPrimaryButton(
@@ -184,6 +185,13 @@ fun PlaylistScreen(
                                             icon = Icons.Default.Shuffle,
                                             onClick = { viewModel.playAll(playlist.tracks, shuffle = true) },
                                             testTag = "playlist_shuffle_button"
+                                        )
+
+                                        GammaSecondaryButton(
+                                            text = "Download All",
+                                            icon = Icons.Default.Download,
+                                            onClick = { viewModel.downloadAll(playlist.tracks) },
+                                            testTag = "playlist_download_all_button"
                                         )
                                     }
                                 }

@@ -24,11 +24,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
@@ -59,6 +62,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -152,7 +156,7 @@ fun ProfileSettingsScreen(
     val isGoogleSyncing by tasteManager.isGoogleSyncing.collectAsStateWithLifecycle()
 
     val developerName = "VHUWON MATHERS"
-    val developerEmail = "vhuwonmathers@gmail.com"
+    val developerEmail = "info@gautambhuwan.com.np"
     val developerUsername = "sudovu"
 
     var showSpotifyConnectDialog by remember { mutableStateOf(false) }
@@ -403,7 +407,7 @@ fun ProfileSettingsScreen(
                                     color = GammaTextPrimary
                                 )
                                 Text(
-                                    text = "Version 2.1.0 (Build 21)",
+                                    text = "Version 2.2.0 (Build 22)",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = GammaPrimary
                                 )
@@ -562,6 +566,191 @@ fun ProfileSettingsScreen(
                                             .background(preset.backgroundColor)
                                             .border(1.dp, GammaDivider, CircleShape)
                                     )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ==========================================
+            // CUSTOM FREQUENCY COLOR ACCENT
+            // ==========================================
+            item {
+                Spacer(modifier = Modifier.height(14.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Palette,
+                            contentDescription = null,
+                            tint = GammaPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "CUSTOM COLOR ACCENT",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                letterSpacing = 1.2.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = GammaPrimary
+                        )
+                    }
+                    if (com.example.ui.theme.GammaThemeManager.customAccentColor != null) {
+                        Text(
+                            text = "CUSTOM ACTIVE",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.sp
+                            ),
+                            color = GammaPrimary,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(GammaPrimary.copy(alpha = 0.2f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(GammaSurfaceElevated)
+                        .border(1.dp, GammaDivider, RoundedCornerShape(16.dp))
+                        .padding(16.dp)
+                ) {
+                    Column {
+                        Text(
+                            text = "Pick a cyber frequency hue or enter any custom hex color code (#RRGGBB) to dynamically tint all primary buttons, glows, and auric spectrums.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = GammaTextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Swatch Row
+                        val swatches = listOf(
+                            Pair("Aurora", Color(0xFF00F5D4)),
+                            Pair("Cyan", Color(0xFF00E5FF)),
+                            Pair("Violet", Color(0xFF9D4EDD)),
+                            Pair("Ultraviolet", Color(0xFF7C3AED)),
+                            Pair("Magenta", Color(0xFFFF007F)),
+                            Pair("Sunset", Color(0xFFF59E0B)),
+                            Pair("Crimson", Color(0xFFEF4444)),
+                            Pair("Emerald", Color(0xFF10B981)),
+                            Pair("Sapphire", Color(0xFF2563EB)),
+                            Pair("Lime", Color(0xFF84CC16))
+                        )
+
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(swatches) { (name, color) ->
+                                val isSelected = com.example.ui.theme.GammaThemeManager.customAccentColor == color
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable {
+                                            com.example.ui.theme.GammaThemeManager.setCustomColor(color, context)
+                                            Toast.makeText(context, "$name accent applied", Toast.LENGTH_SHORT).show()
+                                        }
+                                        .padding(4.dp)
+                                        .testTag("color_swatch_${name.lowercase()}")
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(color)
+                                            .border(
+                                                width = if (isSelected) 3.dp else 1.dp,
+                                                color = if (isSelected) Color.White else GammaDivider,
+                                                shape = CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = Color.Black,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = name,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                        color = if (isSelected) GammaPrimary else GammaTextMuted
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Custom Hex Input Row
+                        var customHexInput by remember { mutableStateOf("") }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = customHexInput,
+                                onValueChange = { customHexInput = it },
+                                placeholder = { Text("#RRGGBB", color = GammaTextMuted, fontSize = 12.sp) },
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = GammaPrimary,
+                                    unfocusedBorderColor = GammaDivider,
+                                    focusedTextColor = GammaTextPrimary,
+                                    unfocusedTextColor = GammaTextPrimary
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("custom_hex_input")
+                            )
+
+                            Button(
+                                onClick = {
+                                    try {
+                                        val hex = if (customHexInput.startsWith("#")) customHexInput else "#$customHexInput"
+                                        val parsed = Color(android.graphics.Color.parseColor(hex))
+                                        com.example.ui.theme.GammaThemeManager.setCustomColor(parsed, context)
+                                        Toast.makeText(context, "Custom color applied: $hex", Toast.LENGTH_SHORT).show()
+                                    } catch (_: Exception) {
+                                        Toast.makeText(context, "Invalid hex code. Use e.g. #FF007F", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = GammaPrimary),
+                                shape = RoundedCornerShape(10.dp),
+                                enabled = customHexInput.isNotBlank(),
+                                modifier = Modifier.testTag("apply_custom_color_button")
+                            ) {
+                                Text("Apply", color = GammaSurfaceElevated, fontWeight = FontWeight.Bold)
+                            }
+
+                            if (com.example.ui.theme.GammaThemeManager.customAccentColor != null) {
+                                Button(
+                                    onClick = {
+                                        com.example.ui.theme.GammaThemeManager.clearCustomColor(context)
+                                        Toast.makeText(context, "Reset to preset", Toast.LENGTH_SHORT).show()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = GammaSurfaceHighlight),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.testTag("reset_custom_color_button")
+                                ) {
+                                    Text("Reset", color = GammaTextSecondary)
                                 }
                             }
                         }
