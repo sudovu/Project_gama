@@ -597,7 +597,116 @@ object CuratedFrequencies {
             genre = "Classics",
             frequencyHz = 432,
             playCount = 1100000000L
-        )
+        ),
+
+        // --- Hip-Hop ---
+        Track("trk_hh_01", "HUMBLE.", "Kendrick Lamar", durationSeconds = 177, artworkUrl = "https://img.youtube.com/vi/tvTRZJ-4EyI/hqdefault.jpg", youtubeVideoId = "tvTRZJ-4EyI", genre = "Hip-Hop", frequencyHz = 432, playCount = 1900000000L),
+        Track("trk_hh_02", "SICKO MODE", "Travis Scott", durationSeconds = 312, artworkUrl = "https://img.youtube.com/vi/6ONRF7h3KU8/hqdefault.jpg", youtubeVideoId = "6ONRF7h3KU8", genre = "Hip-Hop", frequencyHz = 432, playCount = 1700000000L),
+        Track("trk_hh_03", "God's Plan", "Drake", durationSeconds = 199, artworkUrl = "https://img.youtube.com/vi/xpVfcZ0ZcFM/hqdefault.jpg", youtubeVideoId = "xpVfcZ0ZcFM", genre = "Hip-Hop", frequencyHz = 432, playCount = 1500000000L),
+        Track("trk_hh_04", "Sunflower", "Post Malone & Swae Lee", durationSeconds = 158, artworkUrl = "https://img.youtube.com/vi/ApXoWvfEYVU/hqdefault.jpg", youtubeVideoId = "ApXoWvfEYVU", genre = "Hip-Hop", frequencyHz = 432, playCount = 2200000000L),
+        Track("trk_hh_05", "In Da Club", "50 Cent", durationSeconds = 193, artworkUrl = "https://img.youtube.com/vi/5qm8PH4xAss/hqdefault.jpg", youtubeVideoId = "5qm8PH4xAss", genre = "Hip-Hop", frequencyHz = 432, playCount = 1950000000L),
+        Track("trk_hh_06", "California Love", "2Pac ft. Dr. Dre", durationSeconds = 285, artworkUrl = "https://img.youtube.com/vi/5wBT4ggm5OU/hqdefault.jpg", youtubeVideoId = "5wBT4ggm5OU", genre = "Hip-Hop", frequencyHz = 432, playCount = 750000000L),
+        Track("trk_hh_07", "FE!N", "Travis Scott ft. Playboi Carti", durationSeconds = 192, artworkUrl = "https://img.youtube.com/vi/B9synWjqBn8/hqdefault.jpg", youtubeVideoId = "B9synWjqBn8", genre = "Hip-Hop", frequencyHz = 432, playCount = 680000000L),
+
+        // --- Rock & Metal ---
+        Track("trk_rm_01", "Enter Sandman", "Metallica", durationSeconds = 332, artworkUrl = "https://img.youtube.com/vi/CD-E-LDc384/hqdefault.jpg", youtubeVideoId = "CD-E-LDc384", genre = "Rock & Metal", frequencyHz = 432, playCount = 1600000000L),
+        Track("trk_rm_02", "Master of Puppets", "Metallica", durationSeconds = 515, artworkUrl = "https://img.youtube.com/vi/K6LA7v1PApU/hqdefault.jpg", youtubeVideoId = "K6LA7v1PApU", genre = "Rock & Metal", frequencyHz = 432, playCount = 1100000000L),
+        Track("trk_rm_03", "Back in Black", "AC/DC", durationSeconds = 255, artworkUrl = "https://img.youtube.com/vi/pAgnJDJN4VA/hqdefault.jpg", youtubeVideoId = "pAgnJDJN4VA", genre = "Rock & Metal", frequencyHz = 432, playCount = 1450000000L),
+        Track("trk_rm_04", "Sweet Child O' Mine", "Guns N' Roses", durationSeconds = 303, artworkUrl = "https://img.youtube.com/vi/1w7OgIMMRc4/hqdefault.jpg", youtubeVideoId = "1w7OgIMMRc4", genre = "Rock & Metal", frequencyHz = 432, playCount = 1700000000L),
+        Track("trk_rm_05", "Smells Like Teen Spirit", "Nirvana", durationSeconds = 301, artworkUrl = "https://img.youtube.com/vi/hTWKbfoikeg/hqdefault.jpg", youtubeVideoId = "hTWKbfoikeg", genre = "Rock & Metal", frequencyHz = 432, playCount = 1850000000L),
+        Track("trk_rm_06", "Everlong", "Foo Fighters", durationSeconds = 250, artworkUrl = "https://img.youtube.com/vi/eBG7P-K-r1Y/hqdefault.jpg", youtubeVideoId = "eBG7P-K-r1Y", genre = "Rock & Metal", frequencyHz = 432, playCount = 980000000L),
+        Track("trk_rm_07", "Paranoid", "Black Sabbath", durationSeconds = 172, artworkUrl = "https://img.youtube.com/vi/0qanF-91aJo/hqdefault.jpg", youtubeVideoId = "0qanF-91aJo", genre = "Rock & Metal", frequencyHz = 432, playCount = 820000000L),
+
+        // --- Nu Metal & Alt-Rock ---
+        Track("trk_nm_01", "Chop Suey!", "System Of A Down", durationSeconds = 210, artworkUrl = "https://img.youtube.com/vi/CSvFpBOe8eY/hqdefault.jpg", youtubeVideoId = "CSvFpBOe8eY", genre = "Nu Metal & Alt-Rock", frequencyHz = 432, playCount = 1400000000L),
+        Track("trk_nm_02", "Toxicity", "System Of A Down", durationSeconds = 219, artworkUrl = "https://img.youtube.com/vi/iywaBOMvYLI/hqdefault.jpg", youtubeVideoId = "iywaBOMvYLI", genre = "Nu Metal & Alt-Rock", frequencyHz = 432, playCount = 950000000L),
+        Track("trk_nm_03", "Bring Me To Life", "Evanescence", durationSeconds = 236, artworkUrl = "https://img.youtube.com/vi/3YxaaGgTQYM/hqdefault.jpg", youtubeVideoId = "3YxaaGgTQYM", genre = "Nu Metal & Alt-Rock", frequencyHz = 432, playCount = 1350000000L),
+        Track("trk_nm_04", "The Emptiness Machine", "Linkin Park", durationSeconds = 190, artworkUrl = "https://img.youtube.com/vi/SRXH9AbT280/hqdefault.jpg", youtubeVideoId = "SRXH9AbT280", genre = "Nu Metal & Alt-Rock", frequencyHz = 432, playCount = 380000000L),
+        Track("trk_nm_05", "Freak on a Leash", "Korn", durationSeconds = 255, artworkUrl = "https://img.youtube.com/vi/jRGrNDV2NWo/hqdefault.jpg", youtubeVideoId = "jRGrNDV2NWo", genre = "Nu Metal & Alt-Rock", frequencyHz = 432, playCount = 520000000L),
+        Track("trk_nm_06", "Change (In the House of Flies)", "Deftones", durationSeconds = 299, artworkUrl = "https://img.youtube.com/vi/WPpDyIU588U/hqdefault.jpg", youtubeVideoId = "WPpDyIU588U", genre = "Nu Metal & Alt-Rock", frequencyHz = 432, playCount = 650000000L),
+        Track("trk_nm_07", "Last Resort", "Papa Roach", durationSeconds = 200, artworkUrl = "https://img.youtube.com/vi/j0lSpNhoEQo/hqdefault.jpg", youtubeVideoId = "j0lSpNhoEQo", genre = "Nu Metal & Alt-Rock", frequencyHz = 432, playCount = 1100000000L),
+
+        // --- Pop Hits ---
+        Track("trk_pop_01", "Espresso", "Sabrina Carpenter", durationSeconds = 175, artworkUrl = "https://img.youtube.com/vi/eVli-tstM5E/hqdefault.jpg", youtubeVideoId = "eVli-tstM5E", genre = "Pop Hits", frequencyHz = 432, playCount = 1450000000L),
+        Track("trk_pop_02", "Birds of a Feather", "Billie Eilish", durationSeconds = 198, artworkUrl = "https://img.youtube.com/vi/V9PVRfjEBTI/hqdefault.jpg", youtubeVideoId = "V9PVRfjEBTI", genre = "Pop Hits", frequencyHz = 432, playCount = 1380000000L),
+        Track("trk_pop_03", "Die With A Smile", "Lady Gaga & Bruno Mars", durationSeconds = 251, artworkUrl = "https://img.youtube.com/vi/b_pD_J86NfQ/hqdefault.jpg", youtubeVideoId = "b_pD_J86NfQ", genre = "Pop Hits", frequencyHz = 432, playCount = 1200000000L),
+        Track("trk_pop_04", "Levitating", "Dua Lipa", durationSeconds = 203, artworkUrl = "https://img.youtube.com/vi/TUVcZfQe-Kw/hqdefault.jpg", youtubeVideoId = "TUVcZfQe-Kw", genre = "Pop Hits", frequencyHz = 432, playCount = 1980000000L),
+        Track("trk_pop_05", "Cruel Summer", "Taylor Swift", durationSeconds = 178, artworkUrl = "https://img.youtube.com/vi/ic8j13piAhQ/hqdefault.jpg", youtubeVideoId = "ic8j13piAhQ", genre = "Pop Hits", frequencyHz = 432, playCount = 2100000000L),
+        Track("trk_pop_06", "vampire", "Olivia Rodrigo", durationSeconds = 220, artworkUrl = "https://img.youtube.com/vi/RlPNh_PBZb4/hqdefault.jpg", youtubeVideoId = "RlPNh_PBZb4", genre = "Pop Hits", frequencyHz = 432, playCount = 1250000000L),
+        Track("trk_pop_07", "As It Was", "Harry Styles", durationSeconds = 167, artworkUrl = "https://img.youtube.com/vi/H5v3kku4y6Q/hqdefault.jpg", youtubeVideoId = "H5v3kku4y6Q", genre = "Pop Hits", frequencyHz = 432, playCount = 2800000000L),
+
+        // --- Electronic & EDM ---
+        Track("trk_edm_01", "Levels", "Avicii", durationSeconds = 198, artworkUrl = "https://img.youtube.com/vi/_ovdm2yX4MA/hqdefault.jpg", youtubeVideoId = "_ovdm2yX4MA", genre = "Electronic & EDM", frequencyHz = 432, playCount = 1100000000L),
+        Track("trk_edm_02", "Wake Me Up", "Avicii", durationSeconds = 247, artworkUrl = "https://img.youtube.com/vi/IcrbM1l_BoI/hqdefault.jpg", youtubeVideoId = "IcrbM1l_BoI", genre = "Electronic & EDM", frequencyHz = 432, playCount = 2400000000L),
+        Track("trk_edm_03", "Closer", "The Chainsmokers ft. Halsey", durationSeconds = 245, artworkUrl = "https://img.youtube.com/vi/PT2_F-1esPk/hqdefault.jpg", youtubeVideoId = "PT2_F-1esPk", genre = "Electronic & EDM", frequencyHz = 432, playCount = 2900000000L),
+        Track("trk_edm_04", "Get Lucky", "Daft Punk ft. Pharrell Williams", durationSeconds = 248, artworkUrl = "https://img.youtube.com/vi/5NV6Rdv1a3I/hqdefault.jpg", youtubeVideoId = "5NV6Rdv1a3I", genre = "Electronic & EDM", frequencyHz = 432, playCount = 1800000000L),
+        Track("trk_edm_05", "Summer", "Calvin Harris", durationSeconds = 224, artworkUrl = "https://img.youtube.com/vi/ebXbLfLACGM/hqdefault.jpg", youtubeVideoId = "ebXbLfLACGM", genre = "Electronic & EDM", frequencyHz = 432, playCount = 1650000000L),
+        Track("trk_edm_06", "Faded", "Alan Walker", durationSeconds = 212, artworkUrl = "https://img.youtube.com/vi/60ItHLz5WEA/hqdefault.jpg", youtubeVideoId = "60ItHLz5WEA", genre = "Electronic & EDM", frequencyHz = 432, playCount = 3600000000L),
+        Track("trk_edm_07", "Titanium", "David Guetta ft. Sia", durationSeconds = 245, artworkUrl = "https://img.youtube.com/vi/JRfuAukYTKg/hqdefault.jpg", youtubeVideoId = "JRfuAukYTKg", genre = "Electronic & EDM", frequencyHz = 432, playCount = 1750000000L),
+
+        // --- Cyberpunk & Synthwave ---
+        Track("trk_cw_01", "Nightcall", "Kavinsky", durationSeconds = 259, artworkUrl = "https://img.youtube.com/vi/MV_3Dpw-BRY/hqdefault.jpg", youtubeVideoId = "MV_3Dpw-BRY", genre = "Cyberpunk & Synthwave", frequencyHz = 432, playCount = 340000000L),
+        Track("trk_cw_02", "Sunset", "The Midnight", durationSeconds = 326, artworkUrl = "https://img.youtube.com/vi/rDBbaGCCIhk/hqdefault.jpg", youtubeVideoId = "rDBbaGCCIhk", genre = "Cyberpunk & Synthwave", frequencyHz = 432, playCount = 120000000L),
+        Track("trk_cw_03", "Resonance", "HOME", durationSeconds = 212, artworkUrl = "https://img.youtube.com/vi/8GW6sLrK40k/hqdefault.jpg", youtubeVideoId = "8GW6sLrK40k", genre = "Cyberpunk & Synthwave", frequencyHz = 432, playCount = 280000000L),
+        Track("trk_cw_04", "Turbo Killer", "Carpenter Brut", durationSeconds = 208, artworkUrl = "https://img.youtube.com/vi/er416XiUp4g/hqdefault.jpg", youtubeVideoId = "er416XiUp4g", genre = "Cyberpunk & Synthwave", frequencyHz = 432, playCount = 95000000L),
+        Track("trk_cw_05", "Tech Noir", "Gunship", durationSeconds = 297, artworkUrl = "https://img.youtube.com/vi/-EDTbyNeuv0/hqdefault.jpg", youtubeVideoId = "-EDTbyNeuv0", genre = "Cyberpunk & Synthwave", frequencyHz = 432, playCount = 80000000L),
+        Track("trk_cw_06", "Acid Rain", "Lorn", durationSeconds = 179, artworkUrl = "https://img.youtube.com/vi/nxg4C365LbQ/hqdefault.jpg", youtubeVideoId = "nxg4C365LbQ", genre = "Cyberpunk & Synthwave", frequencyHz = 432, playCount = 110000000L),
+        Track("trk_cw_07", "Running in the Night", "FM-84", durationSeconds = 270, artworkUrl = "https://img.youtube.com/vi/vskZkWqI28o/hqdefault.jpg", youtubeVideoId = "vskZkWqI28o", genre = "Cyberpunk & Synthwave", frequencyHz = 432, playCount = 88000000L),
+
+        // --- 432Hz & Ambient ---
+        Track("trk_hz_01", "Weightless (432Hz)", "Marconi Union", durationSeconds = 485, artworkUrl = "https://img.youtube.com/vi/UfcAVejslrU/hqdefault.jpg", youtubeVideoId = "UfcAVejslrU", genre = "432Hz & Ambient", frequencyHz = 432, playCount = 120000000L),
+        Track("trk_hz_02", "An Ending (Ascent)", "Brian Eno", durationSeconds = 265, artworkUrl = "https://img.youtube.com/vi/aKw5mbcE7VY/hqdefault.jpg", youtubeVideoId = "aKw5mbcE7VY", genre = "432Hz & Ambient", frequencyHz = 432, playCount = 95000000L),
+        Track("trk_hz_03", "Sweden (432Hz Healing)", "C418", durationSeconds = 215, artworkUrl = "https://img.youtube.com/vi/aBkTkxKDduc/hqdefault.jpg", youtubeVideoId = "aBkTkxKDduc", genre = "432Hz & Ambient", frequencyHz = 432, playCount = 210000000L),
+        Track("trk_hz_04", "Nuvole Bianche", "Ludovico Einaudi", durationSeconds = 358, artworkUrl = "https://img.youtube.com/vi/kcihcYEOeic/hqdefault.jpg", youtubeVideoId = "kcihcYEOeic", genre = "432Hz & Ambient", frequencyHz = 432, playCount = 380000000L),
+        Track("trk_hz_05", "On The Nature Of Daylight", "Max Richter", durationSeconds = 371, artworkUrl = "https://img.youtube.com/vi/rVN1B-tU4nA/hqdefault.jpg", youtubeVideoId = "rVN1B-tU4nA", genre = "432Hz & Ambient", frequencyHz = 432, playCount = 140000000L),
+        Track("trk_hz_06", "Photosynthesis", "Carbon Based Lifeforms", durationSeconds = 341, artworkUrl = "https://img.youtube.com/vi/tL4P_wT-uO4/hqdefault.jpg", youtubeVideoId = "tL4P_wT-uO4", genre = "432Hz & Ambient", frequencyHz = 432, playCount = 65000000L),
+
+        // --- Lo-Fi & Chill ---
+        Track("trk_lf_01", "Steven Universe Chill", "L.Dre", durationSeconds = 160, artworkUrl = "https://img.youtube.com/vi/M3e2hWbJ_YQ/hqdefault.jpg", youtubeVideoId = "M3e2hWbJ_YQ", genre = "Lo-Fi & Chill", frequencyHz = 432, playCount = 85000000L),
+        Track("trk_lf_02", "lonely", "idealism", durationSeconds = 135, artworkUrl = "https://img.youtube.com/vi/p7dM_a3_eQU/hqdefault.jpg", youtubeVideoId = "p7dM_a3_eQU", genre = "Lo-Fi & Chill", frequencyHz = 432, playCount = 92000000L),
+        Track("trk_lf_03", "Affection", "Jinsang", durationSeconds = 142, artworkUrl = "https://img.youtube.com/vi/C6f80GgP49s/hqdefault.jpg", youtubeVideoId = "C6f80GgP49s", genre = "Lo-Fi & Chill", frequencyHz = 432, playCount = 110000000L),
+        Track("trk_lf_04", "i'm closing my eyes", "potsu ft. Shiloh", durationSeconds = 131, artworkUrl = "https://img.youtube.com/vi/X51XQ2o3-E4/hqdefault.jpg", youtubeVideoId = "X51XQ2o3-E4", genre = "Lo-Fi & Chill", frequencyHz = 432, playCount = 240000000L),
+        Track("trk_lf_05", "Sakura Trees", "Saib", durationSeconds = 158, artworkUrl = "https://img.youtube.com/vi/uW3hI_86u10/hqdefault.jpg", youtubeVideoId = "uW3hI_86u10", genre = "Lo-Fi & Chill", frequencyHz = 432, playCount = 95000000L),
+        Track("trk_lf_06", "Roots", "Kupla", durationSeconds = 148, artworkUrl = "https://img.youtube.com/vi/u8_m1gO3Y_0/hqdefault.jpg", youtubeVideoId = "u8_m1gO3Y_0", genre = "Lo-Fi & Chill", frequencyHz = 432, playCount = 58000000L),
+
+        // --- Acoustic & Folk ---
+        Track("trk_af_01", "Let Her Go", "Passenger", durationSeconds = 254, artworkUrl = "https://img.youtube.com/vi/RBumgq5yVrA/hqdefault.jpg", youtubeVideoId = "RBumgq5yVrA", genre = "Acoustic & Folk", frequencyHz = 432, playCount = 3700000000L),
+        Track("trk_af_02", "Riptide", "Vance Joy", durationSeconds = 204, artworkUrl = "https://img.youtube.com/vi/uJ_1HMAGb4k/hqdefault.jpg", youtubeVideoId = "uJ_1HMAGb4k", genre = "Acoustic & Folk", frequencyHz = 432, playCount = 2100000000L),
+        Track("trk_af_03", "Thinking Out Loud", "Ed Sheeran", durationSeconds = 281, artworkUrl = "https://img.youtube.com/vi/lp-EO5I60KA/hqdefault.jpg", youtubeVideoId = "lp-EO5I60KA", genre = "Acoustic & Folk", frequencyHz = 432, playCount = 3800000000L),
+        Track("trk_af_04", "Ho Hey", "The Lumineers", durationSeconds = 163, artworkUrl = "https://img.youtube.com/vi/zvCBSSwgtg4/hqdefault.jpg", youtubeVideoId = "zvCBSSwgtg4", genre = "Acoustic & Folk", frequencyHz = 432, playCount = 1300000000L),
+        Track("trk_af_05", "Little Lion Man", "Mumford & Sons", durationSeconds = 246, artworkUrl = "https://img.youtube.com/vi/lLJf9qJgGcY/hqdefault.jpg", youtubeVideoId = "lLJf9qJgGcY", genre = "Acoustic & Folk", frequencyHz = 432, playCount = 890000000L),
+        Track("trk_af_06", "Stick Season", "Noah Kahan", durationSeconds = 182, artworkUrl = "https://img.youtube.com/vi/0vB3p-0d50E/hqdefault.jpg", youtubeVideoId = "0vB3p-0d50E", genre = "Acoustic & Folk", frequencyHz = 432, playCount = 1100000000L),
+        Track("trk_af_07", "Budapest", "George Ezra", durationSeconds = 201, artworkUrl = "https://img.youtube.com/vi/VHrLPs3_1Wo/hqdefault.jpg", youtubeVideoId = "VHrLPs3_1Wo", genre = "Acoustic & Folk", frequencyHz = 432, playCount = 980000000L),
+
+        // --- R&B & Soul ---
+        Track("trk_rb_01", "Kill Bill", "SZA", durationSeconds = 153, artworkUrl = "https://img.youtube.com/vi/SQnc1Q3DVgo/hqdefault.jpg", youtubeVideoId = "SQnc1Q3DVgo", genre = "R&B & Soul", frequencyHz = 432, playCount = 1850000000L),
+        Track("trk_rb_02", "Thinkin Bout You", "Frank Ocean", durationSeconds = 200, artworkUrl = "https://img.youtube.com/vi/pn1VGytzXus/hqdefault.jpg", youtubeVideoId = "pn1VGytzXus", genre = "R&B & Soul", frequencyHz = 432, playCount = 1200000000L),
+        Track("trk_rb_03", "Best Part", "Daniel Caesar ft. H.E.R.", durationSeconds = 210, artworkUrl = "https://img.youtube.com/vi/hKgl5-lkT8U/hqdefault.jpg", youtubeVideoId = "hKgl5-lkT8U", genre = "R&B & Soul", frequencyHz = 432, playCount = 1350000000L),
+        Track("trk_rb_04", "Heartbreak Anniversary", "Giveon", durationSeconds = 198, artworkUrl = "https://img.youtube.com/vi/d4v24u0_34c/hqdefault.jpg", youtubeVideoId = "d4v24u0_34c", genre = "R&B & Soul", frequencyHz = 432, playCount = 1100000000L),
+        Track("trk_rb_05", "If I Ain't Got You", "Alicia Keys", durationSeconds = 228, artworkUrl = "https://img.youtube.com/vi/Ju8Hr50Ckwk/hqdefault.jpg", youtubeVideoId = "Ju8Hr50Ckwk", genre = "R&B & Soul", frequencyHz = 432, playCount = 920000000L),
+        Track("trk_rb_06", "All of Me", "John Legend", durationSeconds = 269, artworkUrl = "https://img.youtube.com/vi/450p7goxZqg/hqdefault.jpg", youtubeVideoId = "450p7goxZqg", genre = "R&B & Soul", frequencyHz = 432, playCount = 2300000000L),
+
+        // --- Phonk & Drift ---
+        Track("trk_pk_01", "Murder In My Mind", "Kordhell", durationSeconds = 145, artworkUrl = "https://img.youtube.com/vi/w-sQRS-Um98/hqdefault.jpg", youtubeVideoId = "w-sQRS-Um98", genre = "Phonk & Drift", frequencyHz = 432, playCount = 850000000L),
+        Track("trk_pk_02", "Close Eyes", "DVRST", durationSeconds = 132, artworkUrl = "https://img.youtube.com/vi/1-sf_l14u4s/hqdefault.jpg", youtubeVideoId = "1-sf_l14u4s", genre = "Phonk & Drift", frequencyHz = 432, playCount = 680000000L),
+        Track("trk_pk_03", "Sahara", "Hensonn", durationSeconds = 171, artworkUrl = "https://img.youtube.com/vi/u9834kO2_4c/hqdefault.jpg", youtubeVideoId = "u9834kO2_4c", genre = "Phonk & Drift", frequencyHz = 432, playCount = 520000000L),
+        Track("trk_pk_04", "METAMORPHOSIS", "INTERWORLD", durationSeconds = 143, artworkUrl = "https://img.youtube.com/vi/3824u10_49o/hqdefault.jpg", youtubeVideoId = "3824u10_49o", genre = "Phonk & Drift", frequencyHz = 432, playCount = 610000000L),
+        Track("trk_pk_05", "Overdose", "Pharmacist", durationSeconds = 130, artworkUrl = "https://img.youtube.com/vi/b834kO91834/hqdefault.jpg", youtubeVideoId = "b834kO91834", genre = "Phonk & Drift", frequencyHz = 432, playCount = 390000000L),
+
+        // --- Classics ---
+        Track("trk_cl_01", "Billie Jean", "Michael Jackson", durationSeconds = 294, artworkUrl = "https://img.youtube.com/vi/Zi_XLOBDo_Y/hqdefault.jpg", youtubeVideoId = "Zi_XLOBDo_Y", genre = "Classics", frequencyHz = 432, playCount = 1600000000L),
+        Track("trk_cl_02", "Bohemian Rhapsody", "Queen", durationSeconds = 359, artworkUrl = "https://img.youtube.com/vi/fJ9rUzIMcZQ/hqdefault.jpg", youtubeVideoId = "fJ9rUzIMcZQ", genre = "Classics", frequencyHz = 432, playCount = 1800000000L),
+        Track("trk_cl_03", "Yesterday", "The Beatles", durationSeconds = 125, artworkUrl = "https://img.youtube.com/vi/NrgmdOz227I/hqdefault.jpg", youtubeVideoId = "NrgmdOz227I", genre = "Classics", frequencyHz = 432, playCount = 820000000L),
+        Track("trk_cl_04", "Dreams", "Fleetwood Mac", durationSeconds = 257, artworkUrl = "https://img.youtube.com/vi/Y3ywic_-Qgk/hqdefault.jpg", youtubeVideoId = "Y3ywic_-Qgk", genre = "Classics", frequencyHz = 432, playCount = 1450000000L),
+        Track("trk_cl_05", "Africa", "Toto", durationSeconds = 295, artworkUrl = "https://img.youtube.com/vi/FTQbiNvZqaY/hqdefault.jpg", youtubeVideoId = "FTQbiNvZqaY", genre = "Classics", frequencyHz = 432, playCount = 1100000000L),
+        Track("trk_cl_06", "Don't Stop Believin'", "Journey", durationSeconds = 251, artworkUrl = "https://img.youtube.com/vi/1k8craCGghs/hqdefault.jpg", youtubeVideoId = "1k8craCGghs", genre = "Classics", frequencyHz = 432, playCount = 1550000000L),
+
+        // --- Orchestral & Cinematic ---
+        Track("trk_oc_01", "Time", "Hans Zimmer", durationSeconds = 275, artworkUrl = "https://img.youtube.com/vi/RxabLA7UQ9k/hqdefault.jpg", youtubeVideoId = "RxabLA7UQ9k", genre = "Orchestral & Cinematic", frequencyHz = 432, playCount = 280000000L),
+        Track("trk_oc_02", "Interstellar Main Theme", "Hans Zimmer", durationSeconds = 248, artworkUrl = "https://img.youtube.com/vi/UDVtMYqUAyw/hqdefault.jpg", youtubeVideoId = "UDVtMYqUAyw", genre = "Orchestral & Cinematic", frequencyHz = 432, playCount = 350000000L),
+        Track("trk_oc_03", "Concerning Hobbits", "Howard Shore", durationSeconds = 175, artworkUrl = "https://img.youtube.com/vi/_pGaz_qN0cw/hqdefault.jpg", youtubeVideoId = "_pGaz_qN0cw", genre = "Orchestral & Cinematic", frequencyHz = 432, playCount = 190000000L),
+        Track("trk_oc_04", "The Good, the Bad and the Ugly", "Ennio Morricone", durationSeconds = 162, artworkUrl = "https://img.youtube.com/vi/AFa1-kciNw4/hqdefault.jpg", youtubeVideoId = "AFa1-kciNw4", genre = "Orchestral & Cinematic", frequencyHz = 432, playCount = 160000000L),
+        Track("trk_oc_05", "Victory", "Two Steps From Hell", durationSeconds = 320, artworkUrl = "https://img.youtube.com/vi/hKRUPYrAQoE/hqdefault.jpg", youtubeVideoId = "hKRUPYrAQoE", genre = "Orchestral & Cinematic", frequencyHz = 432, playCount = 210000000L)
     )
 
     val albums: List<Album> = listOf(

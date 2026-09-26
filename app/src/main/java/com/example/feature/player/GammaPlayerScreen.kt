@@ -240,16 +240,17 @@ fun GammaPlayerScreen(
                             .padding(horizontal = 14.dp, vertical = 6.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            val isAudioOnly = playback.isAudioOnlyMode || playback.isVideoUnavailable
                             Box(
                                 modifier = Modifier
                                     .size(6.dp)
-                                    .background(GammaPrimary, CircleShape)
+                                    .background(if (isAudioOnly) GammaGlowCyan else GammaPrimary, CircleShape)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "${track?.genre ?: "Music"} • NOW PLAYING",
+                                text = if (isAudioOnly) "${track?.genre ?: "Music"} • AUDIO-ONLY STREAM" else "${track?.genre ?: "Music"} • NOW PLAYING",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = GammaPrimary
+                                color = if (isAudioOnly) GammaGlowCyan else GammaPrimary
                             )
                         }
                     }
@@ -273,6 +274,7 @@ fun GammaPlayerScreen(
 
             // Hero Artwork or YouTube Video Area with Gesture Overlay
             val isYouTubePlaying = track?.let { it.youtubeVideoId.isNotEmpty() && it.localAudioUri.isEmpty() } ?: false
+            val isAudioOnly = playback.isAudioOnlyMode || playback.isVideoUnavailable
             GammaGestureOverlay(
                 onSkipBackward5 = { viewModel.seekBy(-5000L) },
                 onSkipForward5 = { viewModel.seekBy(5000L) },
@@ -291,7 +293,7 @@ fun GammaPlayerScreen(
                     .size(width = 300.dp, height = 210.dp)
                     .scale(if (playback.isPlaying) pulseScale else 1.0f)
             ) {
-                if (!isYouTubePlaying || isVideoClosed) {
+                if (!isYouTubePlaying || isVideoClosed || isAudioOnly) {
                     // Background aura ring
                     Box(
                         modifier = Modifier
@@ -307,7 +309,34 @@ fun GammaPlayerScreen(
                         hasGlowBorder = true
                     )
 
-                    if (isYouTubePlaying && isVideoClosed) {
+                    if (isAudioOnly) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 8.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color.Black.copy(alpha = 0.85f))
+                                .border(1.dp, GammaGlowCyan, RoundedCornerShape(16.dp))
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                .testTag("audio_only_badge")
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.GraphicEq,
+                                    contentDescription = "Audio-Only Mode",
+                                    tint = GammaGlowCyan,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Audio-Only Mode • Video unavailable",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = GammaGlowCyan,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+                    } else if (isYouTubePlaying && isVideoClosed) {
                         Box(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)

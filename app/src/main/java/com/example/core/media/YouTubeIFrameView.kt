@@ -28,7 +28,7 @@ class YouTubeBridgeInterface(private val playbackManager: PlaybackManager) {
 
     @JavascriptInterface
     fun onError(errorCode: Int) {
-        playbackManager.onBridgeError("Playback notice (code: $errorCode).")
+        playbackManager.onBridgeErrorWithCode(errorCode)
     }
 }
 

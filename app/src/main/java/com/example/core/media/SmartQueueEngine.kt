@@ -6,6 +6,38 @@ import kotlin.math.abs
 
 object SmartQueueEngine {
 
+    private val unplayableTrackIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+    fun markTrackUnplayable(idOrVideoId: String) {
+        val clean = idOrVideoId.trim()
+        if (clean.isNotEmpty()) {
+            unplayableTrackIds.add(clean)
+        }
+    }
+
+    fun isTrackPlayable(track: Track?): Boolean {
+        if (track == null) return false
+        val id = track.id.trim()
+        val ytId = track.youtubeVideoId.trim()
+        val local = track.localAudioUri.trim()
+        val stream = track.streamUrl.trim()
+
+        if (id.isNotEmpty() && unplayableTrackIds.contains(id)) return false
+        if (ytId.isNotEmpty() && unplayableTrackIds.contains(ytId)) return false
+        if (ytId.startsWith("invalid") || ytId.startsWith("dummy") || id.startsWith("invalid")) return false
+
+        // Valid local download or remote stream
+        if (local.isNotEmpty() || stream.isNotEmpty()) return true
+
+        // If it has a YouTube video ID, must be 11 characters
+        if (ytId.isNotEmpty()) {
+            return ytId.length == 11
+        }
+
+        // For in-memory / catalog / library tracks without direct stream yet, valid unless marked unplayable
+        return id.isNotEmpty()
+    }
+
     fun analyzePlayedTracks(playedTracks: List<Track>): SmartQueueProfile {
         if (playedTracks.isEmpty()) {
             return SmartQueueProfile(
@@ -164,6 +196,9 @@ object SmartQueueEngine {
         }) {
             return -1000.0
         }
+        if (!isTrackPlayable(candidate)) {
+            return -1000.0
+        }
         if (isCollectionOrMix(candidate.title, candidate.durationSeconds)) {
             return -1000.0
         }
@@ -211,7 +246,7 @@ object SmartQueueEngine {
         currentQueue: List<Track>,
         count: Int = 3
     ): List<Track> {
-        val singlePool = candidatePool.filter { !isCollectionOrMix(it.title, it.durationSeconds) }
+        val singlePool = candidatePool.filter { isTrackPlayable(it) && !isCollectionOrMix(it.title, it.durationSeconds) }
         if (singlePool.isEmpty()) return emptyList()
 
         val profile = analyzePlayedTracks(playedTracks)
@@ -259,7 +294,7 @@ object SmartQueueEngine {
         currentQueue: List<Track>,
         count: Int = 5
     ): List<Track> {
-        val singlePool = candidatePool.filter { !isCollectionOrMix(it.title, it.durationSeconds) }
+        val singlePool = candidatePool.filter { isTrackPlayable(it) && !isCollectionOrMix(it.title, it.durationSeconds) }
         if (singlePool.isEmpty()) return emptyList()
 
         val activeGenre = targetTrack?.genre?.trim().orEmpty()

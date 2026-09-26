@@ -407,4 +407,56 @@ class ExampleRobolectricTest {
         playbackManager.onBridgeTimeUpdate(0f, 0f)
         assertEquals("Position must not reset to 0L on 0s glitch", 15500L, playbackManager.playbackState.value.positionMs)
     }
+
+    @Test
+    fun `verify unplayable tracks are strictly excluded from shuffle`() {
+        val goodTrack1 = Track(id = "trk_good_1", title = "Playable Anthem 1", artist = "Artist 1", durationSeconds = 200, youtubeVideoId = "dQw4w9WgXcQ")
+        val goodTrack2 = Track(id = "trk_good_2", title = "Playable Anthem 2", artist = "Artist 2", durationSeconds = 210, youtubeVideoId = "Zi_XLOBDo_Y")
+        val unplayableTrack = Track(id = "trk_blocked_1", title = "Blocked Track", artist = "Bad", durationSeconds = 200, youtubeVideoId = "invalid_vid_id")
+
+        com.example.core.media.SmartQueueEngine.markTrackUnplayable("trk_blocked_1")
+        assertFalse(com.example.core.media.SmartQueueEngine.isTrackPlayable(unplayableTrack))
+        assertTrue(com.example.core.media.SmartQueueEngine.isTrackPlayable(goodTrack1))
+
+        // Play queue shuffled
+        playbackManager.playQueueShuffled(listOf(goodTrack1, unplayableTrack, goodTrack2))
+        val queue = playbackManager.playbackState.value.queue
+
+        assertTrue("Queue must contain playable tracks", queue.any { it.id == "trk_good_1" } || queue.any { it.id == "trk_good_2" })
+        assertFalse("Queue must NEVER contain unplayable tracks on shuffle", queue.any { it.id == "trk_blocked_1" })
+    }
+
+    @Test
+    fun `verify audio-only mode triggers when video is unavailable`() {
+        val ytTrack = Track(
+            id = "trk_vevo_test",
+            title = "VEVO Clip",
+            artist = "Artist",
+            durationSeconds = 240,
+            youtubeVideoId = "hTWKbfoikeg"
+        )
+        playbackManager.playTrack(ytTrack)
+        assertFalse(playbackManager.playbackState.value.isAudioOnlyMode)
+        assertFalse(playbackManager.playbackState.value.isVideoUnavailable)
+
+        // Simulate YouTube embedding block (error code 101 or 150)
+        playbackManager.onBridgeErrorWithCode(101)
+        assertTrue("Audio only mode must be enabled", playbackManager.playbackState.value.isAudioOnlyMode)
+        assertTrue("Video unavailable must be true", playbackManager.playbackState.value.isVideoUnavailable)
+    }
+
+    @Test
+    fun `verify search by artist and relatable keyword search`() = runBlocking {
+        val searchViewModel = com.example.feature.search.SearchViewModel(repository, playbackManager)
+
+        // Test search by artist
+        searchViewModel.searchByArtist("Slipknot")
+        assertTrue(searchViewModel.query.value.contains("Slipknot"))
+
+        // Test relatable keyword mapping in YouTubeProvider
+        val ytProvider = com.example.data.provider.YouTubeProvider()
+        val results = ytProvider.searchWithScope("workout", "ALL").getOrThrow()
+        assertTrue("Workout query must return relatable tracks", results.tracks.isNotEmpty())
+    }
 }
+

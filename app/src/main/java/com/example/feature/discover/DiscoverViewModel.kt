@@ -205,7 +205,8 @@ class DiscoverViewModel(
     }
 
     fun playShuffled(queue: List<Track>) {
-        playbackManager.playQueueShuffled(queue)
+        val playableOnly = queue.filter { com.example.core.media.SmartQueueEngine.isTrackPlayable(it) }
+        playbackManager.playQueueShuffled(if (playableOnly.isNotEmpty()) playableOnly else queue)
         playbackManager.playbackState.value.currentTrack?.let { track ->
             viewModelScope.launch {
                 repository.recordRecent(track)

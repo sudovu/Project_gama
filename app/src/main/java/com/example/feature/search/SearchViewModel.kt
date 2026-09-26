@@ -111,6 +111,21 @@ class SearchViewModel(
         }
     }
 
+    fun searchByArtist(artistName: String) {
+        val q = artistName.trim()
+        if (q.isNotEmpty()) {
+            if (_searchScope.value == SearchScope.UPLOADED) {
+                _searchScope.value = SearchScope.ALL
+            }
+            val queryWithArtist = "$q songs"
+            _query.value = queryWithArtist
+            _searchTrigger.value = queryWithArtist
+            viewModelScope.launch {
+                repository.addSearchQuery(q)
+            }
+        }
+    }
+
     fun setSearchScope(scope: SearchScope) {
         _searchScope.value = scope
         if (_query.value.isNotBlank()) {

@@ -149,6 +149,44 @@ class YouTubeProvider(
         @Volatile private var cachedDailyChartDate: String = ""
         @Volatile private var cachedDailyTop100: List<Track> = emptyList()
 
+        val KEYWORD_VIBE_MAP = mapOf(
+            "workout" to listOf("Electronic & EDM", "Hip-Hop", "Rock & Metal", "Phonk & Drift"),
+            "gym" to listOf("Phonk & Drift", "Rock & Metal", "Hip-Hop", "Electronic & EDM"),
+            "fitness" to listOf("Electronic & EDM", "Phonk & Drift"),
+            "pump" to listOf("Phonk & Drift", "Rock & Metal"),
+            "chill" to listOf("Lo-Fi & Chill", "Acoustic & Folk", "432Hz & Ambient"),
+            "relax" to listOf("Lo-Fi & Chill", "432Hz & Ambient", "Acoustic & Folk"),
+            "sleep" to listOf("432Hz & Ambient", "Lo-Fi & Chill"),
+            "meditation" to listOf("432Hz & Ambient"),
+            "study" to listOf("Lo-Fi & Chill", "432Hz & Ambient"),
+            "focus" to listOf("Lo-Fi & Chill", "Cyberpunk & Synthwave", "432Hz & Ambient"),
+            "sad" to listOf("Acoustic & Folk", "R&B & Soul", "Lo-Fi & Chill", "Pop Hits"),
+            "heartbreak" to listOf("R&B & Soul", "Pop Hits", "Acoustic & Folk"),
+            "drive" to listOf("Cyberpunk & Synthwave", "Phonk & Drift", "Hip-Hop"),
+            "night drive" to listOf("Cyberpunk & Synthwave", "Phonk & Drift", "Lo-Fi & Chill"),
+            "party" to listOf("Electronic & EDM", "Pop Hits", "Hip-Hop"),
+            "dance" to listOf("Electronic & EDM", "Pop Hits"),
+            "guitar" to listOf("Acoustic & Folk", "Rock & Metal", "Nu Metal & Alt-Rock"),
+            "rock" to listOf("Rock & Metal", "Nu Metal & Alt-Rock", "Classics"),
+            "metal" to listOf("Rock & Metal", "Nu Metal & Alt-Rock"),
+            "ambient" to listOf("432Hz & Ambient"),
+            "calm" to listOf("432Hz & Ambient", "Lo-Fi & Chill"),
+            "pop" to listOf("Pop Hits"),
+            "lofi" to listOf("Lo-Fi & Chill"),
+            "phonk" to listOf("Phonk & Drift")
+        )
+
+        private val publicProvider by lazy { YouTubeProvider() }
+
+        suspend fun searchVideosPublic(query: String, scope: String = "ALL"): List<Track> {
+            return try {
+                val result = publicProvider.searchWithScope(query, scope)
+                result.getOrNull()?.tracks ?: emptyList()
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+
         fun getDailyChartDateFormatted(): String {
             val date = java.util.Date()
             val format = java.text.SimpleDateFormat("MMMM d, yyyy", java.util.Locale.US)
@@ -486,17 +524,33 @@ class YouTubeProvider(
             } catch (_: Exception) {}
         }
 
-        // 6. Curated and local frequency matching
-        val matchedTracks = CuratedFrequencies.allTracks.filter {
-            it.title.contains(cleanQuery, ignoreCase = true) ||
-                    it.artist.contains(cleanQuery, ignoreCase = true) ||
-                    it.genre.contains(cleanQuery, ignoreCase = true)
+        // 6. Curated and local frequency matching with keyword vibe mapping
+        val cleanLower = cleanQuery.lowercase()
+        val mappedGenres = KEYWORD_VIBE_MAP.entries
+            .filter { cleanLower.contains(it.key) }
+            .flatMap { it.value }
+            .toSet()
+
+        val matchedTracks = CuratedFrequencies.allTracks.filter { track ->
+            track.title.contains(cleanQuery, ignoreCase = true) ||
+                    track.artist.contains(cleanQuery, ignoreCase = true) ||
+                    track.genre.contains(cleanQuery, ignoreCase = true) ||
+                    mappedGenres.any { g -> track.genre.equals(g, ignoreCase = true) }
+        }
+
+        // 7. If still empty, search YouTube for artist songs fallback
+        if (ytTracks.isEmpty() && matchedTracks.isEmpty()) {
+            try {
+                val artistTracks = fetchInnerTubeVideos("$cleanQuery official tracks", scope)
+                ytTracks.addAll(artistTracks.take(10))
+            } catch (_: Exception) {}
         }
 
         val matchedArtists = if (scope != "YOUTUBE" && scope != "YOUTUBE_MUSIC") {
             CuratedFrequencies.artists.filter {
                 it.name.contains(cleanQuery, ignoreCase = true) ||
-                        it.genres.any { g -> g.contains(cleanQuery, ignoreCase = true) }
+                        it.genres.any { g -> g.contains(cleanQuery, ignoreCase = true) } ||
+                        cleanLower.contains(it.name.lowercase())
             }
         } else emptyList()
 
@@ -515,7 +569,7 @@ class YouTubeProvider(
         } else emptyList()
 
         // Combine based on scope
-        val combinedTracks = when (scope) {
+        val baseTracks = when (scope) {
             "YOUTUBE" -> ytTracks.ifEmpty {
                 matchedTracks.map { it.copy(source = "youtube") }
             }
@@ -523,9 +577,12 @@ class YouTubeProvider(
                 matchedTracks.map { it.copy(source = "youtube_music") }
             }
             else -> {
-                (ytTracks + matchedTracks).distinctBy { it.id }
+                (ytTracks + matchedTracks).distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
             }
         }
+
+        // Rank by relevance scoring
+        val combinedTracks = baseTracks.sortedByDescending { scoreTrack(it, cleanQuery) }
 
         val searchResults = SearchResults(
             query = cleanQuery,
@@ -541,6 +598,35 @@ class YouTubeProvider(
         }
 
         Result.success(searchResults)
+    }
+
+    private fun scoreTrack(track: Track, q: String): Int {
+        val qLower = q.lowercase()
+        val tLower = track.title.lowercase()
+        val aLower = track.artist.lowercase()
+        val gLower = track.genre.lowercase()
+
+        var score = 0
+        if (tLower == qLower) score += 100
+        else if (tLower.startsWith(qLower)) score += 80
+        else if (tLower.contains(qLower)) score += 60
+
+        if (aLower == qLower) score += 70
+        else if (aLower.startsWith(qLower)) score += 50
+        else if (aLower.contains(qLower)) score += 40
+
+        if (gLower.contains(qLower)) score += 30
+
+        KEYWORD_VIBE_MAP.forEach { (keyword, genres) ->
+            if (qLower.contains(keyword) && genres.any { g -> gLower.contains(g.lowercase()) }) {
+                score += 35
+            }
+        }
+
+        if (!SmartQueueEngine.isTrackPlayable(track)) {
+            score -= 200
+        }
+        return score
     }
 
     /**

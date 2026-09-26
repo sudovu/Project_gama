@@ -433,7 +433,7 @@ fun GammaApp(
         } ?: false
 
         if (isYouTubeTrack) {
-            val showVideoUi = !isVideoClosed && (isVideoFullscreen || !isVideoPipMinimized || isPlayerScreen)
+            val showVideoUi = !isVideoClosed && !playbackState.isAudioOnlyMode && !playbackState.isVideoUnavailable && (isVideoFullscreen || !isVideoPipMinimized || isPlayerScreen)
             val isFullscreenActive = isVideoFullscreen && showVideoUi
 
             val videoWidth by animateDpAsState(

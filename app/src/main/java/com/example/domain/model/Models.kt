@@ -174,7 +174,9 @@ data class PlaybackState(
     val sleepTimerInitialSeconds: Long? = null,
     val isSleepTimerActive: Boolean = false,
     val isSleepTimerEndOfTrack: Boolean = false,
-    val playbackSpeed: Float = 1.0f
+    val playbackSpeed: Float = 1.0f,
+    val isAudioOnlyMode: Boolean = false,
+    val isVideoUnavailable: Boolean = false
 ) {
     val progress: Float
         get() = if (durationMs > 0) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
@@ -232,6 +234,8 @@ data class PlaybackState(
         if (isSleepTimerActive != other.isSleepTimerActive) return false
         if (isSleepTimerEndOfTrack != other.isSleepTimerEndOfTrack) return false
         if (playbackSpeed != other.playbackSpeed) return false
+        if (isAudioOnlyMode != other.isAudioOnlyMode) return false
+        if (isVideoUnavailable != other.isVideoUnavailable) return false
 
         return true
     }
@@ -260,6 +264,8 @@ data class PlaybackState(
         result = 31 * result + isSleepTimerActive.hashCode()
         result = 31 * result + isSleepTimerEndOfTrack.hashCode()
         result = 31 * result + playbackSpeed.hashCode()
+        result = 31 * result + isAudioOnlyMode.hashCode()
+        result = 31 * result + isVideoUnavailable.hashCode()
         return result
     }
 }

@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudUpload
@@ -27,6 +28,8 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -39,8 +42,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.core.ui.GammaAlbumCard
@@ -254,10 +260,21 @@ fun SearchScreen(
                 val results = state.results
 
                 if (results.isEmpty) {
-                    GammaEmptyState(
-                        title = "No Signals Detected",
-                        message = "No matching frequencies found for '$query' in ${searchScope.displayName}. Try adjusting your scope or query.",
-                        icon = Icons.Default.Search
+                    EmptySearchArtistFallback(
+                        query = query,
+                        searchScopeDisplayName = searchScope.displayName,
+                        onSearchAsArtist = {
+                            if (searchScope == SearchScope.UPLOADED) {
+                                viewModel.setSearchScope(SearchScope.ALL)
+                            }
+                            viewModel.searchByArtist(it)
+                        },
+                        onKeywordClick = {
+                            if (searchScope == SearchScope.UPLOADED) {
+                                viewModel.setSearchScope(SearchScope.ALL)
+                            }
+                            viewModel.submitSearch(it)
+                        }
                     )
                 } else {
                     LazyColumn(
@@ -391,6 +408,119 @@ fun SearchScreen(
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun EmptySearchArtistFallback(
+    query: String,
+    searchScopeDisplayName: String,
+    onSearchAsArtist: (String) -> Unit,
+    onKeywordClick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val vibeKeywords = listOf(
+        "Workout", "Gym Pump", "Lo-Fi Chill", "Phonk Drift",
+        "432Hz Calm", "Top Hits", "90s Rock", "Sad Vibes",
+        "Cyberpunk", "Acoustic Folk"
+    )
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(64.dp)
+                .clip(CircleShape)
+                .background(GammaPrimary.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = null,
+                tint = GammaPrimary,
+                modifier = Modifier.size(32.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "No direct song found for \"$query\"",
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = GammaTextPrimary,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Text(
+            text = "Didn't find that exact song in $searchScopeDisplayName? Try searching as an artist name to discover all their tracks & releases.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = GammaTextSecondary,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = { onSearchAsArtist(query) },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = GammaPrimary,
+                contentColor = Color.Black
+            ),
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.testTag("btn_search_as_artist")
+        ) {
+            Icon(
+                imageVector = Icons.Default.MusicNote,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Search \"$query\" as Artist",
+                color = Color.Black,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, color = Color.Black)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        Text(
+            text = "RELATED VIBE KEYWORDS",
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+            color = GammaTextMuted
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            vibeKeywords.forEach { keyword ->
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(GammaSurfaceElevated)
+                        .clickable { onKeywordClick(keyword) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = keyword,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = GammaTextPrimary
+                    )
                 }
             }
         }

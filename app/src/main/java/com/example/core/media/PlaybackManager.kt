@@ -6,6 +6,7 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Build
 import com.example.data.provider.CuratedFrequencies
+import com.example.data.provider.YouTubeProvider
 import com.example.domain.model.EqualizerSettings
 import com.example.domain.model.PlaybackState
 import com.example.domain.model.RepeatMode
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 interface YouTubePlayerBridge {
     fun loadVideo(videoId: String)
@@ -175,6 +177,8 @@ class PlaybackManager(private val context: Context) {
                 positionMs = 0L,
                 durationMs = trackDurationMs,
                 errorMessage = null,
+                isAudioOnlyMode = false,
+                isVideoUnavailable = false,
                 playedTracksHistory = updatedHistory,
                 smartQueueProfile = profile
             )
@@ -209,9 +213,12 @@ class PlaybackManager(private val context: Context) {
 
     fun playQueueShuffled(queue: List<Track>, startTrack: Track? = null) {
         if (queue.isEmpty()) return
-        val deduped = SmartQueueEngine.deduplicateTracks(queue)
+        val playableOnly = queue.filter { SmartQueueEngine.isTrackPlayable(it) }
+        val pool = if (playableOnly.isNotEmpty()) playableOnly else queue
+        val deduped = SmartQueueEngine.deduplicateTracks(pool)
+        if (deduped.isEmpty()) return
         val shuffled = deduped.shuffled()
-        val firstTrack = startTrack ?: shuffled.first()
+        val firstTrack = if (startTrack != null && SmartQueueEngine.isTrackPlayable(startTrack)) startTrack else shuffled.first()
         val remaining = shuffled.filter { !SmartQueueEngine.areTracksEqual(it, firstTrack) }
         val finalQueue = listOf(firstTrack) + remaining
 
@@ -477,7 +484,9 @@ class PlaybackManager(private val context: Context) {
 
         if (!state.isShuffle) {
             originalQueueBeforeShuffle = currentQueue
-            val remaining = currentQueue.filter { it.id != currentTrack.id }.shuffled()
+            val playableQueue = currentQueue.filter { SmartQueueEngine.isTrackPlayable(it) }
+            val pool = if (playableQueue.isNotEmpty()) playableQueue else currentQueue
+            val remaining = pool.filter { it.id != currentTrack.id }.shuffled()
             val newQueue = listOf(currentTrack) + remaining
             _playbackState.update {
                 it.copy(isShuffle = true, queue = newQueue, queueIndex = 0)
@@ -705,6 +714,66 @@ class PlaybackManager(private val context: Context) {
 
     fun onBridgeError(errorMsg: String) {
         _playbackState.update { it.copy(isBuffering = false, errorMessage = errorMsg) }
+    }
+
+    fun onBridgeErrorWithCode(errorCode: Int) {
+        val current = _playbackState.value.currentTrack
+        android.util.Log.w("PlaybackManager", "onBridgeErrorWithCode: code=$errorCode, track=${current?.title}")
+
+        val isUnavailable = errorCode in listOf(2, 5, 100, 101, 150)
+        if (isUnavailable && current != null) {
+            _playbackState.update { it.copy(isVideoUnavailable = true, isAudioOnlyMode = true) }
+            playerBridge?.pauseVideo()
+
+            // 1. If local audio exists, play immediately via native engine
+            if (current.localAudioUri.isNotEmpty()) {
+                audioEngine.playTrack(current)
+                _playbackState.update { it.copy(isPlaying = true, isBuffering = false, isVideoUnavailable = true, isAudioOnlyMode = true) }
+                return
+            }
+
+            // 2. Official music video blocked from embedding (101/150): fallback to audio / topic release
+            scope.launch {
+                val candidateAudio = try {
+                    val query = "${current.artist} ${current.title} audio"
+                    val results = YouTubeProvider.searchVideosPublic(query, "YOUTUBE_MUSIC")
+                    results.firstOrNull {
+                        it.youtubeVideoId.isNotEmpty() &&
+                        it.youtubeVideoId != current.youtubeVideoId &&
+                        SmartQueueEngine.isTrackPlayable(it)
+                    }
+                } catch (_: Exception) {
+                    null
+                }
+
+                if (candidateAudio != null) {
+                    val updatedTrack = current.copy(
+                        youtubeVideoId = candidateAudio.youtubeVideoId,
+                        streamUrl = candidateAudio.streamUrl
+                    )
+                    _playbackState.update { state ->
+                        val updatedQueue = state.queue.map { if (it.id == current.id) updatedTrack else it }
+                        state.copy(
+                            currentTrack = updatedTrack,
+                            queue = updatedQueue,
+                            isAudioOnlyMode = true,
+                            isVideoUnavailable = true
+                        )
+                    }
+                    playerBridge?.loadVideo(candidateAudio.youtubeVideoId)
+                    playerBridge?.playVideo()
+                } else if (_playbackState.value.isShuffle) {
+                    // Mark as unplayable so shuffle and queue engine never recommend it again
+                    SmartQueueEngine.markTrackUnplayable(current.id)
+                    if (current.youtubeVideoId.isNotEmpty()) {
+                        SmartQueueEngine.markTrackUnplayable(current.youtubeVideoId)
+                    }
+                    skipNext()
+                }
+            }
+        } else {
+            _playbackState.update { it.copy(isBuffering = false, errorMessage = "Playback error ($errorCode)") }
+        }
     }
 
     fun downloadTrack(track: Track) {
