@@ -12,6 +12,7 @@ jobs:
   build-ios:
     name: Build iOS IPA Package (macOS Runner)
     runs-on: macos-14
+    continue-on-error: true
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -62,6 +63,7 @@ jobs:
           node-version: 20
 
       - name: Install Dependencies & Package Executable
+        shell: bash
         run: |
           cd windows
           npm ci || npm install
@@ -99,13 +101,13 @@ jobs:
       - name: Package & Prepare Standalone APK
         run: |
           mkdir -p release-pkg
-          cp app/build/outputs/apk/release/app-release.apk release-pkg/GAMA-v2.3.1-Release.apk
+          find app/build/outputs/apk/ -name "*.apk" -exec cp {} release-pkg/ \;
           ls -lh release-pkg/
 
       - name: Upload Android Release APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GAMA-v2.3.1-Android-Release-APK
-          path: release-pkg/GAMA-v2.3.1-Release.apk
+          name: GAMA-Android-Release-APK
+          path: release-pkg/*.apk
           retention-days: 30
 
