@@ -1214,13 +1214,14 @@ object DailyTop100Registry {
     )
 
     fun getDailyTop100(rotationSeed: Long = System.currentTimeMillis() / (1000 * 60 * 60 * 24)): List<Track> {
-        // Daily rotation slight shuffle so chart updates fresh everyday
+        // Daily rotation shuffle across tiers so the entire chart updates fresh every day
         val rng = java.util.Random(rotationSeed)
-        val shuffledTop3 = baseChart.take(3).shuffled(rng)
-        val shuffled4to15 = baseChart.subList(3, 15).shuffled(rng)
-        val rest = baseChart.drop(15)
+        val shuffledTop5 = baseChart.take(5).shuffled(rng)
+        val shuffled6to20 = baseChart.subList(5, 20.coerceAtMost(baseChart.size)).shuffled(rng)
+        val shuffled21to50 = baseChart.subList(20.coerceAtMost(baseChart.size), 50.coerceAtMost(baseChart.size)).shuffled(rng)
+        val shuffled51to100 = baseChart.subList(50.coerceAtMost(baseChart.size), baseChart.size).shuffled(rng)
 
-        val ordered = (shuffledTop3 + shuffled4to15 + rest).take(100)
+        val ordered = (shuffledTop5 + shuffled6to20 + shuffled21to50 + shuffled51to100).take(100)
 
         return ordered.mapIndexed { index, track ->
             val rank = index + 1

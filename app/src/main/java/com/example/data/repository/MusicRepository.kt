@@ -85,10 +85,7 @@ class MusicRepository(
     ) { providerResult, uploaded ->
         providerResult.map { feed ->
             feed.copy(
-                uploadedTracks = uploaded,
-                quickPicks = if (uploaded.isNotEmpty()) {
-                    (uploaded + feed.quickPicks).distinctBy { it.id }
-                } else feed.quickPicks
+                uploadedTracks = uploaded
             )
         }
     }
@@ -112,10 +109,7 @@ class MusicRepository(
             }
             Result.success(
                 feed.copy(
-                    uploadedTracks = uploaded,
-                    quickPicks = if (uploaded.isNotEmpty()) {
-                        (uploaded + feed.quickPicks).distinctBy { it.id }
-                    } else feed.quickPicks
+                    uploadedTracks = uploaded
                 )
             )
         } else {

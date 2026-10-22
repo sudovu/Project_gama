@@ -168,11 +168,11 @@ fun ProfileSettingsScreen(
     val developerUsername = "sudovu"
 
     var showSpotifyConnectDialog by remember { mutableStateOf(false) }
-    var editSpotifyUser by remember(spotifyUser) { mutableStateOf(if (spotifyUser.isNotEmpty()) spotifyUser else "vhuwonmathers@gmail.com") }
+    var editSpotifyUser by remember(spotifyUser) { mutableStateOf(spotifyUser) }
     var selectedSpotifyTastes by remember(spotifyTastes) { mutableStateOf(spotifyTastes.toSet()) }
 
     var showGoogleConnectDialog by remember { mutableStateOf(false) }
-    var editGoogleEmail by remember(googleEmail) { mutableStateOf(if (googleEmail.isNotEmpty() && googleEmail != "@gmail.com") googleEmail else "vhuwonmathers@gmail.com") }
+    var editGoogleEmail by remember(googleEmail) { mutableStateOf(if (googleEmail != "@gmail.com") googleEmail else "") }
     var selectedGoogleTastes by remember(youtubeTastes) { mutableStateOf(youtubeTastes.toSet()) }
 
     val launchEmail: (String, String) -> Unit = { email, subject ->
@@ -1355,7 +1355,7 @@ fun ProfileSettingsScreen(
                                                     modifier = Modifier
                                                         .size(14.dp)
                                                         .clickable {
-                                                            editGoogleEmail = if (googleEmail.isNotEmpty()) googleEmail else "vhuwonmathers@gmail.com"
+                                                            editGoogleEmail = googleEmail
                                                             selectedGoogleTastes = youtubeTastes.toSet()
                                                             showGoogleConnectDialog = true
                                                         }
@@ -1502,7 +1502,7 @@ fun ProfileSettingsScreen(
                                 ) {
                                     Button(
                                         onClick = {
-                                            editGoogleEmail = if (googleEmail.isNotEmpty()) googleEmail else "vhuwonmathers@gmail.com"
+                                            editGoogleEmail = googleEmail
                                             selectedGoogleTastes = youtubeTastes.toSet()
                                             showGoogleConnectDialog = true
                                         },
@@ -1697,8 +1697,8 @@ fun ProfileSettingsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        val finalUser = editSpotifyUser.trim().ifEmpty { "vhuwonmathers@gmail.com" }
-                        val finalTastes = selectedSpotifyTastes.toList().ifEmpty { listOf("Rock & Metal", "Cyberpunk", "Alternative Rock") }
+                        val finalUser = editSpotifyUser.trim()
+                        val finalTastes: List<String> = if (selectedSpotifyTastes.isEmpty()) listOf("Rock & Metal", "Cyberpunk", "Alternative Rock") else selectedSpotifyTastes.toList()
                         tasteManager.linkSpotify(finalUser, finalTastes)
                         if (youtubeProvider != null) {
                             coroutineScope.launch {
@@ -1820,8 +1820,8 @@ fun ProfileSettingsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        val finalEmail = editGoogleEmail.trim().ifEmpty { "vhuwonmathers@gmail.com" }
-                        val finalTastes = selectedGoogleTastes.toList().ifEmpty { listOf("Ambient Calm", "Progressive Metal", "Synthwave") }
+                        val finalEmail = editGoogleEmail.trim()
+                        val finalTastes: List<String> = if (selectedGoogleTastes.isEmpty()) listOf("Ambient Calm", "Progressive Metal", "Synthwave") else selectedGoogleTastes.toList()
                         tasteManager.linkGoogle(finalEmail, finalTastes)
                         if (youtubeProvider != null) {
                             coroutineScope.launch {

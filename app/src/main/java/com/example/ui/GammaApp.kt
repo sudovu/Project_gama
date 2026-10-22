@@ -100,6 +100,10 @@ import com.example.feature.playlist.PlaylistViewModel
 import com.example.feature.profile.ProfileSettingsScreen
 import com.example.feature.search.SearchScreen
 import com.example.feature.search.SearchViewModel
+import android.graphics.RenderEffect
+import android.graphics.Shader
+import android.os.Build
+import androidx.compose.ui.graphics.graphicsLayer
 import com.example.ui.theme.GammaBackground
 import com.example.ui.theme.GammaDivider
 import com.example.ui.theme.GammaGlowCyan
@@ -197,7 +201,7 @@ fun GammaApp(
                             .navigationBarsPadding()
                             .padding(bottom = 2.dp)
                     ) {
-                        // Floating capsule mini-player island (Echo-Music inspired)
+                        // Floating capsule mini-player island
                         GammaMiniPlayer(
                             playbackState = playbackState,
                             onExpandClick = {
@@ -216,7 +220,7 @@ fun GammaApp(
                             modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 0.dp, bottom = 2.dp)
                         )
 
-                        // Floating Pill Bottom Navigation Bar (Echo Music / Nothing OS inspired)
+                        // Floating Pill Bottom Navigation Bar
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -715,15 +719,20 @@ fun GammaApp(
 
                             IconButton(
                                 onClick = {
-                                    isVideoFullscreen = true
+                                    if (!isPlayerScreen) {
+                                        isVideoPipMinimized = false
+                                        navController.navigate(Screen.Player.route)
+                                    } else {
+                                        isVideoFullscreen = !isVideoFullscreen
+                                    }
                                 },
                                 modifier = Modifier
                                     .size(28.dp)
                                     .testTag("pip_fullscreen_button")
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Fullscreen,
-                                    contentDescription = "Fullscreen video",
+                                    imageVector = if (!isPlayerScreen) Icons.Default.Fullscreen else Icons.Default.FullscreenExit,
+                                    contentDescription = if (!isPlayerScreen) "Expand to YouTube player" else "Toggle Fullscreen",
                                     tint = Color.White,
                                     modifier = Modifier.size(18.dp)
                                 )

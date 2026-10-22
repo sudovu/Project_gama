@@ -1,5 +1,8 @@
 package com.example.core.ui
 
+import android.graphics.RenderEffect
+import android.graphics.Shader
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -10,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -43,7 +48,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -54,10 +62,12 @@ import androidx.compose.ui.unit.sp
 import com.example.domain.model.PlaybackState
 import com.example.ui.theme.GammaBackground
 import com.example.ui.theme.GammaDivider
+import com.example.ui.theme.GammaFrequencyBrush
 import com.example.ui.theme.GammaGlowCyan
 import com.example.ui.theme.GammaPrimary
 import com.example.ui.theme.GammaSurfaceElevated
 import com.example.ui.theme.GammaSurfaceGlass
+import com.example.ui.theme.GammaTextMuted
 import com.example.ui.theme.GammaTextPrimary
 import com.example.ui.theme.GammaTextSecondary
 import kotlinx.coroutines.launch
@@ -126,10 +136,27 @@ fun GammaMiniPlayer(
                         }
                     )
                 }
-                .shadow(elevation = 10.dp, shape = RoundedCornerShape(18.dp))
-                .clip(RoundedCornerShape(18.dp))
-                .background(GammaSurfaceElevated.copy(alpha = 0.96f))
-                .border(1.dp, GammaDivider.copy(alpha = 0.8f), RoundedCornerShape(18.dp))
+                .shadow(elevation = 14.dp, shape = RoundedCornerShape(22.dp))
+                .clip(RoundedCornerShape(22.dp))
+                .then(
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        Modifier.graphicsLayer {
+                            renderEffect = RenderEffect.createBlurEffect(20f, 20f, Shader.TileMode.CLAMP).asComposeRenderEffect()
+                        }
+                    } else Modifier
+                )
+                .background(GammaSurfaceElevated.copy(alpha = 0.88f))
+                .border(
+                    width = 1.2.dp,
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            GammaPrimary.copy(alpha = 0.45f),
+                            GammaGlowCyan.copy(alpha = 0.25f),
+                            GammaDivider.copy(alpha = 0.6f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(22.dp)
+                )
                 .clickable(onClick = onExpandClick)
                 .testTag("mini_player")
         ) {
@@ -137,21 +164,21 @@ fun GammaMiniPlayer(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Artwork with rounded capsule corners & glow border
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .border(1.dp, GammaGlowCyan.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, GammaPrimary.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
                     ) {
                         GammaArtwork(
                             url = track.artworkUrl,
                             contentDescription = "${track.title} artwork",
-                            modifier = Modifier.size(40.dp),
-                            shape = RoundedCornerShape(10.dp)
+                            modifier = Modifier.size(44.dp),
+                            shape = RoundedCornerShape(12.dp)
                         )
                     }
 
@@ -165,7 +192,7 @@ fun GammaMiniPlayer(
                             color = GammaTextPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            fontWeight = FontWeight.SemiBold,
+                            fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -175,27 +202,60 @@ fun GammaMiniPlayer(
                                 color = GammaTextSecondary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                fontSize = 12.sp
+                                fontSize = 12.sp,
+                                modifier = Modifier.weight(1f, fill = false)
                             )
+                            if (track.youtubeVideoId.isNotEmpty()) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color(0xFFE50914).copy(alpha = 0.2f))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                ) {
+                                    Text(
+                                        text = "VIDEO",
+                                        color = Color(0xFFFF5252),
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
                     }
 
                     // Mini equalizer visualizer bars
                     MiniEqualizerBars(isPlaying = playbackState.isPlaying)
 
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
 
-                    // Play/Pause button (smooth pill button)
+                    // Fullscreen / Expand button (looks like YouTube video opener)
+                    IconButton(
+                        onClick = onExpandClick,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("mini_fullscreen_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Fullscreen,
+                            contentDescription = "Open in YouTube Player",
+                            tint = GammaTextPrimary.copy(alpha = 0.85f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // Play/Pause button (smooth illuminated pill button)
                     IconButton(
                         onClick = onPlayPauseClick,
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(38.dp)
+                            .shadow(elevation = 6.dp, shape = CircleShape)
                             .background(GammaPrimary, CircleShape)
                             .testTag("mini_play_pause_button")
                     ) {
                         if (playbackState.isBuffering) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(15.dp),
+                                modifier = Modifier.size(16.dp),
                                 color = GammaBackground,
                                 strokeWidth = 2.dp
                             )
@@ -204,7 +264,7 @@ fun GammaMiniPlayer(
                                 imageVector = if (playbackState.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                                 contentDescription = if (playbackState.isPlaying) "Pause" else "Play",
                                 tint = GammaBackground,
-                                modifier = Modifier.size(19.dp)
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
@@ -213,26 +273,26 @@ fun GammaMiniPlayer(
                     IconButton(
                         onClick = onNextClick,
                         modifier = Modifier
-                            .size(34.dp)
+                            .size(32.dp)
                             .testTag("mini_next_button")
                     ) {
                         Icon(
                             imageVector = Icons.Filled.SkipNext,
                             contentDescription = "Next track",
                             tint = GammaTextPrimary,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
 
-                // Progress Bar line at the bottom
+                // Smooth glowing progress bar at the bottom
                 LinearProgressIndicator(
                     progress = { playbackState.progress },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(2.dp),
+                        .height(2.5.dp),
                     color = GammaPrimary,
-                    trackColor = GammaDivider.copy(alpha = 0.4f)
+                    trackColor = GammaDivider.copy(alpha = 0.35f)
                 )
             }
         }
@@ -253,7 +313,7 @@ private fun MiniEqualizerBars(isPlaying: Boolean) {
                     .width(2.5.dp)
                     .height(h)
                     .clip(CircleShape)
-                    .background(if (isPlaying) GammaPrimary else GammaTextSecondary.copy(alpha = 0.5f))
+                    .background(if (isPlaying) GammaPrimary else GammaTextSecondary.copy(alpha = 0.4f))
             )
         }
     }

@@ -48,17 +48,14 @@ class YouTubeProvider(
 
     companion object {
         private val TRENDING_SEEDS = listOf(
-            "Kendrick Lamar Not Like Us official music video",
-            "Sabrina Carpenter Espresso official video",
-            "Lady Gaga Bruno Mars Die With A Smile official video",
-            "Billie Eilish Birds of a Feather official music video",
-            "Shaboozey A Bar Song Tipsy official video",
-            "Teddy Swims Lose Control official music video",
-            "Benson Boone Beautiful Things official video",
-            "Chappell Roan Good Luck Babe official video",
-            "Linkin Park The Emptiness Machine official video",
-            "Eminem Houdini official video",
-            "The Weeknd Blinding Lights official music video"
+            "trending music official music video",
+            "top 50 music hits this week official video",
+            "popular songs official music video",
+            "billboard hot 100 new songs official video",
+            "viral hits today official music video",
+            "youtube music top songs trending",
+            "new music releases official video",
+            "global top hits official music video"
         )
 
         private val GENRE_QUERY_POOLS = mapOf(
@@ -308,12 +305,26 @@ class YouTubeProvider(
             val allCombined: List<Track> = (dailyTop100 + onlineTrending + hipHopYt + rockYt + popYt + classicsYt + baseTracks).distinctBy { it.youtubeVideoId.ifEmpty { it.id } }
 
             val quickPicks = (dailyTop100.shuffled(rng).take(5) + onlineTrending.shuffled(rng).take(3) + baseTracks.shuffled(rng).take(2)).distinctBy { it.id }.take(8)
-            val trending = if (dailyTop100.isNotEmpty()) {
+            val trending = if (onlineTrending.isNotEmpty()) {
+                val liveRanked = onlineTrending.take(15)
+                val remainingTop = dailyTop100.filterNot { dt -> 
+                    liveRanked.any { it.youtubeVideoId == dt.youtubeVideoId || it.title.equals(dt.title, ignoreCase = true) } 
+                }
+                (liveRanked + remainingTop).take(100).mapIndexed { i, t ->
+                    val rank = i + 1
+                    val trend = when {
+                        rank == 1 -> "HOT #1 OF THE DAY"
+                        rank in 2..5 -> "🔥 SURGING TOP $rank"
+                        rank in 6..10 -> "▲ CLIMBING TOP 10"
+                        rank in 11..25 -> "★ POPULAR TODAY"
+                        else -> "DAILY 100"
+                    }
+                    t.copy(dailyRank = rank, chartTrend = trend)
+                }
+            } else if (dailyTop100.isNotEmpty()) {
                 dailyTop100
-            } else if (onlineTrending.isNotEmpty()) {
-                onlineTrending.take(20).mapIndexed { i, t -> t.copy(dailyRank = i + 1, chartTrend = "HOT #${i + 1}") }
             } else {
-                allCombined.sortedByDescending { it.playCount.takeIf { c -> c > 0 } ?: 500000000L }.take(20).mapIndexed { i, t -> t.copy(dailyRank = i + 1, chartTrend = "TOP #${i + 1}") }
+                allCombined.sortedByDescending { it.playCount.takeIf { c -> c > 0 } ?: 500000000L }.take(50).mapIndexed { i, t -> t.copy(dailyRank = i + 1, chartTrend = "TOP #${i + 1}") }
             }
             val playlists = CuratedFrequencies.getRotatingPlaylists(seed)
             val albums = CuratedFrequencies.getRotatingAlbums(seed)

@@ -50,8 +50,8 @@ class TastePreferenceManager(context: Context) {
 
     private val _googleEmail = MutableStateFlow(
         prefs.getString(KEY_GOOGLE_EMAIL, "")?.let { stored ->
-            if (stored.trim() == "@gmail.com" || stored.trim().startsWith("@") && stored.trim().length <= 11) {
-                "vhuwonmathers@gmail.com".also { sanitized ->
+            if (stored.trim() == "@gmail.com" || (stored.trim().startsWith("@") && stored.trim().length <= 11)) {
+                "".also { sanitized ->
                     prefs.edit().putString(KEY_GOOGLE_EMAIL, sanitized).apply()
                 }
             } else {
@@ -168,8 +168,8 @@ class TastePreferenceManager(context: Context) {
         }
     }
 
-    fun linkSpotify(username: String = "vhuwonmathers@gmail.com", tastes: List<String> = listOf("Rock & Metal", "Alternative Rock", "Cyberpunk")) {
-        val cleanUser = username.trim().ifEmpty { "vhuwonmathers@gmail.com" }
+    fun linkSpotify(username: String = "", tastes: List<String> = listOf("Rock & Metal", "Alternative Rock", "Cyberpunk")) {
+        val cleanUser = username.trim()
         prefs.edit()
             .putBoolean(KEY_SPOTIFY_LINKED, true)
             .putString(KEY_SPOTIFY_USER, cleanUser)
@@ -182,7 +182,9 @@ class TastePreferenceManager(context: Context) {
         _spotifyTastes.value = tastes
         _lastSyncTime.value = System.currentTimeMillis()
 
-        validateSpotifyEmailBackground(cleanUser)
+        if (cleanUser.isNotEmpty()) {
+            validateSpotifyEmailBackground(cleanUser)
+        }
     }
 
     fun unlinkSpotify() {
@@ -200,9 +202,9 @@ class TastePreferenceManager(context: Context) {
         _spotifyEmailMessage.value = ""
     }
 
-    fun linkGoogle(email: String = "vhuwonmathers@gmail.com", tastes: List<String> = listOf("432Hz Ambient", "Progressive Metal", "Synthwave")) {
+    fun linkGoogle(email: String = "", tastes: List<String> = listOf("432Hz Ambient", "Progressive Metal", "Synthwave")) {
         val cleanEmail = email.trim().let {
-            if (it.isEmpty() || it == "@gmail.com" || it.startsWith("@")) "vhuwonmathers@gmail.com" else it
+            if (it == "@gmail.com" || it.startsWith("@")) "" else it
         }
         prefs.edit()
             .putBoolean(KEY_GOOGLE_LINKED, true)
@@ -216,7 +218,9 @@ class TastePreferenceManager(context: Context) {
         _youtubeTastes.value = tastes
         _lastSyncTime.value = System.currentTimeMillis()
 
-        validateGoogleEmailBackground(cleanEmail)
+        if (cleanEmail.isNotEmpty()) {
+            validateGoogleEmailBackground(cleanEmail)
+        }
     }
 
     fun unlinkGoogle() {
@@ -239,38 +243,36 @@ class TastePreferenceManager(context: Context) {
         _isSyncing.value = true
         try {
             if (_isSpotifyLinked.value) {
-                // Verify email / handle before syncing
+                // Background email verification without blocking sync
                 val user = _spotifyUsername.value
                 if (user.contains("@")) {
-                    val valResult = EmailValidator.validateEmailInBackground(user)
-                    _spotifyEmailStatus.value = valResult.status
-                    _spotifyEmailMessage.value = valResult.message
-                    prefs.edit()
-                        .putString(KEY_SPOTIFY_STATUS, valResult.status.name)
-                        .putString(KEY_SPOTIFY_MSG, valResult.message)
-                        .apply()
-
-                    if (!valResult.isValid) {
-                        android.util.Log.w("TastePreference", "Spotify email verification failed: ${valResult.message}. Skipping sync.")
-                        return@withContext
+                    scope.launch {
+                        try {
+                            val valResult = EmailValidator.validateEmailInBackground(user)
+                            _spotifyEmailStatus.value = valResult.status
+                            _spotifyEmailMessage.value = valResult.message
+                            prefs.edit()
+                                .putString(KEY_SPOTIFY_STATUS, valResult.status.name)
+                                .putString(KEY_SPOTIFY_MSG, valResult.message)
+                                .apply()
+                        } catch (_: Exception) {}
                     }
                 }
 
-                val querySuffixes = listOf(
-                    "hits single official music video",
-                    "top songs official video",
-                    "popular tracks official single",
-                    "best music hits official video"
-                )
-                val querySuffix = querySuffixes.random()
-                val tastes = _spotifyTastes.value.take(2)
+                val tastes = _spotifyTastes.value.ifEmpty { listOf("Top Hits", "Pop", "Rock", "Hip-Hop") }.take(4)
                 val deferred = tastes.map { taste ->
                     async {
                         try {
-                            val res = youtubeProvider.searchWithScope("$taste $querySuffix", "YOUTUBE_MUSIC")
+                            val queries = listOf(
+                                "$taste hits official music video",
+                                "top $taste songs official video",
+                                "$taste popular tracks official audio"
+                            )
+                            val query = queries.random()
+                            val res = youtubeProvider.searchWithScope(query, "YOUTUBE_MUSIC")
                             res.getOrNull()?.tracks
                                 ?.filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
-                                ?.take(6)
+                                ?.take(5)
                                 ?.map { it.copy(genre = taste) }
                                 ?: emptyList()
                         } catch (_: Exception) {
@@ -299,36 +301,36 @@ class TastePreferenceManager(context: Context) {
         _isSyncing.value = true
         try {
             if (_isGoogleLinked.value) {
-                // Verify email before syncing
+                // Background email verification without blocking sync
                 val email = _googleEmail.value
-                val valResult = EmailValidator.validateEmailInBackground(email)
-                _googleEmailStatus.value = valResult.status
-                _googleEmailMessage.value = valResult.message
-                prefs.edit()
-                    .putString(KEY_GOOGLE_STATUS, valResult.status.name)
-                    .putString(KEY_GOOGLE_MSG, valResult.message)
-                    .apply()
-
-                if (!valResult.isValid) {
-                    android.util.Log.w("TastePreference", "Google/YouTube email verification failed: ${valResult.message}. Skipping sync.")
-                    return@withContext
+                if (email.contains("@")) {
+                    scope.launch {
+                        try {
+                            val valResult = EmailValidator.validateEmailInBackground(email)
+                            _googleEmailStatus.value = valResult.status
+                            _googleEmailMessage.value = valResult.message
+                            prefs.edit()
+                                .putString(KEY_GOOGLE_STATUS, valResult.status.name)
+                                .putString(KEY_GOOGLE_MSG, valResult.message)
+                                .apply()
+                        } catch (_: Exception) {}
+                    }
                 }
 
-                val querySuffixes = listOf(
-                    "hits single official music video",
-                    "top songs official video",
-                    "popular tracks official single",
-                    "best music hits official video"
-                )
-                val querySuffix = querySuffixes.random()
-                val tastes = _youtubeTastes.value.take(2)
+                val tastes = _youtubeTastes.value.ifEmpty { listOf("Trending Music", "Pop Hits", "Electronic", "Acoustic") }.take(4)
                 val deferred = tastes.map { taste ->
                     async {
                         try {
-                            val res = youtubeProvider.searchWithScope("$taste $querySuffix", "YOUTUBE_MUSIC")
+                            val queries = listOf(
+                                "$taste official music video",
+                                "youtube music top $taste",
+                                "$taste trending music single"
+                            )
+                            val query = queries.random()
+                            val res = youtubeProvider.searchWithScope(query, "YOUTUBE_MUSIC")
                             res.getOrNull()?.tracks
                                 ?.filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
-                                ?.take(6)
+                                ?.take(5)
                                 ?.map { it.copy(genre = taste) }
                                 ?: emptyList()
                         } catch (_: Exception) {
