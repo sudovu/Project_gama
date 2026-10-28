@@ -93,8 +93,13 @@ enum class TuningPreset(val displayName: String) {
     CUSTOM("Custom"),
     FLAT("Flat"),
     BASS_BOOST("Bass Boost"),
-    VOCAL_CLARITY("Vocal & Clarity"),
+    SUB_BASS("Sub-Bass Punch"),
+    STUDIO_REF("Studio Reference"),
+    VOCAL_CLARITY("Vocal Clarity"),
     TREBLE_BOOST("Treble Boost"),
+    EDM_PUNCH("EDM Club"),
+    DOLBY_SURROUND("3D Spatial"),
+    HARMONIC_432("432Hz Harmonic"),
     LOFI_CHILL("Lo-Fi Warmth"),
     ELECTRONIC("Electronic / Dance"),
     SYNTHWAVE("Synthwave Smile"),
@@ -112,7 +117,9 @@ data class EqualizerSettings(
     val isEnabled: Boolean = true,
     val currentPreset: TuningPreset = TuningPreset.FLAT,
     val bands: List<EqualizerBand> = defaultBands(),
-    val bassBoost: Float = 0f,
+    val bassBoost: Float = 0.35f,
+    val virtualizer: Float = 0.30f,
+    val loudnessGainMb: Int = 400,
     val masterGain: Float = 1.0f
 ) {
     companion object {
@@ -128,8 +135,13 @@ data class EqualizerSettings(
             TuningPreset.CUSTOM -> listOf(0f, 0f, 0f, 0f, 0f)
             TuningPreset.FLAT -> listOf(0f, 0f, 0f, 0f, 0f)
             TuningPreset.BASS_BOOST -> listOf(7.5f, 4.5f, 0f, -1.5f, -2.5f)
+            TuningPreset.SUB_BASS -> listOf(9.0f, 6.0f, 1.0f, -1.0f, -2.0f)
+            TuningPreset.STUDIO_REF -> listOf(1.0f, -0.5f, 0.5f, 1.0f, 1.5f)
             TuningPreset.VOCAL_CLARITY -> listOf(-3.0f, -1.0f, 4.5f, 7.0f, 3.0f)
             TuningPreset.TREBLE_BOOST -> listOf(-2.5f, 0f, 1.5f, 5.5f, 8.5f)
+            TuningPreset.EDM_PUNCH -> listOf(8.5f, 4.0f, -1.5f, 4.5f, 7.0f)
+            TuningPreset.DOLBY_SURROUND -> listOf(3.5f, 1.5f, 3.0f, 5.5f, 8.0f)
+            TuningPreset.HARMONIC_432 -> listOf(4.0f, 5.0f, 3.5f, 2.0f, 1.0f)
             TuningPreset.LOFI_CHILL -> listOf(4.5f, 6.0f, 2.0f, -3.5f, -7.5f)
             TuningPreset.ELECTRONIC -> listOf(6.0f, 3.0f, -1.0f, 3.5f, 5.0f)
             TuningPreset.SYNTHWAVE -> listOf(7.0f, 2.5f, -2.5f, 4.0f, 6.5f)

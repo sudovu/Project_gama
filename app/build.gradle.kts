@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.gamma.freq"
     minSdk = 24
     targetSdk = 35
-    versionCode = 27
-    versionName = "2.3.3"
+    versionCode = 28
+    versionName = "2.3.4"
     multiDexEnabled = true
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

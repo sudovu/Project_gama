@@ -191,7 +191,7 @@ class GamaAudioEngine(private val context: Context) {
             globalBassBoost = BassBoost(1000, 0).apply {
                 enabled = isEqEnabled
                 if (strengthSupported) {
-                    setStrength(0)
+                    setStrength(350)
                 }
             }
         } catch (e: Exception) {
@@ -202,7 +202,7 @@ class GamaAudioEngine(private val context: Context) {
             globalVirtualizer = Virtualizer(1000, 0).apply {
                 enabled = isEqEnabled
                 if (strengthSupported) {
-                    setStrength(0)
+                    setStrength(300)
                 }
             }
         } catch (e: Exception) {
@@ -212,6 +212,7 @@ class GamaAudioEngine(private val context: Context) {
         try {
             globalLoudnessEnhancer = LoudnessEnhancer(0).apply {
                 enabled = isEqEnabled
+                setTargetGain(400)
             }
         } catch (e: Exception) {
             Log.d(TAG, "Global loudness enhancer not available: ${e.message}")
@@ -463,26 +464,97 @@ class GamaAudioEngine(private val context: Context) {
         // Preset-specific hardware DSP profile tuning
         try {
             when (preset) {
+                TuningPreset.SUB_BASS -> {
+                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(950) }
+                    globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(300) }
+                    globalLoudnessEnhancer?.setTargetGain(600)
+                }
                 TuningPreset.BASS_BOOST -> {
-                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(800) }
+                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(850) }
+                    globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(250) }
+                    globalLoudnessEnhancer?.setTargetGain(500)
+                }
+                TuningPreset.EDM_PUNCH -> {
+                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(750) }
+                    globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(550) }
+                    globalLoudnessEnhancer?.setTargetGain(600)
+                }
+                TuningPreset.DOLBY_SURROUND -> {
+                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(400) }
+                    globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(850) }
+                    globalLoudnessEnhancer?.setTargetGain(450)
+                }
+                TuningPreset.HARMONIC_432 -> {
+                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(500) }
+                    globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(400) }
+                    globalLoudnessEnhancer?.setTargetGain(400)
+                }
+                TuningPreset.STUDIO_REF -> {
+                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(200) }
+                    globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(200) }
+                    globalLoudnessEnhancer?.setTargetGain(300)
                 }
                 TuningPreset.SYNTHWAVE -> {
-                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(450) }
-                    globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(400) }
+                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(550) }
+                    globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(450) }
+                    globalLoudnessEnhancer?.setTargetGain(500)
                 }
                 TuningPreset.ELECTRONIC -> {
-                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(600) }
+                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(650) }
                     globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(500) }
+                    globalLoudnessEnhancer?.setTargetGain(550)
                 }
                 TuningPreset.VOCAL_CLARITY -> {
-                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(0) }
-                    globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(200) }
+                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(100) }
+                    globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(350) }
+                    globalLoudnessEnhancer?.setTargetGain(450)
                 }
-                else -> {
+                TuningPreset.ACOUSTIC -> {
+                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(350) }
+                    globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(300) }
+                    globalLoudnessEnhancer?.setTargetGain(400)
+                }
+                TuningPreset.LOFI_CHILL -> {
+                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(600) }
+                    globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(250) }
+                    globalLoudnessEnhancer?.setTargetGain(350)
+                }
+                TuningPreset.TREBLE_BOOST -> {
+                    globalBassBoost?.let { if (it.strengthSupported) it.setStrength(100) }
+                    globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(300) }
+                    globalLoudnessEnhancer?.setTargetGain(350)
+                }
+                TuningPreset.FLAT -> {
                     globalBassBoost?.let { if (it.strengthSupported) it.setStrength(0) }
                     globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(0) }
+                    globalLoudnessEnhancer?.setTargetGain(300)
                 }
+                TuningPreset.CUSTOM -> {}
+                else -> {}
             }
+        } catch (_: Exception) {}
+    }
+
+    fun setBassBoostStrength(fraction: Float) {
+        val clamped = fraction.coerceIn(0f, 1f)
+        try {
+            val strength = (clamped * 1000).toInt().toShort()
+            globalBassBoost?.let { if (it.strengthSupported) it.setStrength(strength) }
+        } catch (_: Exception) {}
+    }
+
+    fun setVirtualizerStrength(fraction: Float) {
+        val clamped = fraction.coerceIn(0f, 1f)
+        try {
+            val strength = (clamped * 1000).toInt().toShort()
+            globalVirtualizer?.let { if (it.strengthSupported) it.setStrength(strength) }
+        } catch (_: Exception) {}
+    }
+
+    fun setLoudnessEnhancerGain(gainMb: Int) {
+        val clamped = gainMb.coerceIn(0, 1500)
+        try {
+            globalLoudnessEnhancer?.setTargetGain(clamped)
         } catch (_: Exception) {}
     }
 

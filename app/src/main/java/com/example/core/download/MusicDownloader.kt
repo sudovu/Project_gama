@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
@@ -178,57 +180,107 @@ class MusicDownloader(
     }
 
     private suspend fun resolveYouTubeMp3Url(videoId: String, onProgress: (Float) -> Unit): String = withContext(Dispatchers.IO) {
-        val initUrl = "https://loader.to/ajax/download.php?format=mp3&url=https://www.youtube.com/watch?v=$videoId"
-        val initRequest = Request.Builder()
-            .url(initUrl)
-            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-            .build()
-
-        val initResponse = client.newCall(initRequest).execute()
-        if (!initResponse.isSuccessful) {
-            throw Exception("MP3 converter service error: ${initResponse.code}")
-        }
-
-        val initBody = initResponse.body?.string() ?: throw Exception("Empty converter response")
-        val initJson = JSONObject(initBody)
-        val progressUrl = initJson.optString("progress_url")
-        if (progressUrl.isBlank()) {
-            val directUrl = initJson.optString("url")
-            if (directUrl.isNotBlank()) return@withContext directUrl
-            throw Exception("Could not initiate MP3 conversion")
-        }
-
-        for (i in 0 until 18) {
-            delay(1500L)
-            onProgress(0.08f + (i * 0.015f))
-
-            val pollRequest = Request.Builder()
-                .url(progressUrl)
+        // Engine 1: Cobalt High-Speed Audio Tunnel API (Direct 320kbps MP3 tunnel)
+        try {
+            onProgress(0.08f)
+            val cobaltPayload = JSONObject().apply {
+                put("url", "https://www.youtube.com/watch?v=$videoId")
+                put("downloadMode", "audio")
+            }
+            val mediaType = "application/json".toMediaTypeOrNull()
+            val requestBody = cobaltPayload.toString().toRequestBody(mediaType)
+            val cobaltRequest = Request.Builder()
+                .url("https://api.cnvmp3.com/")
+                .post(requestBody)
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json")
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 .build()
 
+            val cobaltResp = client.newCall(cobaltRequest).execute()
+            if (cobaltResp.isSuccessful) {
+                val cobaltBody = cobaltResp.body?.string() ?: ""
+                if (cobaltBody.isNotEmpty()) {
+                    val cobaltJson = JSONObject(cobaltBody)
+                    val tunnelUrl = cobaltJson.optString("url")
+                    if (tunnelUrl.isNotBlank()) {
+                        Log.d(TAG, "Resolved audio via Cobalt tunnel: $tunnelUrl")
+                        onProgress(0.20f)
+                        return@withContext tunnelUrl
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Cobalt resolver attempt failed: ${e.message}")
+        }
+
+        // Engine 2: Invidious Native Audio Stream Proxies (AAC 128kbps / 140 itag direct audio stream)
+        val invidiousInstances = listOf(
+            "https://yt.chocolatemoo53.com",
+            "https://invidious.nerdvpn.de",
+            "https://yewtu.be",
+            "https://inv.nadeko.net"
+        )
+
+        for (instance in invidiousInstances) {
             try {
-                val pollResponse = client.newCall(pollRequest).execute()
-                if (pollResponse.isSuccessful) {
-                    val pollBody = pollResponse.body?.string() ?: ""
-                    if (pollBody.isNotEmpty()) {
-                        val pollJson = JSONObject(pollBody)
-                        val text = pollJson.optString("text")
-                        if (text.contains("not supported", ignoreCase = true)) {
-                            throw Exception(text)
-                        }
-                        val downloadUrl = pollJson.optString("download_url")
-                        if (downloadUrl.isNotBlank()) {
-                            return@withContext downloadUrl
+                onProgress(0.15f)
+                val directAudioUrl = "$instance/latest_version?id=$videoId&itag=140"
+                val testReq = Request.Builder()
+                    .url(directAudioUrl)
+                    .head()
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .build()
+
+                val testResp = client.newCall(testReq).execute()
+                val code = testResp.code
+                if (testResp.isSuccessful && (code == 200 || code == 302)) {
+                    val streamUrl = testResp.header("Location") ?: directAudioUrl
+                    Log.d(TAG, "Resolved audio via Invidious proxy ($instance): $streamUrl")
+                    onProgress(0.25f)
+                    return@withContext streamUrl
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Invidious instance $instance failed: ${e.message}")
+            }
+        }
+
+        // Engine 3: Invidious API Adaptive Formats extraction
+        for (instance in invidiousInstances) {
+            try {
+                onProgress(0.20f)
+                val apiReq = Request.Builder()
+                    .url("$instance/api/v1/videos/$videoId")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .build()
+
+                val apiResp = client.newCall(apiReq).execute()
+                if (apiResp.isSuccessful) {
+                    val apiBody = apiResp.body?.string() ?: ""
+                    if (apiBody.isNotEmpty()) {
+                        val json = JSONObject(apiBody)
+                        val formats = json.optJSONArray("adaptiveFormats")
+                        if (formats != null) {
+                            for (i in 0 until formats.length()) {
+                                val fmt = formats.optJSONObject(i) ?: continue
+                                val type = fmt.optString("type")
+                                if (type.startsWith("audio/")) {
+                                    val streamUrl = fmt.optString("url")
+                                    if (streamUrl.isNotBlank()) {
+                                        onProgress(0.28f)
+                                        return@withContext streamUrl
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             } catch (e: Exception) {
-                if (e.message?.contains("not supported") == true) throw e
+                Log.w(TAG, "Adaptive formats fetch on $instance failed: ${e.message}")
             }
         }
 
-        throw Exception("Conversion timed out. Please try again.")
+        throw Exception("Could not find a fast audio stream for this track. Please check network and try again.")
     }
 
     fun deleteDownload(trackId: String): Boolean {

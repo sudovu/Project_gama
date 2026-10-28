@@ -1514,7 +1514,108 @@ fun GammaPlayerScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Acoustic Boost Engine (Bass Boost, 3D Spatial Virtualizer, Loudness Enhancer)
+                Text(
+                    text = "ACOUSTIC ENHANCEMENT ENGINE",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = GammaTextMuted,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Bass Boost Slider
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "🥁 Sub-Bass Impact",
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                            color = GammaTextPrimary
+                        )
+                    }
+                    Text(
+                        text = "${(playback.equalizerSettings.bassBoost * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = GammaPrimary
+                    )
+                }
+                Slider(
+                    value = playback.equalizerSettings.bassBoost,
+                    onValueChange = { viewModel.setBassBoost(it) },
+                    valueRange = 0f..1f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = GammaPrimary,
+                        activeTrackColor = GammaPrimary,
+                        inactiveTrackColor = GammaSurfaceHighlight
+                    ),
+                    enabled = playback.equalizerSettings.isEnabled
+                )
+
+                // 3D Spatial Audio Virtualizer Slider
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "🌐 3D Spatial Soundstage",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = GammaTextPrimary
+                    )
+                    Text(
+                        text = "${(playback.equalizerSettings.virtualizer * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = GammaSecondary
+                    )
+                }
+                Slider(
+                    value = playback.equalizerSettings.virtualizer,
+                    onValueChange = { viewModel.setVirtualizer(it) },
+                    valueRange = 0f..1f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = GammaSecondary,
+                        activeTrackColor = GammaSecondary,
+                        inactiveTrackColor = GammaSurfaceHighlight
+                    ),
+                    enabled = playback.equalizerSettings.isEnabled
+                )
+
+                // Loudness Boost
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "🔊 Loudness Headroom Boost",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = GammaTextPrimary
+                    )
+                    Text(
+                        text = "+${playback.equalizerSettings.loudnessGainMb / 100} dB",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = GammaPrimary
+                    )
+                }
+                Slider(
+                    value = (playback.equalizerSettings.loudnessGainMb / 100).toFloat(),
+                    onValueChange = { viewModel.setLoudnessGain((it * 100).toInt()) },
+                    valueRange = 0f..12f,
+                    steps = 11,
+                    colors = SliderDefaults.colors(
+                        thumbColor = GammaPrimary,
+                        activeTrackColor = GammaPrimary,
+                        inactiveTrackColor = GammaSurfaceHighlight
+                    ),
+                    enabled = playback.equalizerSettings.isEnabled
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Master Pre-Amp Gain
                 Row(
@@ -1523,7 +1624,7 @@ fun GammaPlayerScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Master Tuning Gain",
+                        text = "Master Gain Headroom",
                         style = MaterialTheme.typography.bodySmall,
                         color = GammaTextSecondary
                     )
@@ -1536,7 +1637,7 @@ fun GammaPlayerScreen(
                 Slider(
                     value = playback.equalizerSettings.masterGain,
                     onValueChange = { viewModel.setMasterGain(it) },
-                    valueRange = 0.5f..1.5f,
+                    valueRange = 0.5f..1.8f,
                     colors = SliderDefaults.colors(
                         thumbColor = GammaSecondary,
                         activeTrackColor = GammaSecondary,

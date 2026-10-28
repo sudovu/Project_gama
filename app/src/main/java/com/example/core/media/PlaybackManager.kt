@@ -669,6 +669,30 @@ class PlaybackManager(private val context: Context) {
         audioEngine.setSpatialAudioEnabled(enabled)
     }
 
+    fun setBassBoost(strength: Float) {
+        val clamped = strength.coerceIn(0f, 1f)
+        audioEngine.setBassBoostStrength(clamped)
+        _playbackState.update { current ->
+            current.copy(equalizerSettings = current.equalizerSettings.copy(bassBoost = clamped))
+        }
+    }
+
+    fun setVirtualizer(strength: Float) {
+        val clamped = strength.coerceIn(0f, 1f)
+        audioEngine.setVirtualizerStrength(clamped)
+        _playbackState.update { current ->
+            current.copy(equalizerSettings = current.equalizerSettings.copy(virtualizer = clamped))
+        }
+    }
+
+    fun setLoudnessGain(gainMb: Int) {
+        val clamped = gainMb.coerceIn(0, 1500)
+        audioEngine.setLoudnessEnhancerGain(clamped)
+        _playbackState.update { current ->
+            current.copy(equalizerSettings = current.equalizerSettings.copy(loudnessGainMb = clamped))
+        }
+    }
+
     // JavaScript Bridge callbacks from YouTube
     fun onBridgePlayerStateChange(stateInt: Int) {
         when (stateInt) {

@@ -178,6 +178,12 @@ class PlayerViewModel(
 
     fun setMasterGain(gain: Float) = playbackManager.setMasterGain(gain)
 
+    fun setBassBoost(strength: Float) = playbackManager.setBassBoost(strength)
+
+    fun setVirtualizer(strength: Float) = playbackManager.setVirtualizer(strength)
+
+    fun setLoudnessGain(gainMb: Int) = playbackManager.setLoudnessGain(gainMb)
+
     fun jumpToQueueIndex(index: Int) {
         val q = playbackManager.playbackState.value.queue
         if (index in q.indices) {

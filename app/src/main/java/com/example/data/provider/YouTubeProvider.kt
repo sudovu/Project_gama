@@ -48,14 +48,14 @@ class YouTubeProvider(
 
     companion object {
         private val TRENDING_SEEDS = listOf(
-            "trending music official music video",
-            "top 50 music hits this week official video",
-            "popular songs official music video",
-            "billboard hot 100 new songs official video",
+            "billboard hot 100 new songs 2026 official video",
+            "trending music official music video today",
+            "top 100 songs this week official video 2026",
+            "popular songs official music video 2026",
             "viral hits today official music video",
-            "youtube music top songs trending",
-            "new music releases official video",
-            "global top hits official music video"
+            "youtube music top songs trending 2026",
+            "new music releases official video 2026",
+            "global top hits official music video 2026"
         )
 
         private val GENRE_QUERY_POOLS = mapOf(
@@ -200,7 +200,29 @@ class YouTubeProvider(
         val seed = if (forceRefresh) System.currentTimeMillis() else today.hashCode().toLong()
         val baseTop100 = DailyTop100Registry.getDailyTop100(seed)
 
-        val top100 = baseTop100.mapIndexed { index, track ->
+        // Asynchronously fetch live trending hits directly from YouTube
+        val liveTrending = try {
+            val q = listOf(
+                "billboard hot 100 new songs 2026 official video",
+                "top music hits today official video",
+                "trending music official music video today"
+            ).random()
+            fetchInnerTubeVideos(q, "ALL")
+                .filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) }
+                .take(15)
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+        val merged = if (liveTrending.isNotEmpty()) {
+            val liveVideoIds = liveTrending.map { it.youtubeVideoId.ifEmpty { it.id } }.toSet()
+            val filteredBase = baseTop100.filterNot { it.youtubeVideoId in liveVideoIds || liveTrending.any { lt -> lt.title.equals(it.title, ignoreCase = true) } }
+            (liveTrending.take(10) + filteredBase).distinctBy { it.youtubeVideoId.ifEmpty { it.id } }.take(100)
+        } else {
+            baseTop100
+        }
+
+        val top100 = merged.mapIndexed { index, track ->
             val rank = index + 1
             val trend = when {
                 rank == 1 -> "HOT #1 OF THE DAY"
