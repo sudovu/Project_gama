@@ -1,0 +1,10 @@
+{
+  "test_name": "gitops_autonomous_pipeline_e2e",
+  "triggered_at": "2026-10-29T15:47:29Z",
+  "host": "vhu",
+  "expected_verdicts": {
+    "git_fetch_rebase": "PASS",
+    "http_health_200": "PASS",
+    "ledger_discrepancy_zero": "PASS"
+  }
+}
