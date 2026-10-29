@@ -46,7 +46,7 @@ data class PlayerUiState(
     val playbackState: PlaybackState = PlaybackState(),
     val isFavorite: Boolean = false,
     val sheetType: PlayerSheetType = PlayerSheetType.NONE,
-    val playerStyle: PlayerStyle = PlayerStyle.FLUID_GLASS
+    val playerStyle: PlayerStyle = PlayerStyle.CYBER_NEON
 )
 
 class PlayerViewModel(
@@ -54,7 +54,7 @@ class PlayerViewModel(
     private val repository: MusicRepository
 ) : ViewModel() {
 
-    private val _playerStyle = MutableStateFlow(PlayerStyle.FLUID_GLASS)
+    private val _playerStyle = MutableStateFlow(PlayerStyle.CYBER_NEON)
     val playerStyle: StateFlow<PlayerStyle> = _playerStyle.asStateFlow()
 
     private val _lyricsState = MutableStateFlow<LyricsUiState>(LyricsUiState.Empty)

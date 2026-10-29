@@ -1,8 +1,5 @@
 package com.example.core.ui
 
-import android.graphics.RenderEffect
-import android.graphics.Shader
-import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -50,8 +47,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asComposeRenderEffect
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -138,14 +133,7 @@ fun GammaMiniPlayer(
                 }
                 .shadow(elevation = 14.dp, shape = RoundedCornerShape(22.dp))
                 .clip(RoundedCornerShape(22.dp))
-                .then(
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        Modifier.graphicsLayer {
-                            renderEffect = RenderEffect.createBlurEffect(20f, 20f, Shader.TileMode.CLAMP).asComposeRenderEffect()
-                        }
-                    } else Modifier
-                )
-                .background(GammaSurfaceElevated.copy(alpha = 0.88f))
+                .background(GammaSurfaceElevated.copy(alpha = 0.94f))
                 .border(
                     width = 1.2.dp,
                     brush = Brush.horizontalGradient(

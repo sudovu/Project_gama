@@ -44,13 +44,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.layout.ContentScale
+
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -61,7 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+
 import com.example.data.provider.TrackLyrics
 import com.example.domain.model.Track
 import com.example.ui.theme.GammaBackground
@@ -98,18 +97,7 @@ fun GammaSyncedLyricsSheet(
             .testTag("lyrics_modal_sheet")
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Fluid blurred artwork background (inspired by Echo Music / Apple Music)
-            if (track != null && track.artworkUrl.isNotBlank()) {
-                AsyncImage(
-                    model = track.artworkUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .blur(50.dp)
-                        .alpha(0.28f)
-                )
-            }
+            // Clean dark ambient gradient (no blur)
 
             // Dark gradient overlay
             Box(

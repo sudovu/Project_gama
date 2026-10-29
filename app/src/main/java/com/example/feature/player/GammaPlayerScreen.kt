@@ -61,9 +61,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
-import androidx.compose.ui.layout.ContentScale
-import coil.compose.AsyncImage
+
+
+
 import com.example.core.ui.GammaCurvedWaveformSeekbar
 import com.example.core.ui.GammaGestureOverlay
 import com.example.data.provider.TrackDetailsInfo
@@ -191,43 +191,17 @@ fun GammaPlayerScreen(
             .fillMaxSize()
             .background(GammaBackground)
     ) {
-        // Fluid blurred artwork background (Echo-Music / Apple Music style)
-        if (uiState.playerStyle == PlayerStyle.FLUID_GLASS && track != null && track.artworkUrl.isNotBlank()) {
-            AsyncImage(
-                model = track.artworkUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .blur(65.dp)
-                    .alpha(0.38f)
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Black.copy(alpha = 0.5f),
-                                Color.Black.copy(alpha = 0.72f),
-                                Color.Black.copy(alpha = 0.92f)
-                            )
-                        )
+        // Crisp ambient backdrop
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(GammaGlowViolet.copy(alpha = 0.35f), GammaBackground),
+                        radius = 1200f
                     )
-            )
-        } else {
-            // Deep ambient glow for Cyber Neon mode
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(GammaGlowViolet, GammaBackground),
-                            radius = 1200f
-                        )
-                    )
-            )
-        }
+                )
+        )
 
         Column(
             modifier = Modifier
@@ -376,20 +350,18 @@ fun GammaPlayerScreen(
                     .scale(if (playback.isPlaying) pulseScale else 1.0f)
             ) {
                 if (!isYouTubePlaying || isVideoClosed || isAudioOnly) {
-                    // Background aura ring
                     Box(
-                        modifier = Modifier
-                            .size(width = 336.dp, height = 210.dp)
-                            .background(GammaGlowCyan.copy(alpha = 0.25f), RoundedCornerShape(20.dp))
-                    )
-
-                    GammaArtwork(
-                        url = track?.artworkUrl ?: "",
-                        contentDescription = "${track?.title} cover",
-                        modifier = Modifier.size(214.dp),
-                        shape = RoundedCornerShape(20.dp),
-                        hasGlowBorder = true
-                    )
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        GammaArtwork(
+                            url = track?.artworkUrl ?: "",
+                            contentDescription = "${track?.title} cover",
+                            modifier = Modifier.size(214.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            hasGlowBorder = true
+                        )
+                    }
 
                     if (isAudioOnly) {
                         Box(
