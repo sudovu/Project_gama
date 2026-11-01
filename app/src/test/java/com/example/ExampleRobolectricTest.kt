@@ -362,7 +362,11 @@ class ExampleRobolectricTest {
         // Simulate local downloaded file creation in GAMA storage
         val targetFile = downloader.getTrackFile(track.id)
         targetFile.parentFile?.mkdirs()
-        targetFile.writeBytes(ByteArray(2048) { 1 })
+        val dummyAudio = ByteArray(250_000) { 0 }
+        dummyAudio[0] = 'I'.code.toByte()
+        dummyAudio[1] = 'D'.code.toByte()
+        dummyAudio[2] = '3'.code.toByte()
+        targetFile.writeBytes(dummyAudio)
 
         // Re-scan
         downloader.scanExistingDownloads()

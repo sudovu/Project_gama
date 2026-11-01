@@ -223,6 +223,7 @@ class GamaAudioEngine(private val context: Context) {
     private var externalDurationMs: Long = 0L
 
     var onTrackCompletedListener: (() -> Unit)? = null
+    var onPlaybackErrorListener: ((track: Track?, error: String) -> Unit)? = null
 
     fun playTrack(track: Track) {
         currentTrack = track
@@ -390,27 +391,35 @@ class GamaAudioEngine(private val context: Context) {
 
                 setOnErrorListener { _, what, extra ->
                     Log.w(TAG, "MediaPlayer error: what=$what extra=$extra")
+                    val err = "MediaPlayer error: what=$what extra=$extra"
+                    onPlaybackErrorListener?.invoke(currentTrack, err)
                     true
                 }
 
                 if (isRemote) {
                     prepareAsync()
                 } else {
-                    prepare()
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && currentSpeed != 1.0f) {
-                        try {
-                            playbackParams = playbackParams.setSpeed(currentSpeed)
-                        } catch (_: Exception) {}
+                    try {
+                        prepare()
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && currentSpeed != 1.0f) {
+                            try {
+                                playbackParams = playbackParams.setSpeed(currentSpeed)
+                            } catch (_: Exception) {}
+                        }
+                        val finalVol = (masterGainMultiplier * currentDucking).coerceIn(0f, 1f)
+                        setVolume(finalVol, finalVol)
+                        start()
+                        isEnginePlaying.set(true)
+                        attachEqualizerToSession(audioSessionId)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Local file prepare failed: ${e.message}", e)
+                        onPlaybackErrorListener?.invoke(currentTrack, e.message ?: "Prepare failed")
                     }
-                    val finalVol = (masterGainMultiplier * currentDucking).coerceIn(0f, 1f)
-                    setVolume(finalVol, finalVol)
-                    start()
-                    isEnginePlaying.set(true)
-                    attachEqualizerToSession(audioSessionId)
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "MediaPlayer initialization failed: ${e.message}", e)
+            onPlaybackErrorListener?.invoke(currentTrack, e.message ?: "Init failed")
         }
     }
 

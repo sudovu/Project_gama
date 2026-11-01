@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Build
+import android.util.Log
 import com.example.data.provider.CuratedFrequencies
 import com.example.data.provider.YouTubeProvider
 import com.example.domain.model.EqualizerSettings
@@ -38,6 +39,7 @@ interface YouTubePlayerBridge {
 class PlaybackManager(private val context: Context) {
 
     companion object {
+        private const val TAG = "PlaybackManager"
         var activeInstance: PlaybackManager? = null
     }
 
@@ -85,6 +87,9 @@ class PlaybackManager(private val context: Context) {
         audioEngine.onTrackCompletedListener = {
             scope.launch { onTrackFinished() }
         }
+        audioEngine.onPlaybackErrorListener = { track, error ->
+            scope.launch { handlePlaybackError(track, error) }
+        }
         startProgressTicker()
     }
 
@@ -129,6 +134,28 @@ class PlaybackManager(private val context: Context) {
 
     fun detachBridge() {
         this.playerBridge = null
+    }
+
+    private fun handlePlaybackError(track: Track?, error: String) {
+        val failingTrack = track ?: _playbackState.value.currentTrack ?: return
+        Log.w(TAG, "Audio playback error for '${failingTrack.title}': $error")
+        if (failingTrack.localAudioUri.isNotEmpty()) {
+            musicDownloader.deleteDownload(failingTrack.id)
+            val fallbackTrack = failingTrack.copy(localAudioUri = "", isDownloaded = false)
+            _playbackState.update { current ->
+                val newQueue = current.queue.map { if (it.id == failingTrack.id) fallbackTrack else it }
+                current.copy(
+                    currentTrack = fallbackTrack,
+                    queue = newQueue
+                )
+            }
+            if (fallbackTrack.youtubeVideoId.isNotEmpty()) {
+                Log.i(TAG, "Gracefully falling back to YouTube video playback for '${fallbackTrack.title}'")
+                playerBridge?.loadVideo(fallbackTrack.youtubeVideoId)
+                playerBridge?.setPlaybackRate(_playbackState.value.playbackSpeed)
+                playerBridge?.playVideo()
+            }
+        }
     }
 
     fun playTrack(track: Track, newQueue: List<Track> = emptyList()) {
