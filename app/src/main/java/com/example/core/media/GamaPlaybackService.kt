@@ -43,14 +43,29 @@ class GamaPlaybackService : Service() {
         const val EXTRA_ARTIST = "extra_artist"
         const val EXTRA_IS_PLAYING = "extra_is_playing"
         const val EXTRA_ART_URL = "extra_art_url"
+        const val EXTRA_POSITION_MS = "extra_position_ms"
+        const val EXTRA_DURATION_MS = "extra_duration_ms"
+        const val EXTRA_SPEED = "extra_speed"
 
-        fun start(context: Context, title: String, artist: String, isPlaying: Boolean, artUrl: String = "") {
+        fun start(
+            context: Context,
+            title: String,
+            artist: String,
+            isPlaying: Boolean,
+            artUrl: String = "",
+            positionMs: Long = 0L,
+            durationMs: Long = 0L,
+            speed: Float = 1.0f
+        ) {
             val intent = Intent(context, GamaPlaybackService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_TITLE, title)
                 putExtra(EXTRA_ARTIST, artist)
                 putExtra(EXTRA_IS_PLAYING, isPlaying)
                 putExtra(EXTRA_ART_URL, artUrl)
+                putExtra(EXTRA_POSITION_MS, positionMs)
+                putExtra(EXTRA_DURATION_MS, durationMs)
+                putExtra(EXTRA_SPEED, speed)
             }
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -63,13 +78,25 @@ class GamaPlaybackService : Service() {
             }
         }
 
-        fun update(context: Context, title: String, artist: String, isPlaying: Boolean, artUrl: String = "") {
+        fun update(
+            context: Context,
+            title: String,
+            artist: String,
+            isPlaying: Boolean,
+            artUrl: String = "",
+            positionMs: Long = 0L,
+            durationMs: Long = 0L,
+            speed: Float = 1.0f
+        ) {
             val intent = Intent(context, GamaPlaybackService::class.java).apply {
                 action = ACTION_UPDATE
                 putExtra(EXTRA_TITLE, title)
                 putExtra(EXTRA_ARTIST, artist)
                 putExtra(EXTRA_IS_PLAYING, isPlaying)
                 putExtra(EXTRA_ART_URL, artUrl)
+                putExtra(EXTRA_POSITION_MS, positionMs)
+                putExtra(EXTRA_DURATION_MS, durationMs)
+                putExtra(EXTRA_SPEED, speed)
             }
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -99,6 +126,9 @@ class GamaPlaybackService : Service() {
     private var currentArtUrl: String = ""
     private var currentBitmap: Bitmap? = null
     private var mediaSession: MediaSessionCompat? = null
+    private var currentPositionMs: Long = 0L
+    private var currentDurationMs: Long = 0L
+    private var currentSpeed: Float = 1.0f
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -119,6 +149,9 @@ class GamaPlaybackService : Service() {
                 }
                 override fun onSkipToPrevious() {
                     PlaybackManager.activeInstance?.skipPrevious()
+                }
+                override fun onSeekTo(pos: Long) {
+                    PlaybackManager.activeInstance?.seekTo(pos)
                 }
                 override fun onStop() {
                     PlaybackManager.activeInstance?.pause()
@@ -161,6 +194,9 @@ class GamaPlaybackService : Service() {
                 currentTitle = intent.getStringExtra(EXTRA_TITLE) ?: currentTitle
                 currentArtist = intent.getStringExtra(EXTRA_ARTIST) ?: currentArtist
                 isPlaying = intent.getBooleanExtra(EXTRA_IS_PLAYING, isPlaying)
+                currentPositionMs = intent.getLongExtra(EXTRA_POSITION_MS, currentPositionMs)
+                currentDurationMs = intent.getLongExtra(EXTRA_DURATION_MS, currentDurationMs)
+                currentSpeed = intent.getFloatExtra(EXTRA_SPEED, currentSpeed)
                 val newArtUrl = intent.getStringExtra(EXTRA_ART_URL) ?: ""
 
                 if (newArtUrl.isNotEmpty() && newArtUrl != currentArtUrl) {
@@ -248,6 +284,9 @@ class GamaPlaybackService : Service() {
     private fun syncMediaSession() {
         try {
             val state = if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
+            val pos = currentPositionMs.coerceAtLeast(0L)
+            val spd = if (currentSpeed > 0f) currentSpeed else 1.0f
+
             mediaSession?.setPlaybackState(
                 PlaybackStateCompat.Builder()
                     .setActions(
@@ -255,9 +294,11 @@ class GamaPlaybackService : Service() {
                         PlaybackStateCompat.ACTION_PAUSE or
                         PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
                         PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
-                        PlaybackStateCompat.ACTION_PLAY_PAUSE
+                        PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                        PlaybackStateCompat.ACTION_SEEK_TO or
+                        PlaybackStateCompat.ACTION_STOP
                     )
-                    .setState(state, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1.0f)
+                    .setState(state, pos, spd, android.os.SystemClock.elapsedRealtime())
                     .build()
             )
 
@@ -265,6 +306,9 @@ class GamaPlaybackService : Service() {
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, currentTitle)
                 .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, currentArtist)
                 .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, "GAMA")
+            if (currentDurationMs > 0L) {
+                metaBuilder.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, currentDurationMs)
+            }
             if (currentBitmap != null) {
                 metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, currentBitmap)
             }
@@ -350,6 +394,10 @@ class GamaPlaybackService : Service() {
             .addAction(playPauseIcon, playPauseTitle, playPausePendingIntent)
             .addAction(android.R.drawable.ic_media_next, "Next", nextPendingIntent)
             .setStyle(mediaStyle)
+
+        if (currentDurationMs > 0L) {
+            builder.setProgress((currentDurationMs / 1000).toInt(), (currentPositionMs / 1000).toInt(), false)
+        }
 
         if (currentBitmap != null) {
             builder.setLargeIcon(currentBitmap)

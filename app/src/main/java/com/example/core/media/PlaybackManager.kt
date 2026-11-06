@@ -226,12 +226,16 @@ class PlaybackManager(private val context: Context) {
             playerBridge?.pauseVideo()
         }
 
+        val initialDur = if (playableTrack.durationSeconds > 0) playableTrack.durationSeconds * 1000L else 0L
         GamaPlaybackService.start(
             context = context,
             title = playableTrack.title,
             artist = playableTrack.artist,
             isPlaying = true,
-            artUrl = playableTrack.artworkUrl
+            artUrl = playableTrack.artworkUrl,
+            positionMs = 0L,
+            durationMs = initialDur,
+            speed = _playbackState.value.playbackSpeed
         )
 
         onTrackStartedListener?.invoke(playableTrack)
@@ -294,7 +298,10 @@ class PlaybackManager(private val context: Context) {
             title = track.title,
             artist = track.artist,
             isPlaying = true,
-            artUrl = track.artworkUrl
+            artUrl = track.artworkUrl,
+            positionMs = _playbackState.value.positionMs,
+            durationMs = _playbackState.value.durationMs,
+            speed = _playbackState.value.playbackSpeed
         )
     }
 
@@ -309,7 +316,10 @@ class PlaybackManager(private val context: Context) {
                 title = track.title,
                 artist = track.artist,
                 isPlaying = false,
-                artUrl = track.artworkUrl
+                artUrl = track.artworkUrl,
+                positionMs = _playbackState.value.positionMs,
+                durationMs = _playbackState.value.durationMs,
+                speed = _playbackState.value.playbackSpeed
             )
         }
     }
@@ -338,6 +348,18 @@ class PlaybackManager(private val context: Context) {
         } else {
             audioEngine.setExternalPosition(clamped, duration)
             playerBridge?.seekToSeconds(clamped / 1000f)
+        }
+        track?.let {
+            GamaPlaybackService.update(
+                context = context,
+                title = it.title,
+                artist = it.artist,
+                isPlaying = _playbackState.value.isPlaying,
+                artUrl = it.artworkUrl,
+                positionMs = clamped,
+                durationMs = duration,
+                speed = _playbackState.value.playbackSpeed
+            )
         }
     }
 
@@ -456,9 +478,12 @@ class PlaybackManager(private val context: Context) {
             return
         }
 
-        // Advance to next track, skipping over collections/mixes to guarantee a good single song
+        // Advance to next track, skipping over collections/mixes or duplicate/same songs
         var nextIndex = state.queueIndex + 1
-        while (nextIndex < queue.size && SmartQueueEngine.isCollectionOrMix(queue[nextIndex].title, queue[nextIndex].durationSeconds)) {
+        while (nextIndex < queue.size && (
+            SmartQueueEngine.isCollectionOrMix(queue[nextIndex].title, queue[nextIndex].durationSeconds) ||
+            SmartQueueEngine.isSameSong(queue[nextIndex], state.currentTrack)
+        )) {
             nextIndex++
         }
 
@@ -728,14 +753,32 @@ class PlaybackManager(private val context: Context) {
                 _playbackState.update { it.copy(isPlaying = true, isBuffering = false) }
                 audioEngine.resumeVisualizer()
                 _playbackState.value.currentTrack?.let {
-                    GamaPlaybackService.update(context, it.title, it.artist, true, it.artworkUrl)
+                    GamaPlaybackService.update(
+                        context = context,
+                        title = it.title,
+                        artist = it.artist,
+                        isPlaying = true,
+                        artUrl = it.artworkUrl,
+                        positionMs = _playbackState.value.positionMs,
+                        durationMs = _playbackState.value.durationMs,
+                        speed = _playbackState.value.playbackSpeed
+                    )
                 }
             }
             2 -> { // Paused
                 _playbackState.update { it.copy(isPlaying = false, isBuffering = false) }
                 audioEngine.pauseVisualizer()
                 _playbackState.value.currentTrack?.let {
-                    GamaPlaybackService.update(context, it.title, it.artist, false, it.artworkUrl)
+                    GamaPlaybackService.update(
+                        context = context,
+                        title = it.title,
+                        artist = it.artist,
+                        isPlaying = false,
+                        artUrl = it.artworkUrl,
+                        positionMs = _playbackState.value.positionMs,
+                        durationMs = _playbackState.value.durationMs,
+                        speed = _playbackState.value.playbackSpeed
+                    )
                 }
             }
             3 -> { // Buffering
@@ -940,6 +983,21 @@ class PlaybackManager(private val context: Context) {
                             durationMs = dur,
                             visualizerBands = bands
                         )
+                    }
+
+                    if (step % 8 == 0L && state.isPlaying) {
+                        state.currentTrack?.let { track ->
+                            GamaPlaybackService.update(
+                                context = context,
+                                title = track.title,
+                                artist = track.artist,
+                                isPlaying = true,
+                                artUrl = track.artworkUrl,
+                                positionMs = newPos,
+                                durationMs = dur,
+                                speed = state.playbackSpeed
+                            )
+                        }
                     }
 
                     if (!isTransitioningTrack && dur > 3000L && newPos >= dur) {

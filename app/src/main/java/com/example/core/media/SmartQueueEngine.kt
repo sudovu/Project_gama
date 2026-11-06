@@ -133,6 +133,90 @@ object SmartQueueEngine {
         return Pair(stripped.ifEmpty { rawTitle }, cleanAuthor)
     }
 
+    /**
+     * Normalizes a song title to its core semantic token by stripping video badges,
+     * channel delimiters, features, and non-alphanumeric noise.
+     */
+    fun normalizeTitleOnly(rawTitle: String): String {
+        var clean = rawTitle
+            .replace(Regex("(?i)\\s*[\\(\\[\\{][^\\)\\]\\}]*(?:official|video|audio|lyric|lyrics|visualizer|live|remaster|hd|4k|hq|explicit|version|mix)[^\\)\\]\\}]*[\\)\\]\\}]"), "")
+            .replace(Regex("(?i)\\s*[\\(\\[\\{][^\\)\\]\\}]*(?:feat|ft|featuring)[^\\)\\]\\}]*[\\)\\]\\}]"), "")
+            .replace(Regex("(?i)\\s*\\|\\|.*"), "")
+            .replace(Regex("(?i)\\s*\\|.*"), "")
+            .replace(Regex("(?i)\\s*-\\s*official.*"), "")
+            .trim()
+
+        val splitDelimiters = listOf(" - ", " – ", " — ", " : ")
+        for (delim in splitDelimiters) {
+            if (clean.contains(delim)) {
+                val parts = clean.split(delim, limit = 2)
+                if (parts[1].trim().isNotEmpty()) {
+                    clean = parts[1].trim()
+                }
+            }
+        }
+
+        clean = clean.replace(Regex("(?i)\\s*[\\(\\[\\{].*?[\\)\\]\\}]"), "").trim()
+        val alphaNum = clean.replace(Regex("[^a-zA-Z0-9]"), "").lowercase().trim()
+        return if (alphaNum.isNotEmpty()) alphaNum else rawTitle.replace(Regex("[^a-zA-Z0-9]"), "").lowercase().trim()
+    }
+
+    fun getGenreFamily(genre: String): String {
+        val g = genre.lowercase().trim()
+        return when {
+            g.contains("rock") || g.contains("metal") || g.contains("punk") || g.contains("grunge") || g.contains("alternative") || g.contains("hard") -> "ROCK_METAL"
+            g.contains("hip") || g.contains("rap") || g.contains("trap") || g.contains("drill") || g.contains("r&b") || g.contains("urban") -> "HIP_HOP"
+            g.contains("pop") || g.contains("dance") || g.contains("chart") || g.contains("synthpop") || g.contains("k-pop") || g.contains("electropop") -> "POP"
+            g.contains("electronic") || g.contains("techno") || g.contains("house") || g.contains("edm") || g.contains("trance") || g.contains("dubstep") || g.contains("drum") || g.contains("bass") -> "ELECTRONIC"
+            g.contains("chill") || g.contains("lo-fi") || g.contains("lofi") || g.contains("acoustic") || g.contains("folk") || g.contains("indie") || g.contains("soul") || g.contains("jazz") || g.contains("blues") -> "CHILL_ACOUSTIC"
+            g.contains("ambient") || g.contains("meditation") || g.contains("classical") || g.contains("piano") || g.contains("solfeggio") || g.contains("focus") || g.contains("study") -> "AMBIENT_FOCUS"
+            else -> g.uppercase().replace(Regex("[^A-Z]"), "")
+        }
+    }
+
+    fun areGenresSimilar(genreA: String, genreB: String): Boolean {
+        val cleanA = genreA.trim()
+        val cleanB = genreB.trim()
+        if (cleanA.isEmpty() || cleanB.isEmpty()) return true
+        if (cleanA.equals(cleanB, ignoreCase = true)) return true
+        if (cleanA.contains(cleanB, ignoreCase = true) || cleanB.contains(cleanA, ignoreCase = true)) return true
+        val famA = getGenreFamily(cleanA)
+        val famB = getGenreFamily(cleanB)
+        return famA.isNotEmpty() && famA == famB
+    }
+
+    fun isSameSong(a: Track?, b: Track?): Boolean {
+        if (a == null || b == null) return false
+        val idA = a.id.trim()
+        val idB = b.id.trim()
+        if (idA.isNotEmpty() && idA == idB) return true
+
+        val ytA = a.youtubeVideoId.trim()
+        val ytB = b.youtubeVideoId.trim()
+        if (ytA.isNotEmpty() && ytA == ytB) return true
+
+        val uriA = a.localAudioUri.trim()
+        val uriB = b.localAudioUri.trim()
+        if (uriA.isNotEmpty() && uriA == uriB) return true
+
+        val normTitleA = normalizeTitleOnly(a.title)
+        val normTitleB = normalizeTitleOnly(b.title)
+        if (normTitleA.isNotEmpty() && normTitleB.isNotEmpty()) {
+            if (normTitleA == normTitleB) return true
+            if (normTitleA.length >= 6 && normTitleB.length >= 6) {
+                if (normTitleA.startsWith(normTitleB) || normTitleB.startsWith(normTitleA)) {
+                    return true
+                }
+            }
+        }
+
+        val metaA = getTrackMetaKey(a)
+        val metaB = getTrackMetaKey(b)
+        if (metaA.isNotEmpty() && metaA == metaB) return true
+
+        return false
+    }
+
     fun getTrackMetaKey(track: Track): String {
         val normTitle = track.title
             .replace(Regex("\\s*[\\[\\(].*?[\\]\\)]"), "")
@@ -147,13 +231,7 @@ object SmartQueueEngine {
     }
 
     fun areTracksEqual(a: Track?, b: Track?): Boolean {
-        if (a == null || b == null) return false
-        if (a.id.isNotBlank() && a.id == b.id) return true
-        if (a.youtubeVideoId.isNotBlank() && a.youtubeVideoId == b.youtubeVideoId) return true
-        if (a.localAudioUri.isNotBlank() && a.localAudioUri == b.localAudioUri) return true
-        val metaA = getTrackMetaKey(a)
-        val metaB = getTrackMetaKey(b)
-        return metaA.isNotEmpty() && metaA == metaB
+        return isSameSong(a, b)
     }
 
     fun deduplicateTracks(tracks: List<Track>): List<Track> {
@@ -161,6 +239,7 @@ object SmartQueueEngine {
         val seenYtIds = mutableSetOf<String>()
         val seenUris = mutableSetOf<String>()
         val seenMetaKeys = mutableSetOf<String>()
+        val seenTitles = mutableSetOf<String>()
         val result = ArrayList<Track>(tracks.size)
 
         for (t in tracks) {
@@ -168,17 +247,20 @@ object SmartQueueEngine {
             val ytId = t.youtubeVideoId.trim()
             val uri = t.localAudioUri.trim()
             val metaKey = getTrackMetaKey(t)
+            val normTitle = normalizeTitleOnly(t.title)
 
             val isDuplicate = (id.isNotEmpty() && id in seenIds) ||
                     (ytId.isNotEmpty() && ytId in seenYtIds) ||
                     (uri.isNotEmpty() && uri in seenUris) ||
-                    (metaKey.isNotEmpty() && metaKey in seenMetaKeys)
+                    (metaKey.isNotEmpty() && metaKey in seenMetaKeys) ||
+                    (normTitle.isNotEmpty() && normTitle in seenTitles)
 
             if (!isDuplicate) {
                 if (id.isNotEmpty()) seenIds.add(id)
                 if (ytId.isNotEmpty()) seenYtIds.add(ytId)
                 if (uri.isNotEmpty()) seenUris.add(uri)
                 if (metaKey.isNotEmpty()) seenMetaKeys.add(metaKey)
+                if (normTitle.isNotEmpty()) seenTitles.add(normTitle)
                 result.add(t)
             }
         }
@@ -196,7 +278,8 @@ object SmartQueueEngine {
             it.id == candidate.id || 
             (it.youtubeVideoId.isNotEmpty() && it.youtubeVideoId == candidate.youtubeVideoId) ||
             (it.localAudioUri.isNotEmpty() && it.localAudioUri == candidate.localAudioUri) ||
-            (candidateMeta.isNotEmpty() && getTrackMetaKey(it) == candidateMeta)
+            (candidateMeta.isNotEmpty() && getTrackMetaKey(it) == candidateMeta) ||
+            isSameSong(candidate, it)
         }) {
             return -1000.0
         }
@@ -260,10 +343,7 @@ object SmartQueueEngine {
         val currentMetaKeys = currentQueue.map { getTrackMetaKey(it) }.filter { it.isNotEmpty() }.toSet()
 
         fun isCandidateInQueue(c: Track): Boolean {
-            val meta = getTrackMetaKey(c)
-            return (c.id.isNotEmpty() && c.id in currentQueueIds) ||
-                    (c.youtubeVideoId.isNotEmpty() && c.youtubeVideoId in currentVideoIds) ||
-                    (meta.isNotEmpty() && meta in currentMetaKeys)
+            return currentQueue.any { isSameSong(c, it) }
         }
 
         val scoredCandidates = singlePool
@@ -302,63 +382,49 @@ object SmartQueueEngine {
         if (singlePool.isEmpty()) return emptyList()
 
         val activeGenre = targetTrack?.genre?.trim().orEmpty()
-        val activeArtist = targetTrack?.artist?.trim().orEmpty()
 
-        val currentQueueIds = currentQueue.map { it.id }.filter { it.isNotEmpty() }.toSet()
-        val currentVideoIds = currentQueue.map { it.youtubeVideoId }.filter { it.isNotEmpty() }.toSet()
-        val currentUris = currentQueue.map { it.localAudioUri }.filter { it.isNotEmpty() }.toSet()
-        val currentMetaKeys = currentQueue.map { getTrackMetaKey(it) }.filter { it.isNotEmpty() }.toSet()
-
-        val playedIds = playedTracks.map { it.id }.filter { it.isNotEmpty() }.toSet()
-        val playedVideoIds = playedTracks.map { it.youtubeVideoId }.filter { it.isNotEmpty() }.toSet()
-        val playedMetaKeys = playedTracks.map { getTrackMetaKey(it) }.filter { it.isNotEmpty() }.toSet()
-
-        fun isCandidateInQueue(c: Track): Boolean {
-            val meta = getTrackMetaKey(c)
-            return (c.id.isNotEmpty() && c.id in currentQueueIds) ||
-                    (c.youtubeVideoId.isNotEmpty() && c.youtubeVideoId in currentVideoIds) ||
-                    (c.localAudioUri.isNotEmpty() && c.localAudioUri in currentUris) ||
-                    (meta.isNotEmpty() && meta in currentMetaKeys)
+        // Strict forbidden check: Under NO circumstance allow the same song or title
+        // matching the target track or any track already present in the current queue!
+        fun isSameSongAsForbidden(c: Track): Boolean {
+            if (targetTrack != null && isSameSong(c, targetTrack)) return true
+            if (currentQueue.any { isSameSong(c, it) }) return true
+            return false
         }
 
-        fun isCandidatePlayed(c: Track): Boolean {
-            val meta = getTrackMetaKey(c)
-            return (c.id.isNotEmpty() && c.id in playedIds) ||
-                    (c.youtubeVideoId.isNotEmpty() && c.youtubeVideoId in playedVideoIds) ||
-                    (meta.isNotEmpty() && meta in playedMetaKeys)
+        fun hasBeenPlayed(c: Track): Boolean {
+            return playedTracks.any { isSameSong(c, it) }
         }
 
-        // 1. Unplayed candidates matching the target genre or artist NOT already in the queue
-        val genreMatches = singlePool
-            .filter { candidate ->
-                !isCandidateInQueue(candidate) &&
-                (
-                    (activeGenre.isNotEmpty() && (
-                        candidate.genre.contains(activeGenre, ignoreCase = true) ||
-                        activeGenre.contains(candidate.genre, ignoreCase = true)
-                    )) ||
-                    (activeArtist.isNotEmpty() && candidate.artist.equals(activeArtist, ignoreCase = true))
-                )
-            }
-            .sortedBy { if (isCandidatePlayed(it)) 1 else 0 }
+        // Filter out any track that is the same song as target or current queue
+        val eligibleCandidates = singlePool.filter { !isSameSongAsForbidden(it) }
+        if (eligibleCandidates.isEmpty()) return emptyList()
 
-        if (genreMatches.isNotEmpty()) {
-            return deduplicateTracks(genreMatches).take(count).map { it.copy(source = "genre_recommendation") }
+        // 1. Strictly similar genre family candidates (excluding the same song)
+        val similarGenreCandidates = if (activeGenre.isNotEmpty()) {
+            eligibleCandidates.filter { areGenresSimilar(it.genre, activeGenre) }
+        } else {
+            emptyList()
         }
 
-        // 2. Fallback to standard smart profile recommendations NOT in queue
-        val generalRecs = generateRecommendations(playedTracks, singlePool, currentQueue, count)
-        if (generalRecs.isNotEmpty()) {
-            return deduplicateTracks(generalRecs)
+        val sortedGenreCandidates = similarGenreCandidates.sortedBy { if (hasBeenPlayed(it)) 1 else 0 }
+        val dedupedGenre = deduplicateTracks(sortedGenreCandidates)
+        if (dedupedGenre.isNotEmpty()) {
+            return dedupedGenre.take(count).map { it.copy(source = "genre_recommendation") }
         }
 
-        // 3. Fallback: only pick candidates that are NOT currently in the queue
-        val unqueued = singlePool.filter { !isCandidateInQueue(it) }
-        if (unqueued.isNotEmpty()) {
-            return deduplicateTracks(unqueued).shuffled().take(count).map { it.copy(source = "genre_recommendation") }
+        // 2. Fallback to smart profile genre family recommendations
+        val profile = analyzePlayedTracks(playedTracks)
+        val profileGenre = profile.dominantGenre
+        val fallbackSimilar = eligibleCandidates
+            .filter { areGenresSimilar(it.genre, profileGenre) }
+            .sortedBy { if (hasBeenPlayed(it)) 1 else 0 }
+        val dedupedFallback = deduplicateTracks(fallbackSimilar)
+        if (dedupedFallback.isNotEmpty()) {
+            return dedupedFallback.take(count).map { it.copy(source = "genre_recommendation") }
         }
 
-        // Strictly avoid repeating songs when every candidate is already in queue
-        return emptyList()
+        // 3. Last fallback: any unqueued eligible track, sorted unplayed first, strictly different songs
+        val anyEligible = deduplicateTracks(eligibleCandidates.sortedBy { if (hasBeenPlayed(it)) 1 else 0 })
+        return anyEligible.take(count).map { it.copy(source = "genre_recommendation") }
     }
 }

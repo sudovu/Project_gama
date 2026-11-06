@@ -125,4 +125,86 @@ class DailyChartAndSongCleanTest {
         // With high probability across 14 items, order is different
         assertNotEquals(rotated1.map { it.id }, rotated2.map { it.id })
     }
+
+    @Test
+    fun testTitleNormalizationAndSameSongDetection() {
+        val t1 = com.example.domain.model.Track(
+            id = "t1",
+            title = "Linkin Park - The Emptiness Machine (Official Music Video)",
+            artist = "Linkin Park",
+            youtubeVideoId = "vid_emptiness_1",
+            genre = "Rock"
+        )
+        val t2 = com.example.domain.model.Track(
+            id = "t2",
+            title = "The Emptiness Machine [Official Audio]",
+            artist = "Linkin Park - Topic",
+            youtubeVideoId = "vid_emptiness_2",
+            genre = "Rock"
+        )
+        val t3 = com.example.domain.model.Track(
+            id = "t3",
+            title = "The Emptiness Machine (Lyrics)",
+            artist = "7clouds",
+            youtubeVideoId = "vid_emptiness_3",
+            genre = "Rock"
+        )
+        val diffTrack = com.example.domain.model.Track(
+            id = "t4",
+            title = "In The End",
+            artist = "Linkin Park",
+            youtubeVideoId = "vid_in_the_end",
+            genre = "Rock"
+        )
+
+        assertTrue("Expected t1 and t2 to be recognized as same song", SmartQueueEngine.isSameSong(t1, t2))
+        assertTrue("Expected t1 and t3 to be recognized as same song", SmartQueueEngine.isSameSong(t1, t3))
+        assertFalse("Expected t1 and diffTrack to be recognized as different songs", SmartQueueEngine.isSameSong(t1, diffTrack))
+    }
+
+    @Test
+    fun testGenreSimilarityAndRecommendationsNeverRepeatSameSong() {
+        // Similar genre checks
+        assertTrue("Rock and Heavy Metal should be similar", SmartQueueEngine.areGenresSimilar("Rock", "Heavy Metal"))
+        assertTrue("Alternative and Grunge should be similar", SmartQueueEngine.areGenresSimilar("Alternative", "Grunge"))
+        assertTrue("Hip Hop and Trap should be similar", SmartQueueEngine.areGenresSimilar("Hip-Hop", "Trap"))
+        assertFalse("Rock and Hip-Hop should NOT be similar", SmartQueueEngine.areGenresSimilar("Rock", "Hip-Hop"))
+
+        val target = com.example.domain.model.Track(
+            id = "lp_empty",
+            title = "The Emptiness Machine",
+            artist = "Linkin Park",
+            youtubeVideoId = "lp_empty_01",
+            genre = "Rock"
+        )
+
+        val candidatePool = listOf(
+            target.copy(id = "lp_empty_alt", title = "The Emptiness Machine (Official Video)", youtubeVideoId = "lp_empty_02"),
+            target.copy(id = "lp_empty_lyr", title = "The Emptiness Machine [Lyrics]", youtubeVideoId = "lp_empty_03"),
+            com.example.domain.model.Track(id = "c1", title = "Numb", artist = "Linkin Park", youtubeVideoId = "vid_numb_01", genre = "Rock"),
+            com.example.domain.model.Track(id = "c2", title = "In The End", artist = "Linkin Park", youtubeVideoId = "vid_inend01", genre = "Alternative Rock"),
+            com.example.domain.model.Track(id = "c3", title = "Smells Like Teen Spirit", artist = "Nirvana", youtubeVideoId = "vidsmells01", genre = "Grunge"),
+            com.example.domain.model.Track(id = "c4", title = "Not Like Us", artist = "Kendrick Lamar", youtubeVideoId = "vidnotlike1", genre = "Hip-Hop")
+        )
+
+        val recs = SmartQueueEngine.generateGenreRecommendations(
+            targetTrack = target,
+            playedTracks = emptyList(),
+            candidatePool = candidatePool,
+            currentQueue = listOf(target),
+            count = 5
+        )
+
+        // Must NOT recommend the same song
+        assertTrue("Recommendations must not contain same song as target",
+            recs.none { SmartQueueEngine.isSameSong(it, target) })
+
+        // Must recommend tracks from similar genre
+        assertTrue("Recommendations should contain rock/alternative/grunge tracks",
+            recs.any { it.title == "Numb" || it.title == "In The End" || it.title == "Smells Like Teen Spirit" })
+
+        // Deduplication check
+        val titles = recs.map { SmartQueueEngine.normalizeTitleOnly(it.title) }
+        assertEquals("Each recommended song should have unique normalized title", titles.size, titles.distinct().size)
+    }
 }
