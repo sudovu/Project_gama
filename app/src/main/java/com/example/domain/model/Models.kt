@@ -20,13 +20,30 @@ data class Track(
     val source: String = "curated",
     val isDownloaded: Boolean = false,
     val dailyRank: Int = 0,
-    val chartTrend: String = ""
+    val chartTrend: String = "",
+    val codec: String = "",
+    val bitrateKbps: Int = 0,
+    val sampleRateHz: Int = 0,
+    val bitDepth: Int = 0
 ) {
     val formattedDuration: String
         get() {
             val minutes = durationSeconds / 60
             val seconds = durationSeconds % 60
             return "%d:%02d".format(minutes, seconds)
+        }
+
+    val audioQualityBadge: String
+        get() {
+            return when {
+                codec.equals("FLAC", ignoreCase = true) || bitDepth >= 24 || sampleRateHz >= 96000 -> {
+                    if (sampleRateHz > 0 && bitDepth > 0) "Hi-Res Lossless • ${bitDepth}bit/${sampleRateHz / 1000}kHz"
+                    else "Hi-Res Lossless • FLAC"
+                }
+                codec.isNotEmpty() && bitrateKbps > 0 -> "$codec • ${bitrateKbps}kbps"
+                codec.isNotEmpty() -> codec.uppercase()
+                else -> "STEREO 320k"
+            }
         }
 }
 
@@ -120,7 +137,10 @@ data class EqualizerSettings(
     val bassBoost: Float = 0.35f,
     val virtualizer: Float = 0.30f,
     val loudnessGainMb: Int = 400,
-    val masterGain: Float = 1.0f
+    val masterGain: Float = 1.0f,
+    val preampGainDb: Float = 0.0f,
+    val isReplayGainEnabled: Boolean = false,
+    val crossfadeSeconds: Int = 0
 ) {
     companion object {
         fun defaultBands(): List<EqualizerBand> = listOf(

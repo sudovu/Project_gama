@@ -159,6 +159,19 @@ object GammaThemeManager {
     var customAccentColor by mutableStateOf<Color?>(null)
         private set
 
+    var isAmbientThemingEnabled by mutableStateOf(true)
+
+    var ambientArtworkAccent by mutableStateOf<Color?>(null)
+        private set
+
+    fun setAmbientArtworkColor(color: Color?) {
+        ambientArtworkAccent = color
+    }
+
+    fun clearAmbientArtworkColor() {
+        ambientArtworkAccent = null
+    }
+
     fun init(context: Context) {
         val prefs = context.getSharedPreferences("gamma_theme_prefs", Context.MODE_PRIVATE)
         val saved = prefs.getString("selected_preset", GammaThemePreset.COSMIC_CYAN.name)
@@ -222,11 +235,18 @@ val GammaSurfaceHighlight: Color
 val GammaSurfaceGlass: Color
     get() = GammaThemeManager.selectedThemePreset.surfaceGlassColor
 
+private val activeAccent: Color?
+    get() = if (GammaThemeManager.isAmbientThemingEnabled && GammaThemeManager.ambientArtworkAccent != null) {
+        GammaThemeManager.ambientArtworkAccent
+    } else {
+        GammaThemeManager.customAccentColor
+    }
+
 val GammaPrimary: Color
-    get() = GammaThemeManager.customAccentColor ?: GammaThemeManager.selectedThemePreset.primaryColor
+    get() = activeAccent ?: GammaThemeManager.selectedThemePreset.primaryColor
 
 val GammaPrimaryVariant: Color
-    get() = GammaThemeManager.customAccentColor?.copy(alpha = 0.8f) ?: GammaThemeManager.selectedThemePreset.primaryVariant
+    get() = activeAccent?.copy(alpha = 0.8f) ?: GammaThemeManager.selectedThemePreset.primaryVariant
 
 val GammaSecondary: Color
     get() = GammaThemeManager.selectedThemePreset.secondaryColor
@@ -235,7 +255,7 @@ val GammaTertiary: Color
     get() = GammaThemeManager.selectedThemePreset.tertiaryColor
 
 val GammaAccent: Color
-    get() = GammaThemeManager.customAccentColor ?: GammaThemeManager.selectedThemePreset.accentColor
+    get() = activeAccent ?: GammaThemeManager.selectedThemePreset.accentColor
 
 val GammaTextPrimary: Color
     get() = GammaThemeManager.selectedThemePreset.textPrimaryColor
@@ -253,10 +273,10 @@ val GammaError: Color
     get() = Color(0xFFFF5252)
 
 val GammaSuccess: Color
-    get() = GammaThemeManager.customAccentColor ?: GammaThemeManager.selectedThemePreset.accentColor
+    get() = activeAccent ?: GammaThemeManager.selectedThemePreset.accentColor
 
 val GammaGlowCyan: Color
-    get() = GammaThemeManager.customAccentColor?.copy(alpha = 0.25f) ?: GammaThemeManager.selectedThemePreset.primaryGlowColor
+    get() = activeAccent?.copy(alpha = 0.25f) ?: GammaThemeManager.selectedThemePreset.primaryGlowColor
 
 val GammaGlowViolet: Color
     get() = GammaThemeManager.selectedThemePreset.secondaryGlowColor
@@ -269,7 +289,7 @@ val GammaFrequencyBrush: Brush
 val GammaAuraBrush: Brush
     get() = Brush.verticalGradient(
         colors = listOf(
-            GammaThemeManager.customAccentColor?.copy(alpha = 0.15f) ?: GammaThemeManager.selectedThemePreset.auraTopColor,
+            activeAccent?.copy(alpha = 0.18f) ?: GammaThemeManager.selectedThemePreset.auraTopColor,
             GammaBackground
         )
     )

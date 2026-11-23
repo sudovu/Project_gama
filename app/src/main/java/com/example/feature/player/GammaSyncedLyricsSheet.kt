@@ -432,7 +432,7 @@ fun GammaSyncedLyricsSheet(
                 }
             }
 
-            // Floating Sync Calibration Capsule (Echo Music Best-Feature Integration)
+            // Floating Sync Calibration Capsule (Ultra-Precision Karaoke Timing)
             if (lyricsState is LyricsUiState.Success && lyricsState.lyrics.lines.isNotEmpty()) {
                 Box(
                     modifier = Modifier

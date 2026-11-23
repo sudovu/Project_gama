@@ -41,9 +41,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.core.util.AudioMetadataExtractor
 import com.example.ui.theme.GammaDivider
 import com.example.ui.theme.GammaPrimary
 import com.example.ui.theme.GammaSurfaceElevated
@@ -72,16 +74,21 @@ fun GammaUploadMusicDialog(
     var selectedAudioUri by remember { mutableStateOf<Uri?>(null) }
     var selectedAudioName by remember { mutableStateOf("") }
 
+    val context = LocalContext.current
     val audioPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
             selectedAudioUri = uri
-            val path = uri.lastPathSegment ?: "Local Audio Track"
-            val cleanName = path.substringAfterLast("/").substringBeforeLast(".")
-            selectedAudioName = cleanName
+            val metadata = AudioMetadataExtractor.extract(context, uri)
+            val extractedTitle = metadata.title.ifBlank { uri.lastPathSegment?.substringAfterLast("/")?.substringBeforeLast(".") ?: "Local Audio Track" }
+            val badgePart = if (metadata.audioQualityBadge.isNotBlank()) " [${metadata.audioQualityBadge}]" else ""
+            selectedAudioName = "$extractedTitle${if (metadata.artist.isNotBlank()) " - ${metadata.artist}" else ""}$badgePart"
             if (title.isBlank()) {
-                title = cleanName
+                title = extractedTitle
+            }
+            if (artist.isBlank() && metadata.artist.isNotBlank()) {
+                artist = metadata.artist
             }
         }
     }

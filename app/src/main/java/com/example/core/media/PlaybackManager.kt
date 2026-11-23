@@ -36,7 +36,7 @@ interface YouTubePlayerBridge {
     fun applyEqualizer(bands: List<Float>, masterGain: Float, isEnabled: Boolean)
 }
 
-class PlaybackManager(private val context: Context) {
+class PlaybackManager(val context: Context) {
 
     companion object {
         private const val TAG = "PlaybackManager"
@@ -112,6 +112,43 @@ class PlaybackManager(private val context: Context) {
     fun getAvailableCandidates(): List<Track> {
         val pool = if (cachedCandidates.isNotEmpty()) cachedCandidates else CuratedFrequencies.allTracks
         return pool.filter { !SmartQueueEngine.isCollectionOrMix(it.title, it.durationSeconds) && SmartQueueEngine.isTrackPlayable(it) }
+    }
+
+    fun toggleAudioOnlyMode() {
+        val current = _playbackState.value.isAudioOnlyMode
+        setAudioOnlyMode(!current)
+    }
+
+    fun setAudioOnlyMode(enabled: Boolean) {
+        _playbackState.update { it.copy(isAudioOnlyMode = enabled) }
+        val currentTrack = _playbackState.value.currentTrack
+        val isYouTube = currentTrack?.let { it.youtubeVideoId.isNotEmpty() && it.localAudioUri.isEmpty() } ?: false
+        if (isYouTube && _playbackState.value.isPlaying) {
+            playerBridge?.playVideo()
+        }
+    }
+
+    fun setPreampGain(gainDb: Float) {
+        val clamped = gainDb.coerceIn(-6.0f, 6.0f)
+        _playbackState.update {
+            it.copy(equalizerSettings = it.equalizerSettings.copy(preampGainDb = clamped))
+        }
+        audioEngine.setPreampGain(clamped)
+    }
+
+    fun setReplayGainEnabled(enabled: Boolean) {
+        _playbackState.update {
+            it.copy(equalizerSettings = it.equalizerSettings.copy(isReplayGainEnabled = enabled))
+        }
+        audioEngine.setReplayGainEnabled(enabled)
+    }
+
+    fun setCrossfadeDuration(seconds: Int) {
+        val clamped = seconds.coerceIn(0, 8)
+        _playbackState.update {
+            it.copy(equalizerSettings = it.equalizerSettings.copy(crossfadeSeconds = clamped))
+        }
+        audioEngine.setCrossfadeDuration(clamped)
     }
 
     fun attachBridge(bridge: YouTubePlayerBridge) {
@@ -488,7 +525,41 @@ class PlaybackManager(private val context: Context) {
         }
 
         if (nextIndex < queue.size) {
-            playTrack(queue[nextIndex], queue)
+            val candidateTrack = queue[nextIndex]
+            val isCandidateYouTube = candidateTrack.youtubeVideoId.isNotEmpty() && candidateTrack.localAudioUri.isEmpty()
+            val didGapless = if (!isCandidateYouTube) {
+                audioEngine.executeGaplessTransition { swapped ->
+                    val updatedHistory = (_playbackState.value.playedTracksHistory + swapped).takeLast(30)
+                    val profile = SmartQueueEngine.analyzePlayedTracks(updatedHistory)
+                    val dur = if (swapped.durationSeconds > 0) swapped.durationSeconds * 1000L else 0L
+                    _playbackState.update {
+                        it.copy(
+                            currentTrack = swapped,
+                            queueIndex = nextIndex,
+                            isPlaying = true,
+                            positionMs = 0L,
+                            durationMs = dur,
+                            playedTracksHistory = updatedHistory,
+                            smartQueueProfile = profile
+                        )
+                    }
+                    GamaPlaybackService.update(
+                        context = context,
+                        title = swapped.title,
+                        artist = swapped.artist,
+                        isPlaying = true,
+                        artUrl = swapped.artworkUrl,
+                        positionMs = 0L,
+                        durationMs = dur,
+                        speed = _playbackState.value.playbackSpeed
+                    )
+                    onTrackStartedListener?.invoke(swapped)
+                }
+            } else false
+
+            if (!didGapless) {
+                playTrack(candidateTrack, queue)
+            }
             if (state.isSmartQueueEnabled && (queue.size - 1 - nextIndex <= 2)) {
                 appendSmartRecommendations(count = 5)
             }
@@ -997,6 +1068,19 @@ class PlaybackManager(private val context: Context) {
                                 durationMs = dur,
                                 speed = state.playbackSpeed
                             )
+                        }
+
+                        // Audiophile Lookahead Pre-buffering:
+                        // When remaining playback <= 10 seconds, pre-buffer the upcoming track
+                        val remainingMs = dur - newPos
+                        if (remainingMs in 1000L..12000L) {
+                            val nextIdx = state.queueIndex + 1
+                            if (nextIdx < state.queue.size) {
+                                val nextT = state.queue[nextIdx]
+                                if (nextT.localAudioUri.isNotEmpty() || nextT.streamUrl.isNotEmpty()) {
+                                    audioEngine.prepareNextTrack(nextT)
+                                }
+                            }
                         }
                     }
 

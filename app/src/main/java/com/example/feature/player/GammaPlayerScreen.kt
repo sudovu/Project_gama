@@ -45,8 +45,12 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
@@ -55,6 +59,7 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -285,7 +290,7 @@ fun GammaPlayerScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Player Style Switcher: Fluid Glass (Echo Music) vs Cyber Neon
+                    // Player Style Switcher: Fluid Glass vs Cyber Neon
                     Box(
                         modifier = Modifier
                             .clip(CircleShape)
@@ -456,6 +461,26 @@ fun GammaPlayerScreen(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    val qualityBadge = track?.audioQualityBadge
+                    if (!qualityBadge.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(GammaPrimary.copy(alpha = 0.12f))
+                                .border(0.5.dp, GammaPrimary.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = qualityBadge,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    letterSpacing = 0.8.sp
+                                ),
+                                color = GammaPrimary
+                            )
+                        }
+                    }
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -769,6 +794,36 @@ fun GammaPlayerScreen(
                             text = if (playback.isSleepTimerActive) playback.formattedSleepTimer else "Sleep",
                             style = MaterialTheme.typography.bodySmall.copy(fontWeight = if (playback.isSleepTimerActive) FontWeight.Bold else FontWeight.Normal),
                             color = if (playback.isSleepTimerActive) GammaPrimary else GammaTextPrimary
+                        )
+                    }
+                }
+
+                // Audio-Only / Video Toggle Button
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(if (playback.isAudioOnlyMode) GammaSurfaceElevated else GammaSurface)
+                        .border(
+                            width = 1.dp,
+                            brush = if (playback.isAudioOnlyMode) GammaFrequencyBrush else Brush.linearGradient(listOf(GammaDivider, GammaDivider)),
+                            shape = CircleShape
+                        )
+                        .clickable { viewModel.toggleAudioOnlyMode() }
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                        .testTag("toggle_audio_only_button")
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (playback.isAudioOnlyMode) Icons.Default.Headphones else Icons.Default.Videocam,
+                            contentDescription = "Audio only or video stream",
+                            tint = if (playback.isAudioOnlyMode) GammaPrimary else GammaTextMuted,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = if (playback.isAudioOnlyMode) "Audio-Only" else "Video Mode",
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = if (playback.isAudioOnlyMode) FontWeight.Bold else FontWeight.Normal),
+                            color = if (playback.isAudioOnlyMode) GammaPrimary else GammaTextPrimary
                         )
                     }
                 }
@@ -1610,6 +1665,98 @@ fun GammaPlayerScreen(
                     value = playback.equalizerSettings.masterGain,
                     onValueChange = { viewModel.setMasterGain(it) },
                     valueRange = 0.5f..1.8f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = GammaSecondary,
+                        activeTrackColor = GammaSecondary,
+                        inactiveTrackColor = GammaSurfaceHighlight
+                    ),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                // Audiophile Preamp Gain (dB)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "🎛️ Audiophile Preamp Gain",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = GammaTextPrimary
+                    )
+                    val sign = if (playback.equalizerSettings.preampGainDb > 0f) "+" else ""
+                    Text(
+                        text = "$sign%.1f dB".format(playback.equalizerSettings.preampGainDb),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = GammaPrimary
+                    )
+                }
+                Slider(
+                    value = playback.equalizerSettings.preampGainDb,
+                    onValueChange = { viewModel.setPreampGain(it) },
+                    valueRange = -6f..6f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = GammaPrimary,
+                        activeTrackColor = GammaPrimary,
+                        inactiveTrackColor = GammaSurfaceHighlight
+                    ),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                // Replay-Gain Volume Normalization Toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "⚖️ Replay-Gain Normalization",
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                            color = GammaTextPrimary
+                        )
+                        Text(
+                            text = "Balances track loudness across albums",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = GammaTextMuted
+                        )
+                    }
+                    Switch(
+                        checked = playback.equalizerSettings.isReplayGainEnabled,
+                        onCheckedChange = { viewModel.setReplayGainEnabled(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = GammaPrimary,
+                            checkedTrackColor = GammaPrimary.copy(alpha = 0.4f),
+                            uncheckedThumbColor = GammaTextMuted,
+                            uncheckedTrackColor = GammaSurfaceHighlight
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Gapless Crossfade Duration
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "🔀 Gapless Crossfade Handoff",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = GammaTextPrimary
+                    )
+                    Text(
+                        text = if (playback.equalizerSettings.crossfadeSeconds == 0) "Gapless (0s)" else "${playback.equalizerSettings.crossfadeSeconds}s crossfade",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = GammaSecondary
+                    )
+                }
+                Slider(
+                    value = playback.equalizerSettings.crossfadeSeconds.toFloat(),
+                    onValueChange = { viewModel.setCrossfadeDuration(it.toInt()) },
+                    valueRange = 0f..8f,
+                    steps = 7,
                     colors = SliderDefaults.colors(
                         thumbColor = GammaSecondary,
                         activeTrackColor = GammaSecondary,

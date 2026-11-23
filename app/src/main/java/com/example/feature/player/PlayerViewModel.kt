@@ -75,9 +75,11 @@ class PlayerViewModel(
                     _lyricsOffsetMs.value = 0L
                     if (track != null) {
                         fetchLyricsForTrack(track)
+                        extractAmbientArtworkColor(track)
                     } else {
                         _lyricsState.value = LyricsUiState.Empty
                         lastFetchedTrackId = null
+                        com.example.ui.theme.GammaThemeManager.clearAmbientArtworkColor()
                     }
                 }
         }
@@ -131,6 +133,26 @@ class PlayerViewModel(
         lastFetchedTrackId = track.id
         lyricsFetchJob?.cancel()
         lyricsFetchJob = viewModelScope.launch {
+            // Check for local sidecar lyrics (.lrc, .srt, .vtt) first if local track
+            if (track.localAudioUri.isNotBlank()) {
+                try {
+                    val localFile = java.io.File(track.localAudioUri)
+                    val sidecarLines = LrcLibLyricsProvider.findSidecarLyrics(localFile)
+                    if (sidecarLines != null && sidecarLines.isNotEmpty()) {
+                        _lyricsState.value = LyricsUiState.Success(
+                            TrackLyrics(
+                                trackId = track.id,
+                                title = track.title,
+                                artist = track.artist,
+                                lines = sidecarLines,
+                                source = "Sidecar Subtitle"
+                            )
+                        )
+                        return@launch
+                    }
+                } catch (_: Exception) {}
+            }
+
             _lyricsState.value = LyricsUiState.Loading
             try {
                 val lyrics = LrcLibLyricsProvider.getLyrics(
@@ -146,6 +168,25 @@ class PlayerViewModel(
                 }
             } catch (e: Exception) {
                 _lyricsState.value = LyricsUiState.Error(e.message ?: "Failed to load lyrics")
+            }
+        }
+    }
+
+    private fun extractAmbientArtworkColor(track: Track) {
+        val artUrl = if (track.artworkUrl.isNotBlank()) {
+            track.artworkUrl
+        } else if (track.youtubeVideoId.isNotBlank()) {
+            "https://img.youtube.com/vi/${track.youtubeVideoId}/hqdefault.jpg"
+        } else {
+            ""
+        }
+        val source = if (artUrl.isNotBlank()) artUrl else track.localAudioUri
+        if (source.isNotBlank()) {
+            viewModelScope.launch {
+                val color = com.example.ui.theme.DynamicPaletteExtractor.extractFromUrlOrPath(playbackManager.context, source)
+                if (color != null) {
+                    com.example.ui.theme.GammaThemeManager.setAmbientArtworkColor(color)
+                }
             }
         }
     }
@@ -183,6 +224,16 @@ class PlayerViewModel(
     fun setVirtualizer(strength: Float) = playbackManager.setVirtualizer(strength)
 
     fun setLoudnessGain(gainMb: Int) = playbackManager.setLoudnessGain(gainMb)
+
+    fun setPreampGain(gainDb: Float) = playbackManager.setPreampGain(gainDb)
+
+    fun setReplayGainEnabled(enabled: Boolean) = playbackManager.setReplayGainEnabled(enabled)
+
+    fun setCrossfadeDuration(seconds: Int) = playbackManager.setCrossfadeDuration(seconds)
+
+    fun toggleAudioOnlyMode() = playbackManager.toggleAudioOnlyMode()
+
+    fun setAudioOnlyMode(enabled: Boolean) = playbackManager.setAudioOnlyMode(enabled)
 
     fun jumpToQueueIndex(index: Int) {
         val q = playbackManager.playbackState.value.queue
