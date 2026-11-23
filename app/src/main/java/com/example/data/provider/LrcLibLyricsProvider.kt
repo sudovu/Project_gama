@@ -93,6 +93,68 @@ object LrcLibLyricsProvider {
         return lines.sortedBy { it.timeMs }
     }
 
+    private val SRT_TIMESTAMP_REGEX = Regex("""(?:(\d{1,2}):)?(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(?:(\d{1,2}):)?(\d{2}):(\d{2})[,.](\d{3})""")
+
+    fun parseSrt(srtText: String): List<LyricLine> {
+        val lines = mutableListOf<LyricLine>()
+        val blocks = srtText.replace("\r\n", "\n").split("\n\n")
+        for (block in blocks) {
+            val blockLines = block.trim().lines().map { it.trim() }.filter { it.isNotEmpty() }
+            if (blockLines.size >= 2) {
+                val timeLineIndex = if (blockLines[0].all { it.isDigit() } && blockLines.size >= 3) 1 else 0
+                val timeMatch = SRT_TIMESTAMP_REGEX.find(blockLines[timeLineIndex])
+                if (timeMatch != null) {
+                    val hours = (timeMatch.groupValues[1].ifEmpty { "0" }).toLongOrNull() ?: 0L
+                    val minutes = timeMatch.groupValues[2].toLongOrNull() ?: 0L
+                    val seconds = timeMatch.groupValues[3].toLongOrNull() ?: 0L
+                    val millis = timeMatch.groupValues[4].toLongOrNull() ?: 0L
+                    val startMs = hours * 3_600_000L + minutes * 60_000L + seconds * 1_000L + millis
+                    val textLines = blockLines.drop(timeLineIndex + 1).filter { !it.startsWith("<") || !it.endsWith(">") }
+                    val text = textLines.joinToString(" ").replace(Regex("<[^>]*>"), "").trim()
+                    if (text.isNotBlank()) {
+                        lines.add(LyricLine(timeMs = startMs, text = text))
+                    }
+                }
+            }
+        }
+        return lines.sortedBy { it.timeMs }
+    }
+
+    fun parseVtt(vttText: String): List<LyricLine> {
+        val cleanVtt = vttText.replace(Regex("""^WEBVTT.*?\n""", RegexOption.IGNORE_CASE), "")
+        return parseSrt(cleanVtt)
+    }
+
+    fun parseSubtitleOrLrc(content: String, formatHint: String = "lrc"): List<LyricLine> {
+        val normalizedHint = formatHint.lowercase().trim().removePrefix(".")
+        return when {
+            normalizedHint == "srt" -> parseSrt(content)
+            normalizedHint == "vtt" -> parseVtt(content)
+            content.contains("-->") -> parseSrt(content)
+            else -> parseLrc(content)
+        }
+    }
+
+    fun findSidecarLyrics(audioFile: java.io.File): List<LyricLine>? {
+        if (!audioFile.exists()) return null
+        val parent = audioFile.parentFile ?: return null
+        val baseName = audioFile.nameWithoutExtension
+        val extensions = listOf("lrc", "srt", "vtt")
+        for (ext in extensions) {
+            val candidate = java.io.File(parent, "$baseName.$ext")
+            if (candidate.exists() && candidate.isFile && candidate.length() > 0) {
+                try {
+                    val text = candidate.readText(Charsets.UTF_8)
+                    val parsed = parseSubtitleOrLrc(text, ext)
+                    if (parsed.isNotEmpty()) {
+                        return parsed
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+        return null
+    }
+
     private val memoryCache = java.util.concurrent.ConcurrentHashMap<String, TrackLyrics>()
     @Volatile private var diskCacheDir: java.io.File? = null
 

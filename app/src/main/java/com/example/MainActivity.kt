@@ -32,4 +32,19 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+            val isCtrl = event.isCtrlPressed || event.isMetaPressed
+            if (isCtrl && event.keyCode == android.view.KeyEvent.KEYCODE_K) {
+                com.example.core.ui.GammaCommandPaletteManager.toggle()
+                return true
+            }
+            if (event.keyCode == android.view.KeyEvent.KEYCODE_ESCAPE && com.example.core.ui.GammaCommandPaletteManager.isVisible) {
+                com.example.core.ui.GammaCommandPaletteManager.close()
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
 }

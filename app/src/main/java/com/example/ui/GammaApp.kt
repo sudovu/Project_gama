@@ -58,6 +58,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import com.example.core.ui.GammaCommandPalette
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -188,6 +191,13 @@ fun GammaApp(
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
+        val configuration = LocalConfiguration.current
+        val density = LocalDensity.current
+        val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
+        val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
+        val maxLeftOffsetPx = -(screenWidthPx - with(density) { (220 + 28).dp.toPx() })
+        val maxUpOffsetPx = -(screenHeightPx - with(density) { (130 + 220).dp.toPx() })
+
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = GammaBackground,
@@ -555,10 +565,16 @@ fun GammaApp(
                                         .border(1.5.dp, GammaGlowCyan, RoundedCornerShape(cornerRadius))
                                         .pointerInput(isPlayerScreen, isFullscreenActive) {
                                             if (!isPlayerScreen && !isFullscreenActive) {
-                                                detectDragGestures { change, dragAmount ->
+                                                detectDragGestures(
+                                                    onDragEnd = {
+                                                        val midX = maxLeftOffsetPx / 2f
+                                                        pipOffsetX = if (pipOffsetX < midX) maxLeftOffsetPx else 0f
+                                                        pipOffsetY = pipOffsetY.coerceIn(maxUpOffsetPx, 0f)
+                                                    }
+                                                ) { change, dragAmount ->
                                                     change.consume()
-                                                    pipOffsetX += dragAmount.x
-                                                    pipOffsetY += dragAmount.y
+                                                    pipOffsetX = (pipOffsetX + dragAmount.x).coerceIn(maxLeftOffsetPx, 0f)
+                                                    pipOffsetY = (pipOffsetY + dragAmount.y).coerceIn(maxUpOffsetPx, 0f)
                                                 }
                                             }
                                         }
@@ -760,6 +776,13 @@ fun GammaApp(
                 }
             }
         }
+
+        GammaCommandPalette(
+            playbackManager = container.playbackManager,
+            onNavigateToPlayer = {
+                navController.navigate(Screen.Player.route)
+            }
+        )
     }
 }
 
