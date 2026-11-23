@@ -47,7 +47,10 @@ data class Track(
         }
 
     val isLiveStream: Boolean
-        get() = (durationSeconds <= 0 && streamUrl.isNotBlank()) || codec.equals("HLS", ignoreCase = true) || codec.equals("RTSP", ignoreCase = true)
+        get() = source.equals("live", ignoreCase = true) ||
+                codec.equals("HLS", ignoreCase = true) ||
+                codec.equals("RTSP", ignoreCase = true) ||
+                (durationSeconds <= 0 && streamUrl.isNotBlank() && youtubeVideoId.isBlank())
 }
 
 data class Artist(

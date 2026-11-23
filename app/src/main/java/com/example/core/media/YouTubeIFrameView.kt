@@ -17,6 +17,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 
 class YouTubeBridgeInterface(private val playbackManager: PlaybackManager) {
     @JavascriptInterface
+    fun onPlayerReady() {
+        playbackManager.onBridgeReady()
+    }
+
+    @JavascriptInterface
     fun onStateChange(state: Int) {
         playbackManager.onBridgePlayerStateChange(state)
     }
@@ -240,8 +245,8 @@ fun createCompliantYouTubeWebView(context: Context, playbackManager: PlaybackMan
                     <script type="text/javascript">
                         var gammaPlayer = null;
                         var isPlayerReady = false;
-                        var pendingVideoId = '$initialVideoId';
-                        var pendingPlay = true;
+                        var pendingVideoId = window.pendingVideoId || '$initialVideoId';
+                        var pendingPlay = (window.pendingPlay !== undefined) ? window.pendingPlay : (pendingVideoId && pendingVideoId.length === 11);
                         var timeInterval = null;
                         var isVideoLoading = false;
 
@@ -286,9 +291,12 @@ fun createCompliantYouTubeWebView(context: Context, playbackManager: PlaybackMan
                             } catch (e) {
                                 console.error("unMute error: " + e);
                             }
+                            if (window.pendingVideoId && window.pendingVideoId.length === 11) {
+                                pendingVideoId = window.pendingVideoId;
+                            }
                             if (pendingVideoId && pendingVideoId.length === 11) {
                                 try {
-                                    console.log("Loading video: " + pendingVideoId);
+                                    console.log("Loading video in onPlayerReady: " + pendingVideoId);
                                     event.target.loadVideoById(pendingVideoId, 0);
                                     event.target.unMute();
                                     event.target.setVolume(100);
@@ -296,13 +304,16 @@ fun createCompliantYouTubeWebView(context: Context, playbackManager: PlaybackMan
                                     console.error("loadVideoById error: " + e);
                                 }
                             }
-                            if (pendingPlay) {
+                            if (pendingPlay && pendingVideoId && pendingVideoId.length === 11) {
                                 try {
-                                    console.log("Starting video playback");
+                                    console.log("Starting video playback in onPlayerReady");
                                     event.target.playVideo();
                                 } catch (e) {
                                     console.error("playVideo error: " + e);
                                 }
+                            }
+                            if (window.GammaBridge && window.GammaBridge.onPlayerReady) {
+                                try { window.GammaBridge.onPlayerReady(); } catch(e) {}
                             }
                             if (window.setGammaEqualizer && window.pendingEq) {
                                 try {

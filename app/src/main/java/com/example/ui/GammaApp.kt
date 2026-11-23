@@ -487,8 +487,7 @@ fun GammaApp(
             it.youtubeVideoId.isNotEmpty() && it.localAudioUri.isEmpty()
         } ?: false
 
-        if (isYouTubeTrack) {
-            val showVideoUi = !isVideoClosed && !playbackState.isAudioOnlyMode && !playbackState.isVideoUnavailable && (isVideoFullscreen || !isVideoPipMinimized || isPlayerScreen)
+        val showVideoUi = isYouTubeTrack && !isVideoClosed && !playbackState.isAudioOnlyMode && !playbackState.isVideoUnavailable && (isVideoFullscreen || !isVideoPipMinimized || isPlayerScreen)
             val isFullscreenActive = isVideoFullscreen && showVideoUi
 
             val videoWidth by animateDpAsState(
@@ -775,7 +774,6 @@ fun GammaApp(
                     }
                 }
             }
-        }
 
         GammaCommandPalette(
             playbackManager = container.playbackManager,

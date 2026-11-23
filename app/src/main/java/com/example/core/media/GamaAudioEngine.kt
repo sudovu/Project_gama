@@ -390,6 +390,19 @@ class GamaAudioEngine(private val context: Context) {
         stopMediaPlayer()
         try {
             val isRemote = uriString.startsWith("http://") || uriString.startsWith("https://")
+            val isContent = uriString.startsWith("content://")
+            val isFileUri = uriString.startsWith("file://")
+
+            if (!isRemote && !isContent) {
+                val filePath = if (isFileUri) uriString.removePrefix("file://") else uriString
+                val file = java.io.File(filePath)
+                if (!file.exists()) {
+                    Log.w(TAG, "Local file not found on disk: $filePath. Triggering error for fallback.")
+                    onPlaybackErrorListener?.invoke(currentTrack, "File not found: $filePath")
+                    return
+                }
+            }
+
             mediaPlayer = MediaPlayer().apply {
                 try {
                     setWakeMode(context, android.os.PowerManager.PARTIAL_WAKE_LOCK)
@@ -400,7 +413,7 @@ class GamaAudioEngine(private val context: Context) {
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                         .build()
                 )
-                if (uriString.startsWith("http://") || uriString.startsWith("https://") || uriString.startsWith("content://")) {
+                if (isRemote || isContent || isFileUri) {
                     setDataSource(context, Uri.parse(uriString))
                 } else {
                     setDataSource(uriString)
@@ -743,7 +756,7 @@ class GamaAudioEngine(private val context: Context) {
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                         .build()
                 )
-                if (uriString.startsWith("http://") || uriString.startsWith("https://") || uriString.startsWith("content://")) {
+                if (uriString.startsWith("http://") || uriString.startsWith("https://") || uriString.startsWith("content://") || uriString.startsWith("file://")) {
                     setDataSource(context, Uri.parse(uriString))
                 } else {
                     setDataSource(uriString)

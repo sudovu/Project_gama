@@ -62,6 +62,7 @@ class PlaybackManager(val context: Context) {
     val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
 
     private var playerBridge: YouTubePlayerBridge? = null
+    private var pendingVideoId: String? = null
     private var tickerJob: Job? = null
     private var sleepTimerJob: Job? = null
     private var originalQueueBeforeShuffle: List<Track> = emptyList()
@@ -183,12 +184,30 @@ class PlaybackManager(val context: Context) {
             masterGain = eq.masterGain,
             isEnabled = eq.isEnabled
         )
-        _playbackState.value.currentTrack?.let { track ->
-            if (track.youtubeVideoId.isNotEmpty()) {
-                bridge.loadVideo(track.youtubeVideoId)
-                if (_playbackState.value.isPlaying) {
-                    bridge.playVideo()
-                }
+        val trackToPlay = _playbackState.value.currentTrack
+        val vid = trackToPlay?.youtubeVideoId?.takeIf { it.isNotEmpty() && trackToPlay.localAudioUri.isEmpty() } ?: pendingVideoId
+        if (!vid.isNullOrEmpty()) {
+            pendingVideoId = null
+            Log.i(TAG, "Bridge attached; loading video: $vid (playing=${_playbackState.value.isPlaying})")
+            bridge.loadVideo(vid)
+            bridge.setPlaybackRate(_playbackState.value.playbackSpeed)
+            if (_playbackState.value.isPlaying) {
+                bridge.playVideo()
+            }
+        }
+    }
+
+    fun onBridgeReady() {
+        Log.i(TAG, "YouTube bridge signaled player ready")
+        val trackToPlay = _playbackState.value.currentTrack
+        val vid = trackToPlay?.youtubeVideoId?.takeIf { it.isNotEmpty() && trackToPlay.localAudioUri.isEmpty() } ?: pendingVideoId
+        if (!vid.isNullOrEmpty()) {
+            pendingVideoId = null
+            Log.i(TAG, "onBridgeReady: loading video: $vid (playing=${_playbackState.value.isPlaying})")
+            playerBridge?.loadVideo(vid)
+            playerBridge?.setPlaybackRate(_playbackState.value.playbackSpeed)
+            if (_playbackState.value.isPlaying) {
+                playerBridge?.playVideo()
             }
         }
     }
@@ -203,7 +222,7 @@ class PlaybackManager(val context: Context) {
 
         // Live stream auto-reconnect with bounded exponential backoff
         if (failingTrack.streamUrl.isNotEmpty()) {
-            val isLive = failingTrack.isLiveStream || failingTrack.durationSeconds <= 0
+            val isLive = failingTrack.isLiveStream
             if (isLive && _playbackState.value.isPlaying && liveStreamRetryCount < MAX_LIVE_STREAM_RETRIES) {
                 liveStreamRetryCount++
                 val backoffMs = computeBackoffMs(liveStreamRetryCount)
@@ -251,9 +270,30 @@ class PlaybackManager(val context: Context) {
             }
             if (fallbackTrack.youtubeVideoId.isNotEmpty()) {
                 Log.i(TAG, "Gracefully falling back to YouTube video playback for '${fallbackTrack.title}'")
-                playerBridge?.loadVideo(fallbackTrack.youtubeVideoId)
-                playerBridge?.setPlaybackRate(_playbackState.value.playbackSpeed)
-                playerBridge?.playVideo()
+                val bridge = playerBridge
+                if (bridge != null) {
+                    bridge.loadVideo(fallbackTrack.youtubeVideoId)
+                    bridge.setPlaybackRate(_playbackState.value.playbackSpeed)
+                    bridge.playVideo()
+                } else {
+                    pendingVideoId = fallbackTrack.youtubeVideoId
+                }
+            } else {
+                _playbackState.update {
+                    it.copy(
+                        isPlaying = false,
+                        isBuffering = false,
+                        errorMessage = "Audio playback failed: $error"
+                    )
+                }
+            }
+        } else {
+            _playbackState.update {
+                it.copy(
+                    isPlaying = false,
+                    isBuffering = false,
+                    errorMessage = "Audio playback failed: $error"
+                )
             }
         }
     }
@@ -300,7 +340,7 @@ class PlaybackManager(val context: Context) {
         metadataJob?.cancel()
         metadataJob = null
 
-        val isLive = playableTrack.isLiveStream || (playableTrack.streamUrl.isNotEmpty() && playableTrack.durationSeconds <= 0)
+        val isLive = playableTrack.isLiveStream
         val trackDurationMs = if (isLive) 0L else (playableTrack.durationSeconds * 1000L).coerceAtLeast(1000L)
         audioEngine.setExternalPosition(0L, trackDurationMs)
 
@@ -334,9 +374,15 @@ class PlaybackManager(val context: Context) {
         audioEngine.playTrack(playableTrack)
 
         if (isYouTube) {
-            playerBridge?.loadVideo(playableTrack.youtubeVideoId)
-            playerBridge?.setPlaybackRate(_playbackState.value.playbackSpeed)
-            playerBridge?.playVideo()
+            val bridge = playerBridge
+            if (bridge != null) {
+                bridge.loadVideo(playableTrack.youtubeVideoId)
+                bridge.setPlaybackRate(_playbackState.value.playbackSpeed)
+                bridge.playVideo()
+            } else {
+                pendingVideoId = playableTrack.youtubeVideoId
+                Log.i(TAG, "YouTube bridge not yet attached; stored pendingVideoId: '${playableTrack.youtubeVideoId}'")
+            }
         } else {
             playerBridge?.pauseVideo()
         }
