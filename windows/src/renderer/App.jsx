@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Volume2, VolumeX,
   Compass, Search, Library, Sliders, User, Download, CheckCircle, Heart,
   Maximize2, Minimize2, Radio, Activity, ExternalLink, ShieldCheck, X,
-  Wifi, WifiOff, Smartphone, Laptop, AlertTriangle, AlertCircle, RefreshCw
+  Wifi, WifiOff, Smartphone, Laptop, AlertTriangle, AlertCircle, RefreshCw,
+  Mic, Sparkles, Film, FileText, Music, Layers, BarChart2
 } from 'lucide-react';
 import { INITIAL_TRACKS, GENRES } from './mockData';
 import profilePic from './assets/img_vhuwon_profile.jpg';
@@ -27,10 +28,22 @@ export default function App() {
   const [downloaded, setDownloaded] = useState(new Set(['trk_em_01']));
   const [showVideoPip, setShowVideoPip] = useState(true);
   const [isVideoFullscreen, setIsVideoFullscreen] = useState(false);
+  const [isAudioOnlyMode, setIsAudioOnlyMode] = useState(false);
 
   // Equalizer state (gains in dB)
   const [eqGains, setEqGains] = useState([0, 0, 0, 0, 0]);
   const [eqPreset, setEqPreset] = useState('Flat');
+
+  // Dynamic Album Palette Theming
+  const [dynamicColor, setDynamicColor] = useState({ hex: '#00f0ff', r: 0, g: 240, b: 255 });
+
+  // Synced Lyrics state
+  const [lyrics, setLyrics] = useState([]);
+  const [isFetchingLyrics, setIsFetchingLyrics] = useState(false);
+  const [lyricsOffset, setLyricsOffset] = useState(0);
+
+  // Smart Library Filters
+  const [smartFilter, setSmartFilter] = useState('all'); // 'all' | 'hires' | 'stream' | 'video' | 'fav' | 'download'
 
   // LAN Remote Control Sync state & Discovery
   const [lanConnected, setLanConnected] = useState(false);
@@ -57,6 +70,25 @@ export default function App() {
   const pcAudioRef = useRef(null);
   const isUsingYouTubeRef = useRef(false);
   const reconnectTimerRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const sourceNodeRef = useRef(null);
+  const analyserRef = useRef(null);
+  const biquadFiltersRef = useRef([]);
+
+  // Deterministic Waveform Peaks Generator (SoundCloud-style)
+  const waveformPeaks = useMemo(() => {
+    const title = currentTrack?.title || 'gama';
+    let seed = 0;
+    for (let i = 0; i < title.length; i++) {
+      seed = (seed * 31 + title.charCodeAt(i)) & 0xffffff;
+    }
+    const peaks = [];
+    for (let i = 0; i < 60; i++) {
+      const v = 0.2 + 0.75 * Math.abs(Math.sin((seed + i * 5) * 0.22) * Math.cos(i * 0.18));
+      peaks.push(Math.max(0.18, Math.min(1.0, v)));
+    }
+    return peaks;
+  }, [currentTrack?.id, currentTrack?.title]);
 
   const parseM3uText = (text, dirPath = '') => {
     const lines = text.split(/\r?\n/);
@@ -497,6 +529,141 @@ export default function App() {
   const ytPlayerRef = useRef(null);
   const visualizerCanvasRef = useRef(null);
 
+  // Global Window Crash Guardrails
+  useEffect(() => {
+    const handleErr = (msg, url, line, col, error) => {
+      console.error('[GAMA Window Error Caught]', msg, error);
+      return true;
+    };
+    const handleRejection = (e) => {
+      console.warn('[GAMA Window Unhandled Rejection Caught]', e?.reason);
+      e?.preventDefault?.();
+    };
+    window.addEventListener('error', handleErr);
+    window.addEventListener('unhandledrejection', handleRejection);
+    return () => {
+      window.removeEventListener('error', handleErr);
+      window.removeEventListener('unhandledrejection', handleRejection);
+    };
+  }, []);
+
+  // Web Audio API Setup & 5-Band Biquad Filters
+  const initWebAudio = () => {
+    if (!pcAudioRef.current || audioCtxRef.current) return;
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioCtx();
+      audioCtxRef.current = ctx;
+
+      const source = ctx.createMediaElementSource(pcAudioRef.current);
+      sourceNodeRef.current = source;
+
+      // 5-band biquad filters: 60Hz, 230Hz, 910Hz, 3600Hz, 14000Hz
+      const freqs = [60, 230, 910, 3600, 14000];
+      const types = ['lowshelf', 'peaking', 'peaking', 'peaking', 'highshelf'];
+      const filters = freqs.map((f, i) => {
+        const filter = ctx.createBiquadFilter();
+        filter.type = types[i];
+        filter.frequency.value = f;
+        filter.gain.value = eqGains[i] || 0;
+        if (types[i] === 'peaking') filter.Q.value = 1.0;
+        return filter;
+      });
+      biquadFiltersRef.current = filters;
+
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 64;
+      analyser.smoothingTimeConstant = 0.8;
+      analyserRef.current = analyser;
+
+      let node = source;
+      for (const filter of filters) {
+        node.connect(filter);
+        node = filter;
+      }
+      node.connect(analyser);
+      analyser.connect(ctx.destination);
+    } catch (e) {
+      console.warn('Web Audio DSP initialization notice:', e);
+    }
+  };
+
+  useEffect(() => {
+    if (biquadFiltersRef.current && biquadFiltersRef.current.length === 5) {
+      eqGains.forEach((gain, i) => {
+        if (biquadFiltersRef.current[i]) {
+          biquadFiltersRef.current[i].gain.value = gain;
+        }
+      });
+    }
+  }, [eqGains]);
+
+  // Dynamic Album Palette Extraction
+  useEffect(() => {
+    if (!currentTrack?.artworkUrl) return;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = 16;
+        c.height = 16;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0, 16, 16);
+        const data = ctx.getImageData(0, 0, 16, 16).data;
+        let bestR = 0, bestG = 240, bestB = 255, maxScore = -1;
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          const max = Math.max(r, g, b), min = Math.min(r, g, b);
+          const sat = max === 0 ? 0 : (max - min) / max;
+          const val = max / 255;
+          if (val > 0.25 && val < 0.95 && sat > 0.3) {
+            const score = sat * val;
+            if (score > maxScore) {
+              maxScore = score;
+              bestR = r; bestG = g; bestB = b;
+            }
+          }
+        }
+        const hex = `#${((1 << 24) + (bestR << 16) + (bestG << 8) + bestB).toString(16).slice(1)}`;
+        setDynamicColor({ hex, r: bestR, g: bestG, b: bestB });
+      } catch (_) {}
+    };
+    img.src = currentTrack.artworkUrl;
+  }, [currentTrack?.artworkUrl]);
+
+  // Synced Lyrics Fetching (LrcLib API)
+  useEffect(() => {
+    if (!currentTrack) return;
+    setLyrics([]);
+    setIsFetchingLyrics(true);
+    const controller = new AbortController();
+    const artist = encodeURIComponent(currentTrack.artist || '');
+    const title = encodeURIComponent(currentTrack.title || '');
+    fetch(`https://lrclib.net/api/get?artist_name=${artist}&track_name=${title}`, { signal: controller.signal })
+      .then(r => r.json())
+      .then(d => {
+        if (d && d.syncedLyrics) {
+          const lines = d.syncedLyrics.split('\n').map(l => {
+            const match = l.match(/\[(\d+):(\d+\.?\d*)\](.*)/);
+            if (match) {
+              const sec = parseInt(match[1], 10) * 60 + parseFloat(match[2]);
+              return { time: sec, text: match[3].trim() };
+            }
+            return null;
+          }).filter(Boolean);
+          setLyrics(lines);
+        } else if (d && d.plainLyrics) {
+          setLyrics(d.plainLyrics.split('\n').map(text => ({ time: -1, text: text.trim() })));
+        } else {
+          setLyrics([]);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsFetchingLyrics(false));
+    return () => controller.abort();
+  }, [currentTrack?.id, currentTrack?.title]);
+
   // Initialize YouTube Iframe Player
   useEffect(() => {
     window.onYouTubeIframeAPIReady = () => {
@@ -586,12 +753,13 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isPlaying, duration, currentTrack]);
 
-  // Animated Visualizer Bars Canvas
+  // Animated Visualizer Bars Canvas (Hybrid Web Audio FFT & Fluid Simulation)
   useEffect(() => {
     const canvas = visualizerCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     let animationId;
+    const freqData = new Uint8Array(32);
 
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -600,15 +768,28 @@ export default function App() {
       const gap = 3;
       const t = Date.now() / 250;
 
+      let realFft = false;
+      if (analyserRef.current && isPlaying && !isUsingYouTubeRef.current) {
+        analyserRef.current.getByteFrequencyData(freqData);
+        if (freqData[0] > 0 || freqData[4] > 0 || freqData[8] > 0) {
+          realFft = true;
+        }
+      }
+
       for (let i = 0; i < barCount; i++) {
-        const height = isPlaying 
-          ? Math.max(4, Math.sin(t + i * 0.45) * 14 + Math.cos(t * 1.2 + i * 0.3) * 6 + 18)
-          : 3;
+        let height = 3;
+        if (isPlaying) {
+          if (realFft) {
+            height = Math.max(4, (freqData[i] / 255) * canvas.height * 0.95);
+          } else {
+            height = Math.max(4, Math.sin(t + i * 0.45) * 14 + Math.cos(t * 1.2 + i * 0.3) * 6 + 18);
+          }
+        }
         const x = i * (barWidth + gap);
         const y = canvas.height - height;
 
         const grad = ctx.createLinearGradient(0, canvas.height, 0, 0);
-        grad.addColorStop(0, '#00f0ff');
+        grad.addColorStop(0, dynamicColor.hex || '#00f0ff');
         grad.addColorStop(1, '#9d00ff');
 
         ctx.fillStyle = grad;
@@ -621,7 +802,7 @@ export default function App() {
 
     render();
     return () => cancelAnimationFrame(animationId);
-  }, [isPlaying]);
+  }, [isPlaying, dynamicColor.hex]);
 
   const playTrack = (track) => {
     setCurrentTrack(track);
@@ -645,6 +826,10 @@ export default function App() {
       ytPlayerRef.current?.pauseVideo();
       if (pcAudioRef.current) {
         const audio = pcAudioRef.current;
+        initWebAudio();
+        if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+          audioCtxRef.current.resume().catch(() => {});
+        }
         if (audio.src !== audioUrl) {
           audio.src = audioUrl;
           audio.load();
@@ -817,6 +1002,26 @@ export default function App() {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
+  const lyricsContainerRef = useRef(null);
+
+  const activeLyricIdx = useMemo(() => {
+    if (!lyrics || lyrics.length === 0) return -1;
+    const adjustedTime = currentTime + lyricsOffset;
+    for (let i = lyrics.length - 1; i >= 0; i--) {
+      if (adjustedTime >= lyrics[i].time) return i;
+    }
+    return -1;
+  }, [currentTime, lyricsOffset, lyrics]);
+
+  useEffect(() => {
+    if (activeTab === 'lyrics' && activeLyricIdx >= 0) {
+      const lineEl = document.getElementById(`lyric-line-${activeLyricIdx}`);
+      if (lineEl) {
+        lineEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [activeLyricIdx, activeTab]);
+
   const filteredTracks = tracks.filter((t) => {
     const matchesGenre = selectedGenre === 'All' || t.genre.toLowerCase().includes(selectedGenre.toLowerCase());
     const matchesQuery = t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -824,8 +1029,34 @@ export default function App() {
     return matchesGenre && matchesQuery;
   });
 
+  const smartFilteredTracks = useMemo(() => {
+    return tracks.filter(t => {
+      if (smartFilter === 'hires') {
+        return t.codec === 'FLAC' || t.audioQualityBadge?.toLowerCase().includes('hi-res') || t.audioQualityBadge?.toLowerCase().includes('lossless') || (t.bitrateKbps && t.bitrateKbps >= 900);
+      }
+      if (smartFilter === 'stream') {
+        return t.source === 'stream' || t.source === 'live' || t.streamUrl || t.duration <= 0;
+      }
+      if (smartFilter === 'video') {
+        return Boolean(t.youtubeVideoId) || t.source === 'youtube';
+      }
+      if (smartFilter === 'fav') {
+        return favorites.has(t.id);
+      }
+      if (smartFilter === 'download') {
+        return downloaded.has(t.id);
+      }
+      return true;
+    });
+  }, [tracks, smartFilter, favorites, downloaded]);
+
   return (
-    <div className="flex h-screen bg-gammaBg text-slate-100 aura-glow overflow-hidden">
+    <div 
+      className="flex h-screen bg-gammaBg text-slate-100 aura-glow overflow-hidden relative transition-colors duration-1000"
+      style={{
+        backgroundImage: `radial-gradient(circle at 10% 20%, rgba(${dynamicColor.r}, ${dynamicColor.g}, ${dynamicColor.b}, 0.15) 0%, transparent 45%), radial-gradient(circle at 90% 80%, rgba(${dynamicColor.r}, ${dynamicColor.g}, ${dynamicColor.b}, 0.10) 0%, transparent 40%)`
+      }}
+    >
       {/* SIDEBAR */}
       <aside className="w-64 bg-gammaSurface/90 backdrop-blur-md border-r border-slate-800/80 flex flex-col justify-between p-4 z-20">
         <div>
@@ -876,6 +1107,17 @@ export default function App() {
             >
               <Library className="w-4 h-4" />
               <span>My Library</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('lyrics')}
+              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                activeTab === 'lyrics' 
+                  ? 'bg-gradient-to-r from-gammaCyan/20 to-gammaViolet/20 text-gammaCyan border border-gammaCyan/30' 
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+              }`}
+            >
+              <Mic className="w-4 h-4" />
+              <span>Karaoke Lyrics</span>
             </button>
             <button
               onClick={() => setActiveTab('equalizer')}
@@ -1161,8 +1403,105 @@ export default function App() {
 
           {activeTab === 'library' && (
             <div className="space-y-6">
-              <h3 className="text-xl font-bold">Local Offline Downloads & Favorites</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-xl font-bold">Media Library &amp; Frequencies</h3>
+                  <p className="text-xs text-slate-400">Universal audiophile collection with high-res lossless verification.</p>
+                </div>
+
+                {/* Smart Filter Chips */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[
+                    { id: 'all', label: 'All', count: tracks.length },
+                    { id: 'hires', label: 'Hi-Res Lossless', count: tracks.filter(t => t.codec === 'FLAC' || t.audioQualityBadge?.includes('Hi-Res') || t.audioQualityBadge?.includes('Lossless') || (t.bitrateKbps && t.bitrateKbps >= 900)).length },
+                    { id: 'stream', label: 'Live Streams', count: tracks.filter(t => t.source === 'stream' || t.streamUrl).length },
+                    { id: 'video', label: 'Videos', count: tracks.filter(t => t.youtubeVideoId).length },
+                    { id: 'fav', label: 'Favorites', count: favorites.size },
+                    { id: 'download', label: 'Downloaded', count: downloaded.size }
+                  ].map(chip => (
+                    <button
+                      key={chip.id}
+                      onClick={() => setSmartFilter(chip.id)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-mono transition-all flex items-center space-x-1.5 border ${
+                        smartFilter === chip.id
+                          ? 'bg-gradient-to-r from-gammaCyan to-gammaViolet text-black font-bold border-transparent'
+                          : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700'
+                      }`}
+                    >
+                      <span>{chip.label}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${smartFilter === chip.id ? 'bg-black/20 text-black' : 'bg-slate-800 text-slate-300'}`}>
+                        {chip.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Filtered Track Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {smartFilteredTracks.map(track => {
+                  const isCurrent = currentTrack.id === track.id;
+                  return (
+                    <div
+                      key={track.id}
+                      onClick={() => playTrack(track)}
+                      className={`group p-3 rounded-2xl bg-gammaSurface/60 hover:bg-gammaSurfaceElevated border transition-all cursor-pointer flex items-center justify-between ${
+                        isCurrent ? 'border-gammaCyan/60 bg-gammaSurfaceElevated' : 'border-slate-800/80 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3 overflow-hidden">
+                        <div className="relative w-12 h-12 rounded-xl overflow-hidden flex-shrink-0">
+                          <img src={track.artworkUrl} alt={track.title} className="w-full h-full object-cover" />
+                          <div className={`absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity ${isCurrent ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                            {isCurrent && isPlaying ? (
+                              <Activity className="w-4 h-4 text-gammaCyan animate-bounce" />
+                            ) : (
+                              <Play className="w-4 h-4 text-white fill-white" />
+                            )}
+                          </div>
+                        </div>
+                        <div className="overflow-hidden">
+                          <h4 className={`text-xs font-bold truncate ${isCurrent ? 'text-gammaCyan' : 'text-slate-100'}`}>
+                            {track.title}
+                          </h4>
+                          <p className="text-[11px] text-slate-400 truncate">{track.artist}</p>
+                          <div className="flex items-center space-x-1.5 mt-0.5">
+                            <span className="text-[10px] text-slate-500 font-mono">{formatTime(track.duration)}</span>
+                            {track.codec === 'FLAC' && (
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-gammaCyan/10 text-gammaCyan border border-gammaCyan/30 font-mono font-bold">
+                                FLAC 24-bit
+                              </span>
+                            )}
+                            {track.source === 'stream' && (
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-rose-500/10 text-rose-400 border border-rose-500/30 font-mono font-bold">
+                                STREAM
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
+                        <button 
+                          onClick={() => toggleFavorite(track.id)}
+                          className={`p-1.5 rounded-lg transition-colors ${favorites.has(track.id) ? 'text-gammaPink' : 'text-slate-600 hover:text-slate-300'}`}
+                        >
+                          <Heart className={`w-3.5 h-3.5 ${favorites.has(track.id) ? 'fill-gammaPink' : ''}`} />
+                        </button>
+                        <button 
+                          onClick={() => downloadSong(track)}
+                          className={`p-1.5 rounded-lg transition-colors ${downloaded.has(track.id) ? 'text-gammaCyan' : 'text-slate-600 hover:text-slate-300'}`}
+                        >
+                          {downloaded.has(track.id) ? <CheckCircle className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Offline & Favorites Summary Panels */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
                 <div className="p-5 rounded-2xl bg-gammaSurface border border-slate-800">
                   <h4 className="text-sm font-bold text-gammaCyan mb-3 flex items-center space-x-2">
                     <CheckCircle className="w-4 h-4" />
@@ -1192,6 +1531,102 @@ export default function App() {
                     ))}
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'lyrics' && (
+            <div className="max-w-3xl mx-auto space-y-6 py-4 flex flex-col h-full">
+              {/* Lyrics Header */}
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
+                <div className="flex items-center space-x-4">
+                  <img src={currentTrack.artworkUrl} alt={currentTrack.title} className="w-14 h-14 rounded-2xl object-cover shadow-lg border border-slate-700/80" />
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-100 truncate">{currentTrack.title}</h3>
+                    <p className="text-xs text-slate-400 truncate">{currentTrack.artist}</p>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-gammaCyan/10 text-gammaCyan border border-gammaCyan/30">
+                        Karaoke Mode • LrcLib Synced
+                      </span>
+                      {currentTrack.audioQualityBadge && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
+                          {currentTrack.audioQualityBadge}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-slate-500 font-mono">Sync Offset:</span>
+                  <button 
+                    onClick={() => setLyricsOffset(o => o - 0.5)}
+                    className="px-2 py-1 text-xs font-mono bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg"
+                    title="Advance -0.5s"
+                  >
+                    -0.5s
+                  </button>
+                  <button 
+                    onClick={() => setLyricsOffset(0)}
+                    className="px-2 py-1 text-xs font-mono bg-slate-800 hover:bg-slate-700 text-gammaCyan rounded-lg"
+                    title="Reset Offset"
+                  >
+                    {lyricsOffset >= 0 ? `+${lyricsOffset.toFixed(1)}s` : `${lyricsOffset.toFixed(1)}s`}
+                  </button>
+                  <button 
+                    onClick={() => setLyricsOffset(o => o + 0.5)}
+                    className="px-2 py-1 text-xs font-mono bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg"
+                    title="Delay +0.5s"
+                  >
+                    +0.5s
+                  </button>
+                </div>
+              </div>
+
+              {/* Lyrics Scrolling Body */}
+              <div className="flex-1 overflow-y-auto space-y-4 py-8 px-4 text-center select-none" ref={lyricsContainerRef}>
+                {isFetchingLyrics ? (
+                  <div className="py-20 flex flex-col items-center justify-center space-y-3">
+                    <Activity className="w-8 h-8 text-gammaCyan animate-bounce" />
+                    <p className="text-xs font-mono text-slate-400">Fetching synchronized .lrc lyrics...</p>
+                  </div>
+                ) : lyrics && lyrics.length > 0 ? (
+                  lyrics.map((line, idx) => {
+                    const isActive = idx === activeLyricIdx;
+                    return (
+                      <p
+                        key={idx}
+                        id={`lyric-line-${idx}`}
+                        onClick={() => {
+                          const targetTime = Math.max(0, line.time - lyricsOffset);
+                          if (isUsingYouTubeRef.current && ytPlayerRef.current?.seekTo) {
+                            ytPlayerRef.current.seekTo(targetTime, true);
+                          } else if (pcAudioRef.current) {
+                            pcAudioRef.current.currentTime = targetTime;
+                          }
+                          setCurrentTime(targetTime);
+                        }}
+                        className={`cursor-pointer transition-all duration-300 rounded-xl py-2 px-4 ${
+                          isActive 
+                            ? 'text-2xl md:text-3xl font-black scale-105' 
+                            : 'text-base md:text-lg text-slate-500 hover:text-slate-300 font-semibold opacity-70 hover:opacity-100'
+                        }`}
+                        style={{
+                          color: isActive ? dynamicColor.hex : undefined,
+                          textShadow: isActive ? `0 0 20px ${dynamicColor.hex}88` : undefined
+                        }}
+                      >
+                        {line.text}
+                      </p>
+                    );
+                  })
+                ) : (
+                  <div className="py-20 flex flex-col items-center justify-center space-y-3">
+                    <Mic className="w-10 h-10 text-slate-600" />
+                    <p className="text-sm text-slate-400 font-medium">No synchronized lyrics found for this track.</p>
+                    <p className="text-xs text-slate-600 font-mono">Playing with 432 Hz Master Resonator &amp; 5-Band Hardware DSP.</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1385,26 +1820,73 @@ export default function App() {
           <div className="w-full flex items-center space-x-3 text-[11px] font-mono text-slate-400">
             <span>{formatTime(currentTime)}</span>
             {(currentTrack.source === 'stream' || currentTrack.streamUrl) && (!duration || duration <= 0) ? (
-              <div className="flex-1 h-1.5 bg-slate-800 rounded-lg overflow-hidden relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-gammaCyan via-rose-500 to-gammaViolet animate-pulse"></div>
+              <div className="flex-1 h-3 bg-slate-900/80 rounded-lg overflow-hidden relative border border-rose-500/30">
+                <div className="absolute inset-0 bg-gradient-to-r from-gammaCyan via-rose-500 to-gammaViolet animate-pulse opacity-80"></div>
+                <div className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white tracking-widest font-mono">
+                  LIVE STREAMING • BUFFER RESILIENT
+                </div>
               </div>
             ) : (
-              <input 
-                type="range"
-                min="0"
-                max={duration || 100}
-                value={currentTime}
-                onChange={handleSeek}
-                className="flex-1 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-gammaCyan"
-              />
+              <div className="flex-1 flex flex-col justify-center space-y-1 group py-1">
+                {/* 60-Bar Waveform Scrubber */}
+                <div 
+                  className="h-4 flex items-end space-x-0.5 cursor-pointer"
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const clickX = e.clientX - rect.left;
+                    const pct = Math.max(0, Math.min(1, clickX / rect.width));
+                    const newTime = pct * (duration || 0);
+                    handleSeek({ target: { value: newTime } });
+                  }}
+                >
+                  {waveformPeaks.map((peak, idx) => {
+                    const barProgress = (idx + 1) / waveformPeaks.length;
+                    const currentProgress = duration > 0 ? currentTime / duration : 0;
+                    const isPlayed = barProgress <= currentProgress;
+                    return (
+                      <div
+                        key={idx}
+                        className="flex-1 rounded-full transition-all duration-75"
+                        style={{
+                          height: `${Math.round(peak * 100)}%`,
+                          backgroundColor: isPlayed ? dynamicColor.hex : '#334155',
+                          opacity: isPlayed ? 1 : 0.45,
+                          boxShadow: isPlayed ? `0 0 4px ${dynamicColor.hex}88` : 'none'
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                {/* Precise slider */}
+                <input 
+                  type="range"
+                  min="0"
+                  max={duration || 100}
+                  value={currentTime}
+                  onChange={handleSeek}
+                  className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-gammaCyan"
+                />
+              </div>
             )}
             <span>{(currentTrack.source === 'stream' || currentTrack.streamUrl) && (!duration || duration <= 0) ? 'LIVE' : formatTime(duration)}</span>
           </div>
         </div>
 
-        {/* Waveform Visualizer & Volume */}
-        <div className="flex items-center space-x-5 w-1/4 justify-end">
-          <canvas ref={visualizerCanvasRef} width={100} height={24} className="hidden md:block" />
+        {/* Waveform Visualizer, Audio/Video Switcher & Volume */}
+        <div className="flex items-center space-x-3 w-1/4 justify-end">
+          <canvas ref={visualizerCanvasRef} width={90} height={24} className="hidden md:block rounded" />
+
+          <button 
+            onClick={() => setIsAudioOnlyMode(!isAudioOnlyMode)}
+            title={isAudioOnlyMode ? "Audio-Only Active (Video hidden)" : "Video Mode Active"}
+            className={`p-2 rounded-xl border transition-colors ${
+              isAudioOnlyMode 
+                ? 'border-amber-400 text-amber-400 bg-amber-400/10' 
+                : 'border-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            {isAudioOnlyMode ? <Music className="w-4 h-4" /> : <Film className="w-4 h-4" />}
+          </button>
 
           <div className="flex items-center space-x-2">
             <button onClick={() => {
@@ -1435,13 +1917,13 @@ export default function App() {
                   pcAudioRef.current.muted = false;
                 }
               }}
-              className="w-20 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-gammaCyan"
+              className="w-16 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-gammaCyan"
             />
           </div>
 
           <button 
             onClick={() => setShowVideoPip(!showVideoPip)}
-            className={`p-2 rounded-xl border transition-colors ${showVideoPip ? 'border-gammaCyan text-gammaCyan' : 'border-slate-800 text-slate-500'}`}
+            className={`p-2 rounded-xl border transition-colors ${showVideoPip && !isAudioOnlyMode ? 'border-gammaCyan text-gammaCyan' : 'border-slate-800 text-slate-500'}`}
           >
             {showVideoPip ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
@@ -1454,7 +1936,7 @@ export default function App() {
           isVideoFullscreen
             ? 'inset-0 w-full h-full'
             : `bottom-28 right-6 w-80 h-48 rounded-2xl overflow-hidden border-2 border-gammaCyan/80 shadow-2xl ${
-                showVideoPip ? 'opacity-100 scale-100' : 'opacity-0 pointer-events-none scale-75'
+                showVideoPip && !isAudioOnlyMode ? 'opacity-100 scale-100' : 'opacity-0 pointer-events-none scale-75'
               }`
         }`}
       >

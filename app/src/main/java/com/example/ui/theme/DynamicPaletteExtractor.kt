@@ -98,11 +98,14 @@ object DynamicPaletteExtractor {
                 connection.connectTimeout = 4000
                 connection.readTimeout = 4000
                 connection.doInput = true
-                connection.connect()
-                val input: InputStream = connection.inputStream
-                val bmp = BitmapFactory.decodeStream(input)
-                input.close()
-                bmp
+                try {
+                    connection.connect()
+                    connection.inputStream.use { stream ->
+                        BitmapFactory.decodeStream(stream)
+                    }
+                } finally {
+                    try { connection.disconnect() } catch (_: Throwable) {}
+                }
             } else if (source.startsWith("content://") || source.startsWith("file://")) {
                 val uri = android.net.Uri.parse(source)
                 context.contentResolver.openInputStream(uri)?.use { stream ->

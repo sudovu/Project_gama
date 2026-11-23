@@ -198,7 +198,7 @@ class GamaAudioEngine(private val context: Context) {
                 enabled = isEqEnabled
                 applyHardwareEqualizerGains(this)
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.d(TAG, "Global session equalizer not available: ${e.message}")
         }
 
@@ -209,7 +209,7 @@ class GamaAudioEngine(private val context: Context) {
                     setStrength(350)
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.d(TAG, "Global bass boost not available: ${e.message}")
         }
 
@@ -220,7 +220,7 @@ class GamaAudioEngine(private val context: Context) {
                     setStrength(300)
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.d(TAG, "Global virtualizer not available: ${e.message}")
         }
 
@@ -229,7 +229,7 @@ class GamaAudioEngine(private val context: Context) {
                 enabled = isEqEnabled
                 setTargetGain(400)
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.d(TAG, "Global loudness enhancer not available: ${e.message}")
         }
     }

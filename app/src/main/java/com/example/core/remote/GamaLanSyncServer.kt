@@ -861,23 +861,25 @@ object GamaLanSyncServer {
     body { background: #0a0a0f; color: #f1f5f9; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 20px 16px; }
     .card { background: #13131f; border: 1px solid rgba(0,245,255,0.25); border-radius: 20px; width: 100%; max-width: 440px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }
     .badge { font-size: 10px; font-family: monospace; padding: 3px 8px; border-radius: 6px; background: rgba(0,245,255,0.15); color: #00f5ff; border: 1px solid rgba(0,245,255,0.3); display: inline-block; }
-    .title { font-size: 18px; font-weight: 700; margin-top: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .artist { font-size: 13px; color: #94a3b8; margin-top: 2px; }
-    #viz { width: 100%; height: 60px; margin: 16px 0; border-radius: 10px; background: rgba(0,0,0,0.3); }
-    .progress-bar { width: 100%; height: 6px; background: #1e1e2f; border-radius: 3px; position: relative; margin: 12px 0 6px; cursor: pointer; }
-    .progress-fill { height: 100%; background: linear-gradient(90deg, #00f5ff, #a855f7); border-radius: 3px; width: 0%; }
-    .time-row { display: flex; justify-content: space-between; font-size: 11px; font-family: monospace; color: #64748b; }
-    .controls { display: flex; justify-content: space-around; align-items: center; margin: 18px 0 12px; }
+    .title { font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; }
+    .artist { font-size: 12px; color: #94a3b8; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #viz { width: 100%; height: 50px; margin: 12px 0; border-radius: 10px; background: rgba(0,0,0,0.3); }
+    .waveform-bar { flex: 1; border-radius: 2px; background: #334155; transition: height 0.1s; }
+    .waveform-bar.played { background: #00f5ff; box-shadow: 0 0 4px rgba(0,245,255,0.6); }
+    .time-row { display: flex; justify-content: space-between; font-size: 11px; font-family: monospace; color: #64748b; margin-top: 4px; }
+    .controls { display: flex; justify-content: space-around; align-items: center; margin: 16px 0 12px; }
     .btn { background: #1e1e2f; border: 1px solid #334155; color: #f8fafc; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; transition: all 0.2s; }
     .btn:active { transform: scale(0.92); }
     .btn-main { background: #00f5ff; color: #000; width: 56px; height: 56px; font-size: 20px; font-weight: bold; border: none; box-shadow: 0 0 18px rgba(0,245,255,0.4); }
-    .section { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08); }
+    .section { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); }
     .row { display: flex; gap: 8px; margin-top: 8px; }
     input[type=text] { background: #0a0a0f; border: 1px solid #334155; border-radius: 10px; padding: 8px 12px; color: #fff; font-size: 13px; width: 100%; }
     .action-btn { background: rgba(0,245,255,0.15); border: 1px solid rgba(0,245,255,0.4); color: #00f5ff; padding: 8px 14px; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
     .status-pill { font-size: 11px; font-family: monospace; color: #94a3b8; text-align: center; margin-bottom: 12px; }
     .toggle-stream { background: #1e1e2f; border: 1px solid #334155; padding: 10px 14px; border-radius: 12px; font-size: 12px; width: 100%; display: flex; justify-content: space-between; align-items: center; color: #e2e8f0; cursor: pointer; }
     .toggle-stream.active { border-color: #00f5ff; background: rgba(0,245,255,0.1); color: #00f5ff; font-weight: bold; }
+    .lyric-line { padding: 4px 0; transition: all 0.2s; cursor: pointer; font-size: 13px; }
+    .lyric-line.active { color: #00f5ff; font-weight: bold; font-size: 15px; text-shadow: 0 0 10px rgba(0,245,255,0.6); }
   </style>
 </head>
 <body>
@@ -888,31 +890,49 @@ object GamaLanSyncServer {
     </div>
     <div class="status-pill" id="statusText">Connecting...</div>
 
-    <div class="title" id="trackTitle">GAMA Audio Stream</div>
-    <div class="artist" id="trackArtist">Waiting for telemetry...</div>
-
-    <canvas id="viz" width="400" height="60"></canvas>
-
-    <div class="progress-bar" id="progressBar" onclick="seekClick(event)">
-      <div class="progress-fill" id="progressFill"></div>
+    <div style="display:flex; gap:14px; align-items:center; margin-top:10px;">
+      <img id="trackArt" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'><rect width='60' height='60' fill='%231e1e2f'/><circle cx='30' cy='30' r='14' fill='%23334155'/></svg>" style="width:60px; height:60px; border-radius:14px; object-fit:cover; background:#1e1e2f; border:1px solid #334155; flex-shrink:0;" />
+      <div style="overflow:hidden; flex:1;">
+        <div class="title" id="trackTitle">GAMA Audio Stream</div>
+        <div class="artist" id="trackArtist">Waiting for telemetry...</div>
+        <div id="liveBadge" style="display:none; font-size:9px; color:#f43f5e; font-weight:bold; margin-top:3px; font-family:monospace;">● LIVE STREAM</div>
+      </div>
     </div>
+
+    <canvas id="viz" width="400" height="50"></canvas>
+
+    {/* 40-Bar Waveform Scrubber */}
+    <div id="waveformBars" style="display:flex; align-items:flex-end; gap:2px; height:28px; margin:10px 0 4px; cursor:pointer;" onclick="seekWaveform(event)"></div>
+
     <div class="time-row">
       <span id="posText">0:00</span>
       <span id="durText">0:00</span>
     </div>
 
     <div class="controls">
-      <button class="btn" onclick="sendCmd('prev')">⏮</button>
+      <button class="btn" onclick="sendCmd('prev')" title="Previous Track">⏮</button>
       <button class="btn btn-main" id="playBtn" onclick="sendCmd('play_pause')">▶</button>
-      <button class="btn" onclick="sendCmd('next')">⏭</button>
+      <button class="btn" onclick="sendCmd('next')" title="Next Track">⏭</button>
+      <button class="btn" id="audioOnlyBtn" onclick="sendCmd('toggle_audio_only')" title="Toggle Audio-Only / Video">🎧</button>
     </div>
 
     <div class="section">
       <button class="toggle-stream" id="streamToggleBtn" onclick="toggleStreamAudio()">
-        <span>🔊 Stream Audio to this Device</span>
+        <span>🔊 Stream Audio to this Browser</span>
         <span id="streamIndicator" style="font-size:10px;">OFF</span>
       </button>
       <audio id="streamAudio" preload="none"></audio>
+    </div>
+
+    {/* Synced Lyrics Toggle Section */}
+    <div class="section">
+      <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="toggleLyrics()">
+        <span style="font-size:11px; font-family:monospace; color:#94a3b8;">KARAOKE SYNCED LYRICS</span>
+        <span id="lyricsToggleText" style="font-size:11px; color:#00f5ff; font-weight:bold;">Show</span>
+      </div>
+      <div id="lyricsBox" style="display:none; max-height:140px; overflow-y:auto; padding:8px 0; text-align:center; color:#94a3b8;">
+        <div style="font-size:12px; color:#64748b;">Waiting for lyrics...</div>
+      </div>
     </div>
 
     <div class="section">
@@ -924,9 +944,9 @@ object GamaLanSyncServer {
     </div>
 
     <div class="section">
-      <div style="font-size:11px; font-family:monospace; color:#94a3b8;">SEND SONG TO PHONE QUEUE</div>
+      <div style="font-size:11px; font-family:monospace; color:#94a3b8;">SEND SONG / STREAM TO PHONE QUEUE</div>
       <div class="row">
-        <input type="text" id="queueInput" placeholder="YouTube Video ID or Title">
+        <input type="text" id="queueInput" placeholder="YouTube Video ID, Link or Stream URL">
         <button class="action-btn" onclick="pushToPhone()">+ Queue</button>
       </div>
     </div>
@@ -939,10 +959,46 @@ object GamaLanSyncServer {
     let posMs = 0;
     let durMs = 0;
     let streamActive = false;
+    let showLyrics = false;
+    let currentLyrics = [];
 
     const canvas = document.getElementById('viz');
     const ctx = canvas.getContext('2d');
     let bands = new Array(16).fill(0.1);
+
+    // Waveform bars init
+    const waveformContainer = document.getElementById('waveformBars');
+    const NUM_BARS = 40;
+    const barElements = [];
+    for (let i = 0; i < NUM_BARS; i++) {
+      const b = document.createElement('div');
+      b.className = 'waveform-bar';
+      const h = 20 + Math.round(75 * Math.abs(Math.sin(i * 0.28) * Math.cos(i * 0.14)));
+      b.style.height = h + '%';
+      waveformContainer.appendChild(b);
+      barElements.push(b);
+    }
+
+    function updateWaveformProgress() {
+      if (durMs <= 0) return;
+      const progress = posMs / durMs;
+      barElements.forEach((bar, idx) => {
+        const barPos = (idx + 1) / NUM_BARS;
+        if (barPos <= progress) {
+          bar.classList.add('played');
+        } else {
+          bar.classList.remove('played');
+        }
+      });
+    }
+
+    function seekWaveform(e) {
+      const rect = waveformContainer.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      if (durMs > 0) {
+        sendCmd('seek', { positionMs: Math.floor(pct * durMs) });
+      }
+    }
 
     function drawViz() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -963,6 +1019,78 @@ object GamaLanSyncServer {
       const m = Math.floor(s / 60);
       const sec = Math.floor(s % 60);
       return m + ':' + (sec < 10 ? '0' : '') + sec;
+    }
+
+    function toggleLyrics() {
+      showLyrics = !showLyrics;
+      document.getElementById('lyricsBox').style.display = showLyrics ? 'block' : 'none';
+      document.getElementById('lyricsToggleText').innerText = showLyrics ? 'Hide' : 'Show';
+    }
+
+    async function fetchLyrics(trackName, artistName) {
+      if (!trackName) return;
+      try {
+        const url = 'https://lrclib.net/api/get?track_name=' + encodeURIComponent(trackName) + '&artist_name=' + encodeURIComponent(artistName || '');
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.syncedLyrics) {
+            parseLyrics(data.syncedLyrics);
+          }
+        }
+      } catch (_) {}
+    }
+
+    function parseLyrics(lrcText) {
+      const lines = lrcText.split('\n');
+      currentLyrics = [];
+      const regex = /\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/;
+      for (const line of lines) {
+        const match = line.match(regex);
+        if (match) {
+          const min = parseInt(match[1], 10);
+          const sec = parseInt(match[2], 10);
+          const ms = match[3].length === 2 ? parseInt(match[3], 10) * 10 : parseInt(match[3], 10);
+          const timeMs = (min * 60 + sec) * 1000 + ms;
+          const text = match[4].trim();
+          if (text) {
+            currentLyrics.push({ timeMs, text });
+          }
+        }
+      }
+      renderLyrics();
+    }
+
+    function renderLyrics() {
+      const box = document.getElementById('lyricsBox');
+      if (currentLyrics.length === 0) {
+        box.innerHTML = '<div style="font-size:12px; color:#64748b;">No lyrics available for this song.</div>';
+        return;
+      }
+      box.innerHTML = currentLyrics.map(function(l, idx) {
+        return '<div class="lyric-line" id="lyric-' + idx + '" onclick="sendCmd(\'seek\', {positionMs: ' + l.timeMs + '})">' + l.text + '</div>';
+      }).join('');
+    }
+
+    function updateLyricsHighlight() {
+      if (currentLyrics.length === 0) return;
+      let activeIdx = -1;
+      for (let i = currentLyrics.length - 1; i >= 0; i--) {
+        if (posMs >= currentLyrics[i].timeMs) {
+          activeIdx = i;
+          break;
+        }
+      }
+      for (let i = 0; i < currentLyrics.length; i++) {
+        const el = document.getElementById('lyric-' + i);
+        if (!el) continue;
+        if (i === activeIdx) {
+          el.className = 'lyric-line active';
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+          el.className = 'lyric-line';
+        }
+      }
     }
 
     async function pairWithPin() {
@@ -988,6 +1116,8 @@ object GamaLanSyncServer {
       }
     }
 
+    let lastTrackTitle = '';
+
     function connectWs() {
       if (ws) ws.close();
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1007,14 +1137,37 @@ object GamaLanSyncServer {
             posMs = d.positionMs || 0;
             durMs = d.durationMs || 0;
             document.getElementById('posText').innerText = formatTime(posMs / 1000);
-            document.getElementById('durText').innerText = formatTime(durMs / 1000);
-            if (durMs > 0) {
-              document.getElementById('progressFill').style.width = ((posMs / durMs) * 100) + '%';
+            document.getElementById('durText').innerText = d.isLiveStream ? 'LIVE' : formatTime(durMs / 1000);
+            updateWaveformProgress();
+            updateLyricsHighlight();
+
+            const liveEl = document.getElementById('liveBadge');
+            if (d.isLiveStream) {
+              liveEl.style.display = 'block';
+            } else {
+              liveEl.style.display = 'none';
             }
+
+            if (d.isAudioOnlyMode) {
+              document.getElementById('audioOnlyBtn').style.borderColor = '#fbbf24';
+              document.getElementById('audioOnlyBtn').style.color = '#fbbf24';
+            } else {
+              document.getElementById('audioOnlyBtn').style.borderColor = '#334155';
+              document.getElementById('audioOnlyBtn').style.color = '#f8fafc';
+            }
+
             if (d.track) {
               document.getElementById('trackTitle').innerText = d.track.title || 'Unknown Title';
               document.getElementById('trackArtist').innerText = d.track.artist || 'Unknown Artist';
+              if (d.track.artworkUrl) {
+                document.getElementById('trackArt').src = d.track.artworkUrl;
+              }
               if (d.track.audioQualityBadge) document.getElementById('qualityBadge').innerText = d.track.audioQualityBadge;
+
+              if (d.track.title && d.track.title !== lastTrackTitle) {
+                lastTrackTitle = d.track.title;
+                fetchLyrics(d.track.title, d.track.artist);
+              }
             }
             if (d.deviceModel) document.getElementById('devModel').innerText = d.deviceModel;
             if (d.visualizerBands && d.visualizerBands.length) {
@@ -1046,14 +1199,6 @@ object GamaLanSyncServer {
       }
     }
 
-    function seekClick(e) {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const pct = (e.clientX - rect.left) / rect.width;
-      if (durMs > 0) {
-        sendCmd('seek', { positionMs: Math.floor(pct * durMs) });
-      }
-    }
-
     function toggleStreamAudio() {
       const audio = document.getElementById('streamAudio');
       const btn = document.getElementById('streamToggleBtn');
@@ -1076,16 +1221,20 @@ object GamaLanSyncServer {
       const input = document.getElementById('queueInput');
       const val = input.value.trim();
       if (!val) return;
-      await fetch('/queue/push?token=' + encodeURIComponent(token), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({
-          title: val,
-          artist: 'Mobile Web Companion',
-          youtubeVideoId: val.length === 11 ? val : '',
-          playNow: false
-        })
-      });
+      if (val.startsWith('http://') || val.startsWith('https://') && (val.includes('.mp3') || val.includes('.m3u') || val.includes('.pls') || val.includes('.aac'))) {
+        sendCmd('import_stream', { url: val, title: 'Web Stream' });
+      } else {
+        await fetch('/queue/push?token=' + encodeURIComponent(token), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({
+            title: val,
+            artist: 'Mobile Web Companion',
+            youtubeVideoId: val.length === 11 ? val : '',
+            playNow: false
+          })
+        });
+      }
       input.value = '';
       alert('Pushed to phone queue!');
     }

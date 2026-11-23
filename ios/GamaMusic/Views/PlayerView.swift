@@ -282,8 +282,8 @@ struct PlayerView: View {
                 }
                 .padding(.top, 16)
 
-                // Bottom Utilities (Volume + PiP Toggle)
-                HStack(spacing: 16) {
+                // Bottom Utilities (Volume, Synced Lyrics & Audio/Video Switcher)
+                HStack(spacing: 14) {
                     Image(systemName: "speaker.fill")
                         .foregroundColor(.gray)
                         .font(.caption)
@@ -295,6 +295,28 @@ struct PlayerView: View {
                         .foregroundColor(.gray)
                         .font(.caption)
 
+                    // Synced Lyrics Sheet Button
+                    Button(action: {
+                        audio.showLyricsSheet = true
+                    }) {
+                        Image(systemName: "quote.bubble.fill")
+                            .foregroundColor(Color(red: 0, green: 1, blue: 0.8))
+                            .font(.system(size: 15))
+                    }
+
+                    // Audio-Only / Video Switcher
+                    Button(action: {
+                        audio.isAudioOnlyMode.toggle()
+                        if audio.isAudioOnlyMode {
+                            audio.showVideoPip = false
+                        }
+                    }) {
+                        Image(systemName: audio.isAudioOnlyMode ? "headphones.circle.fill" : "film.circle.fill")
+                            .foregroundColor(audio.isAudioOnlyMode ? Color.yellow : Color.gray)
+                            .font(.system(size: 16))
+                    }
+
+                    // PiP Video Overlay Toggle
                     Button(action: {
                         audio.showVideoPip.toggle()
                     }) {
@@ -303,13 +325,16 @@ struct PlayerView: View {
                             .font(.system(size: 14))
                     }
                 }
-                .padding(.horizontal, 32)
+                .padding(.horizontal, 28)
                 .padding(.top, 24)
                 .padding(.bottom, 24)
             }
         }
         .sheet(isPresented: $audio.showEqualizer) {
             EqualizerView()
+        }
+        .sheet(isPresented: $audio.showLyricsSheet) {
+            SyncedLyricsSheetView()
         }
     }
 
@@ -318,5 +343,88 @@ struct PlayerView: View {
         let m = total / 60
         let s = total % 60
         return String(format: "%d:%02d", m, s)
+    }
+}
+
+// MARK: - Synced Lyrics Karaoke Sheet
+struct SyncedLyricsSheetView: View {
+    @ObservedObject var audio = AudioManager.shared
+    @Environment(\.dismiss) private var dismiss
+
+    var activeIndex: Int {
+        let curMs = Int(audio.currentTime * 1000)
+        var best = -1
+        for (idx, line) in audio.syncedLyrics.enumerated() {
+            if curMs >= line.timeMs {
+                best = idx
+            }
+        }
+        return best
+    }
+
+    var body: some View {
+        ZStack {
+            Color(red: 10/255, green: 10/255, blue: 15/255)
+                .ignoresSafeArea()
+
+            VStack(spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("KARAOKE SYNCED LYRICS")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(Color(red: 0, green: 1, blue: 0.8))
+                        Text(audio.currentTrack.title)
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    Spacer()
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(Color(red: 0, green: 1, blue: 0.8))
+                }
+                .padding(.horizontal)
+                .padding(.top, 16)
+
+                if audio.isFetchingLyrics {
+                    Spacer()
+                    ProgressView("Fetching lyrics from LrcLib...")
+                        .foregroundColor(.gray)
+                    Spacer()
+                } else if audio.syncedLyrics.isEmpty {
+                    Spacer()
+                    Text("No synchronized lyrics found for this song.")
+                        .foregroundColor(.gray)
+                        .font(.subheadline)
+                    Spacer()
+                } else {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(spacing: 16) {
+                                ForEach(Array(audio.syncedLyrics.enumerated()), id: \.offset) { idx, line in
+                                    Text(line.text)
+                                        .font(.system(size: idx == activeIndex ? 22 : 16, weight: idx == activeIndex ? .bold : .medium))
+                                        .foregroundColor(idx == activeIndex ? Color(red: 0, green: 1, blue: 0.8) : Color.gray.opacity(0.7))
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal)
+                                        .id(idx)
+                                        .onTapGesture {
+                                            audio.seek(to: Double(line.timeMs) / 1000.0)
+                                        }
+                                }
+                            }
+                            .padding(.vertical, 24)
+                        }
+                        .onChange(of: activeIndex) { newIdx in
+                            if newIdx >= 0 {
+                                withAnimation {
+                                    proxy.scrollTo(newIdx, anchor: .center)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

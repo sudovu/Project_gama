@@ -11,6 +11,12 @@ public struct GamaTrack: Identifiable, Codable, Hashable {
     public let youtubeVideoId: String
     public let genre: String
     public let frequencyHz: Int
+    public let codec: String
+    public let bitrateKbps: Int
+    public let sampleRateHz: Int
+    public let bitDepth: Int
+    public let streamUrl: String
+    public let audioQualityBadge: String
 
     public init(
         id: String,
@@ -19,9 +25,15 @@ public struct GamaTrack: Identifiable, Codable, Hashable {
         album: String,
         duration: Double,
         artworkUrl: String,
-        youtubeVideoId: String,
+        youtubeVideoId: String = "",
         genre: String,
-        frequencyHz: Int = 432
+        frequencyHz: Int = 432,
+        codec: String = "AAC",
+        bitrateKbps: Int = 320,
+        sampleRateHz: Int = 44100,
+        bitDepth: Int = 16,
+        streamUrl: String = "",
+        audioQualityBadge: String = "Master AAC 320kbps"
     ) {
         self.id = id
         self.title = title
@@ -32,6 +44,32 @@ public struct GamaTrack: Identifiable, Codable, Hashable {
         self.youtubeVideoId = youtubeVideoId
         self.genre = genre
         self.frequencyHz = frequencyHz
+        self.codec = codec
+        self.bitrateKbps = bitrateKbps
+        self.sampleRateHz = sampleRateHz
+        self.bitDepth = bitDepth
+        self.streamUrl = streamUrl
+        self.audioQualityBadge = audioQualityBadge
+    }
+
+    public var isLiveStream: Bool {
+        return codec == "HLS" || codec == "RTSP" || (duration <= 0 && !streamUrl.isEmpty && youtubeVideoId.isEmpty)
+    }
+
+    public var isLossless: Bool {
+        return codec == "FLAC" || audioQualityBadge.localizedCaseInsensitiveContains("lossless") || audioQualityBadge.localizedCaseInsensitiveContains("hi-res") || bitrateKbps >= 900
+    }
+}
+
+// MARK: - Synchronized Lyrics Line
+public struct LrcLine: Identifiable, Hashable {
+    public var id: String { "\(timeMs)_\(text)" }
+    public let timeMs: Int
+    public let text: String
+
+    public init(timeMs: Int, text: String) {
+        self.timeMs = timeMs
+        self.text = text
     }
 }
 

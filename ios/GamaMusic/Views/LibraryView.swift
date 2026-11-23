@@ -2,18 +2,24 @@ import SwiftUI
 
 struct LibraryView: View {
     @ObservedObject var audio = AudioManager.shared
-    @State private var activeTab: String = "Favorites"
+    @State private var activeTab: String = "All"
 
-    let tabs = ["Favorites", "Downloaded", "432Hz Resonant"]
+    let tabs = ["All", "Hi-Res Lossless", "Streams", "Videos", "Favorites", "Downloaded"]
 
     var displayTracks: [GamaTrack] {
         switch activeTab {
+        case "All":
+            return audio.queue
+        case "Hi-Res Lossless":
+            return audio.queue.filter { $0.isLossless }
+        case "Streams":
+            return audio.queue.filter { $0.isLiveStream || !$0.streamUrl.isEmpty }
+        case "Videos":
+            return audio.queue.filter { !$0.youtubeVideoId.isEmpty }
         case "Favorites":
             return audio.queue.filter { audio.favorites.contains($0.id) }
         case "Downloaded":
             return audio.queue.filter { audio.downloaded.contains($0.id) }
-        case "432Hz Resonant":
-            return audio.queue.filter { $0.genre == "Focus & Ambient" }
         default:
             return audio.queue
         }
@@ -57,27 +63,29 @@ struct LibraryView: View {
                 .padding(.horizontal)
                 .padding(.top, 8)
 
-                // Segmented Tabs
-                HStack(spacing: 8) {
-                    ForEach(tabs, id: \.self) { tab in
-                        Button(action: {
-                            activeTab = tab
-                        }) {
-                            Text(tab)
-                                .font(.system(size: 13, weight: .semibold))
-                                .padding(.vertical, 8)
-                                .frame(maxWidth: .infinity)
-                                .background(
-                                    activeTab == tab
-                                        ? Color(red: 0, green: 1, blue: 0.8)
-                                        : Color(red: 18/255, green: 18/255, blue: 26/255)
-                                )
-                                .foregroundColor(activeTab == tab ? .black : .white)
-                                .cornerRadius(14)
+                // Segmented Smart Filter Tabs
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(tabs, id: \.self) { tab in
+                            Button(action: {
+                                activeTab = tab
+                            }) {
+                                Text(tab)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        activeTab == tab
+                                            ? Color(red: 0, green: 1, blue: 0.8)
+                                            : Color(red: 18/255, green: 18/255, blue: 26/255)
+                                    )
+                                    .foregroundColor(activeTab == tab ? .black : .white)
+                                    .cornerRadius(14)
+                            }
                         }
                     }
+                    .padding(.horizontal)
                 }
-                .padding(.horizontal)
 
                 // Track Count Bar
                 HStack {

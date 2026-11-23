@@ -4,6 +4,15 @@ const fs = require('fs');
 const os = require('os');
 const http = require('http');
 
+// Process-wide crash guardrails
+process.on('uncaughtException', (err) => {
+  console.error('[GAMA Main] Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[GAMA Main] Unhandled Rejection:', reason);
+});
+
 // Enable seamless programmatic audio streaming and local network access
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.commandLine.appendSwitch('disable-features', 'BlockInsecurePrivateNetworkRequests');
@@ -34,27 +43,30 @@ function createTray() {
 
     tray = new Tray(trayIconPath);
 
-  const contextMenu = Menu.buildFromTemplate([
-    { label: 'GAMA Cybernetic Player', enabled: false },
-    { type: 'separator' },
-    { label: 'Play / Pause', click: () => mainWindow?.webContents.send('media-command', 'play-pause') },
-    { label: 'Next Track', click: () => mainWindow?.webContents.send('media-command', 'next') },
-    { label: 'Previous Track', click: () => mainWindow?.webContents.send('media-command', 'previous') },
-    { type: 'separator' },
-    { label: 'Show Window', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
-    { label: 'Quit GAMA', click: () => { isQuitting = true; app.quit(); } }
-  ]);
+    const contextMenu = Menu.buildFromTemplate([
+      { label: 'GAMA Cybernetic Player', enabled: false },
+      { type: 'separator' },
+      { label: 'Play / Pause', click: () => mainWindow?.webContents.send('media-command', 'play-pause') },
+      { label: 'Next Track', click: () => mainWindow?.webContents.send('media-command', 'next') },
+      { label: 'Previous Track', click: () => mainWindow?.webContents.send('media-command', 'previous') },
+      { type: 'separator' },
+      { label: 'Show Window', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
+      { label: 'Quit GAMA', click: () => { isQuitting = true; app.quit(); } }
+    ]);
 
-  tray.setToolTip('GAMA - High-Fidelity Audio');
-  tray.setContextMenu(contextMenu);
-  tray.on('double-click', () => {
-    if (mainWindow?.isVisible()) {
-      mainWindow.hide();
-    } else {
-      mainWindow?.show();
-      mainWindow?.focus();
-    }
-  });
+    tray.setToolTip('GAMA - High-Fidelity Audio');
+    tray.setContextMenu(contextMenu);
+    tray.on('double-click', () => {
+      if (mainWindow?.isVisible()) {
+        mainWindow.hide();
+      } else {
+        mainWindow?.show();
+        mainWindow?.focus();
+      }
+    });
+  } catch (err) {
+    console.warn('Tray creation notice:', err);
+  }
 }
 
 function createWindow() {
