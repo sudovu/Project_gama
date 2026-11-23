@@ -40,6 +40,7 @@ object GamaLanSyncServer {
     private val scope = CoroutineScope(Dispatchers.IO)
     private val connectedClients = CopyOnWriteArrayList<Socket>()
     private var playbackManager: PlaybackManager? = null
+    private var appContext: Context? = null
 
     private var nsdManager: NsdManager? = null
     private var registrationListener: NsdManager.RegistrationListener? = null
@@ -92,6 +93,7 @@ object GamaLanSyncServer {
 
     fun start(context: Context, manager: PlaybackManager, port: Int = DEFAULT_PORT) {
         if (isRunning) return
+        appContext = context.applicationContext
         playbackManager = manager
         serverIp = resolveLocalIp(context)
 
@@ -125,6 +127,7 @@ object GamaLanSyncServer {
     fun stop() {
         if (!isRunning && serverSocket == null) return
         isRunning = false
+        appContext = null
         unregisterMdnsService()
         serverJob?.cancel()
         broadcastJob?.cancel()
@@ -349,6 +352,110 @@ object GamaLanSyncServer {
                             output.write(res.toByteArray(Charsets.UTF_8))
                         }
                     }
+                    method == "GET" && path == "/stream" -> {
+                        val authHeader = headers["authorization"]?.removePrefix("Bearer ")?.trim()
+                            ?: headers["x-auth-token"]
+                        val effectiveToken = queryParams["token"] ?: authHeader
+
+                        if (!validateToken(effectiveToken)) {
+                            val errBody = "{\"success\":false,\"error\":\"Unauthorized. Valid pairing token required.\"}"
+                            val res = "HTTP/1.1 401 Unauthorized\r\n" +
+                                    "Content-Type: application/json; charset=utf-8\r\n" +
+                                    "Access-Control-Allow-Origin: *\r\n" +
+                                    "Content-Length: ${errBody.toByteArray().size}\r\n\r\n" + errBody
+                            output.write(res.toByteArray(Charsets.UTF_8))
+                        } else {
+                            val track = playbackManager?.playbackState?.value?.currentTrack
+                            handleStreamRequest(output, headers, track, appContext)
+                        }
+                    }
+                    method == "POST" && path == "/queue/push" -> {
+                        val authHeader = headers["authorization"]?.removePrefix("Bearer ")?.trim()
+                            ?: headers["x-auth-token"]
+                        val effectiveToken = queryParams["token"] ?: authHeader
+
+                        if (!validateToken(effectiveToken)) {
+                            val errBody = "{\"success\":false,\"error\":\"Unauthorized. Valid pairing token required.\"}"
+                            val res = "HTTP/1.1 401 Unauthorized\r\n" +
+                                    "Content-Type: application/json; charset=utf-8\r\n" +
+                                    "Access-Control-Allow-Origin: *\r\n" +
+                                    "Content-Length: ${errBody.toByteArray().size}\r\n\r\n" + errBody
+                            output.write(res.toByteArray(Charsets.UTF_8))
+                        } else {
+                            val contentLength = headers["content-length"]?.toIntOrNull() ?: 0
+                            val contentType = headers["content-type"] ?: "application/json"
+
+                            if (contentType.contains("application/json", ignoreCase = true)) {
+                                val bodyChars = CharArray(contentLength)
+                                input.read(bodyChars, 0, contentLength)
+                                val bodyStr = String(bodyChars)
+                                val json = try { JSONObject(bodyStr) } catch (_: Exception) { JSONObject() }
+                                val playNow = json.optBoolean("playNow", false)
+
+                                val pushedTrack = com.example.domain.model.Track(
+                                    id = json.optString("id", "lan_" + UUID.randomUUID().toString().take(8)),
+                                    title = json.optString("title", "LAN Stream Track"),
+                                    artist = json.optString("artist", "Windows PC"),
+                                    artworkUrl = json.optString("artworkUrl", ""),
+                                    youtubeVideoId = json.optString("youtubeVideoId", ""),
+                                    streamUrl = json.optString("streamUrl", ""),
+                                    localAudioUri = json.optString("localAudioUri", ""),
+                                    durationSeconds = json.optInt("durationSeconds", 0)
+                                )
+
+                                CoroutineScope(Dispatchers.Main).launch {
+                                    if (playNow) {
+                                        playbackManager?.playTrack(pushedTrack)
+                                    } else {
+                                        playbackManager?.addToQueue(pushedTrack)
+                                    }
+                                }
+
+                                val resBody = "{\"success\":true,\"message\":\"Track queued on phone\",\"trackId\":\"${pushedTrack.id}\"}"
+                                val res = "HTTP/1.1 200 OK\r\n" +
+                                        "Content-Type: application/json; charset=utf-8\r\n" +
+                                        "Access-Control-Allow-Origin: *\r\n" +
+                                        "Content-Length: ${resBody.toByteArray().size}\r\n\r\n" + resBody
+                                output.write(res.toByteArray(Charsets.UTF_8))
+                            } else {
+                                val filename = headers["x-track-filename"] ?: "upload_${System.currentTimeMillis()}.mp3"
+                                val title = headers["x-track-title"] ?: filename.substringBeforeLast(".")
+                                val artist = headers["x-track-artist"] ?: "Windows PC"
+                                val playNow = headers["x-play-now"]?.equals("true", ignoreCase = true) == true
+
+                                val uploadDir = java.io.File(appContext?.cacheDir, "lan_uploads").apply { mkdirs() }
+                                val savedFile = java.io.File(uploadDir, "${System.currentTimeMillis()}_$filename")
+
+                                val bodyChars = CharArray(contentLength)
+                                input.read(bodyChars, 0, contentLength)
+                                savedFile.writeBytes(String(bodyChars).toByteArray(Charsets.ISO_8859_1))
+
+                                val pushedTrack = com.example.domain.model.Track(
+                                    id = "lan_" + UUID.randomUUID().toString().take(8),
+                                    title = title,
+                                    artist = artist,
+                                    localAudioUri = savedFile.absolutePath,
+                                    isDownloaded = true,
+                                    codec = savedFile.extension.uppercase()
+                                )
+
+                                CoroutineScope(Dispatchers.Main).launch {
+                                    if (playNow) {
+                                        playbackManager?.playTrack(pushedTrack)
+                                    } else {
+                                        playbackManager?.addToQueue(pushedTrack)
+                                    }
+                                }
+
+                                val resBody = "{\"success\":true,\"message\":\"Audio file queued on phone\",\"trackId\":\"${pushedTrack.id}\"}"
+                                val res = "HTTP/1.1 200 OK\r\n" +
+                                        "Content-Type: application/json; charset=utf-8\r\n" +
+                                        "Access-Control-Allow-Origin: *\r\n" +
+                                        "Content-Length: ${resBody.toByteArray().size}\r\n\r\n" + resBody
+                                output.write(res.toByteArray(Charsets.UTF_8))
+                            }
+                        }
+                    }
                     else -> {
                         val notFound = "HTTP/1.1 404 Not Found\r\n\r\n"
                         output.write(notFound.toByteArray(Charsets.UTF_8))
@@ -549,6 +656,112 @@ object GamaLanSyncServer {
                 System.arraycopy(payload, 0, frame, 10, len)
                 frame
             }
+        }
+    }
+
+    private fun handleStreamRequest(
+        output: OutputStream,
+        headers: Map<String, String>,
+        track: com.example.domain.model.Track?,
+        context: Context?
+    ) {
+        if (track == null) {
+            val notFound = "HTTP/1.1 404 Not Found\r\nAccess-Control-Allow-Origin: *\r\n\r\n"
+            output.write(notFound.toByteArray(Charsets.UTF_8))
+            return
+        }
+
+        var targetFile: java.io.File? = null
+        if (track.localAudioUri.isNotBlank()) {
+            val path = track.localAudioUri.removePrefix("file://")
+            val f = java.io.File(path)
+            if (f.exists() && f.isFile) {
+                targetFile = f
+            }
+        }
+
+        if (targetFile == null && context != null) {
+            val dlDir = java.io.File(context.filesDir, "downloads")
+            val candidates = listOf(
+                java.io.File(dlDir, "${track.id}.mp3"),
+                java.io.File(dlDir, "${track.id}.flac"),
+                java.io.File(dlDir, "${track.id}.m4a"),
+                java.io.File(context.cacheDir, "lan_uploads/${track.id}.mp3")
+            )
+            targetFile = candidates.firstOrNull { it.exists() && it.isFile }
+        }
+
+        if (targetFile != null && targetFile.exists()) {
+            val totalLength = targetFile.length()
+            val mimeType = when (targetFile.extension.lowercase()) {
+                "flac" -> "audio/flac"
+                "wav" -> "audio/wav"
+                "m4a", "aac" -> "audio/mp4"
+                "ogg" -> "audio/ogg"
+                else -> "audio/mpeg"
+            }
+
+            val rangeHeader = headers["range"]
+            if (!rangeHeader.isNullOrBlank() && rangeHeader.startsWith("bytes=")) {
+                val rangeSpec = rangeHeader.removePrefix("bytes=").trim()
+                val parts = rangeSpec.split("-")
+                val start = parts[0].toLongOrNull() ?: 0L
+                val end = if (parts.size > 1 && parts[1].isNotBlank()) {
+                    parts[1].toLongOrNull() ?: (totalLength - 1)
+                } else {
+                    totalLength - 1
+                }.coerceAtMost(totalLength - 1)
+
+                val contentLength = (end - start + 1).coerceAtLeast(0)
+
+                val header = "HTTP/1.1 206 Partial Content\r\n" +
+                        "Content-Type: $mimeType\r\n" +
+                        "Accept-Ranges: bytes\r\n" +
+                        "Content-Range: bytes $start-$end/$totalLength\r\n" +
+                        "Content-Length: $contentLength\r\n" +
+                        "Access-Control-Allow-Origin: *\r\n\r\n"
+                output.write(header.toByteArray(Charsets.UTF_8))
+
+                val fis = java.io.FileInputStream(targetFile)
+                fis.skip(start)
+                val buf = ByteArray(16384)
+                var remaining = contentLength
+                while (remaining > 0) {
+                    val toRead = remaining.coerceAtMost(buf.size.toLong()).toInt()
+                    val read = fis.read(buf, 0, toRead)
+                    if (read <= 0) break
+                    output.write(buf, 0, read)
+                    remaining -= read
+                }
+                fis.close()
+            } else {
+                val header = "HTTP/1.1 200 OK\r\n" +
+                        "Content-Type: $mimeType\r\n" +
+                        "Accept-Ranges: bytes\r\n" +
+                        "Content-Length: $totalLength\r\n" +
+                        "Access-Control-Allow-Origin: *\r\n\r\n"
+                output.write(header.toByteArray(Charsets.UTF_8))
+
+                val fis = java.io.FileInputStream(targetFile)
+                val buf = ByteArray(16384)
+                var read: Int
+                while (fis.read(buf).also { read = it } > 0) {
+                    output.write(buf, 0, read)
+                }
+                fis.close()
+            }
+        } else if (track.streamUrl.isNotBlank()) {
+            val redirect = "HTTP/1.1 302 Found\r\n" +
+                    "Location: ${track.streamUrl}\r\n" +
+                    "Access-Control-Allow-Origin: *\r\n\r\n"
+            output.write(redirect.toByteArray(Charsets.UTF_8))
+        } else {
+            val notFound = "HTTP/1.1 404 Not Found\r\n" +
+                    "Content-Type: application/json\r\n" +
+                    "Access-Control-Allow-Origin: *\r\n" +
+                    "Content-Length: 53\r\n\r\n" +
+                    "{\"error\":\"Track audio not available locally for stream\"}"
+            output.write(notFound.toByteArray(Charsets.UTF_8))
         }
     }
 

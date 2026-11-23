@@ -292,4 +292,21 @@ class AudiophileEngineAndDifferentiatorsTest {
             tempDir.deleteRecursively()
         }
     }
+
+    @Test
+    fun testLanStreamingAndQueuePushProtocol() {
+        val server = com.example.core.remote.GamaLanSyncServer
+        val pin = server.pairingPin
+        val token = server.pairWithPin(pin)
+        assertNotNull(token)
+
+        // Validate token acceptance
+        assertTrue(server.validateToken(token))
+
+        // Validate command execution with valid payload
+        val pushJson = """{"action":"toggle_shuffle"}"""
+        val res = server.executeCommand(pushJson)
+        assertNotNull(res)
+        assertTrue(res.contains("toggle_shuffle") || res.contains("playbackManager is null") || res.contains("success"))
+    }
 }

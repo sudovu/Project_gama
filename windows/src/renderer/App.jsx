@@ -40,7 +40,10 @@ export default function App() {
   const [lanStatusMsg, setLanStatusMsg] = useState('Disconnected');
   const [discoveredDevices, setDiscoveredDevices] = useState([]);
   const [isScanningLan, setIsScanningLan] = useState(false);
+  const [streamToPc, setStreamToPc] = useState(false);
+  const [isPushingTrack, setIsPushingTrack] = useState(false);
   const lanSocketRef = useRef(null);
+  const pcAudioRef = useRef(null);
 
   const scanLanDevices = async () => {
     setIsScanningLan(true);
@@ -128,6 +131,29 @@ export default function App() {
             setIsPlaying(data.isPlaying);
             if (data.positionMs !== undefined) setCurrentTime(data.positionMs / 1000);
             if (data.durationMs !== undefined && data.durationMs > 0) setDuration(data.durationMs / 1000);
+
+            // Synchronize PC Speaker Streaming if enabled
+            if (streamToPc && pcAudioRef.current) {
+              const audio = pcAudioRef.current;
+              const token = localStorage.getItem('gama_lan_token') || '';
+              const streamUrl = `http://${ip}:8765/stream?token=${encodeURIComponent(token)}`;
+              if (!audio.src || !audio.src.includes('/stream')) {
+                audio.src = streamUrl;
+                audio.load();
+              }
+              if (data.isPlaying && audio.paused) {
+                audio.play().catch(() => {});
+              } else if (!data.isPlaying && !audio.paused) {
+                audio.pause();
+              }
+              if (data.positionMs !== undefined) {
+                const targetSec = data.positionMs / 1000;
+                if (Math.abs(audio.currentTime - targetSec) > 2.0) {
+                  audio.currentTime = targetSec;
+                }
+              }
+            }
+
             if (data.track) {
               setCurrentTrack(prev => ({
                 ...prev,
@@ -145,6 +171,7 @@ export default function App() {
       };
       ws.onclose = (e) => {
         setLanConnected(false);
+        if (pcAudioRef.current) pcAudioRef.current.pause();
         if (e.code === 1006 || e.reason?.includes('401')) {
           setLanStatusMsg('Authentication expired or invalid PIN. Please re-enter 4-digit PIN.');
           localStorage.removeItem('gama_lan_token');
@@ -154,6 +181,7 @@ export default function App() {
       };
       ws.onerror = () => {
         setLanConnected(false);
+        if (pcAudioRef.current) pcAudioRef.current.pause();
         setLanStatusMsg('Connection failed. Verify phone IP and 4-digit PIN.');
       };
       lanSocketRef.current = ws;
@@ -167,6 +195,9 @@ export default function App() {
       lanSocketRef.current.close();
       lanSocketRef.current = null;
     }
+    if (pcAudioRef.current) {
+      pcAudioRef.current.pause();
+    }
     setLanConnected(false);
     setLanStatusMsg('Disconnected');
   };
@@ -177,6 +208,82 @@ export default function App() {
       return true;
     }
     return false;
+  };
+
+  const pushTrackToPhone = async (track, playNow = false) => {
+    const token = localStorage.getItem('gama_lan_token');
+    const ip = lanPhoneIp.trim();
+    if (!token || !ip) {
+      setLanStatusMsg('Please connect to your phone via LAN Sync first');
+      setShowLanModal(true);
+      return false;
+    }
+    setIsPushingTrack(true);
+    try {
+      const res = await fetch(`http://${ip}:8765/queue/push?token=${encodeURIComponent(token)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          id: track.id,
+          title: track.title,
+          artist: track.artist,
+          artworkUrl: track.artworkUrl,
+          streamUrl: track.streamUrl || track.audioUrl || '',
+          youtubeVideoId: track.youtubeVideoId || '',
+          durationSeconds: track.duration || 0,
+          playNow
+        })
+      });
+      if (res.ok) {
+        setLanStatusMsg(`Queued "${track.title}" on phone!`);
+        setIsPushingTrack(false);
+        return true;
+      } else {
+        setLanStatusMsg('Queue push failed (HTTP 401/404)');
+      }
+    } catch (e) {
+      setLanStatusMsg(`Queue push error: ${e.message}`);
+    }
+    setIsPushingTrack(false);
+    return false;
+  };
+
+  const uploadFileToPhoneQueue = async (file, playNow = false) => {
+    const token = localStorage.getItem('gama_lan_token');
+    const ip = lanPhoneIp.trim();
+    if (!token || !ip) {
+      setLanStatusMsg('Please connect to your phone via LAN Sync first');
+      setShowLanModal(true);
+      return;
+    }
+    setLanStatusMsg(`Sending ${file.name} to phone queue...`);
+    setIsPushingTrack(true);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const res = await fetch(`http://${ip}:8765/queue/push?token=${encodeURIComponent(token)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'Authorization': `Bearer ${token}`,
+          'X-Track-Filename': file.name,
+          'X-Track-Title': file.name.replace(/\.[^/.]+$/, ''),
+          'X-Track-Artist': 'Windows PC',
+          'X-Play-Now': playNow ? 'true' : 'false'
+        },
+        body: arrayBuffer
+      });
+      if (res.ok) {
+        setLanStatusMsg(`Pushed "${file.name}" straight to phone queue over Wi-Fi!`);
+      } else {
+        setLanStatusMsg('File upload failed (HTTP 401/404)');
+      }
+    } catch (err) {
+      setLanStatusMsg(`Upload error: ${err.message}`);
+    }
+    setIsPushingTrack(false);
   };
 
   // YouTube Player Ref
@@ -618,6 +725,15 @@ export default function App() {
                           >
                             {downloaded.has(track.id) ? <CheckCircle className="w-4 h-4" /> : <Download className="w-4 h-4" />}
                           </button>
+                          {lanConnected && (
+                            <button
+                              title="Push to Phone Queue"
+                              onClick={() => pushTrackToPhone(track)}
+                              className="p-2 rounded-lg text-slate-500 hover:text-gammaCyan transition-colors"
+                            >
+                              <Smartphone className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -1040,14 +1156,59 @@ export default function App() {
                   </button>
                 )}
               </div>
+
+              {/* Direct LAN Audio Streaming Option */}
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono text-slate-200">SPEAKER AUDIO OUTPUT</span>
+                  <button
+                    onClick={() => {
+                      const next = !streamToPc;
+                      setStreamToPc(next);
+                      if (!next && pcAudioRef.current) pcAudioRef.current.pause();
+                    }}
+                    className={`text-xs px-2.5 py-1 rounded-md font-mono transition-colors ${
+                      streamToPc ? 'bg-gammaCyan text-black font-bold' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {streamToPc ? '🔊 Stream to PC Speakers' : '📱 Phone Speaker Output'}
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  {streamToPc
+                    ? 'Audio streams losslessly from phone to this PC via HTTP Range-request.'
+                    : 'Standard remote control mode: Phone plays audio while PC views live telemetry & controls.'}
+                </p>
+              </div>
+
+              {/* Two-Way Queue Push: Send Local File to Phone Queue */}
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                <span className="text-xs font-mono text-slate-200 block">PUSH AUDIO FILE TO PHONE QUEUE</span>
+                <label className="flex items-center justify-center p-3 border border-dashed border-slate-700 hover:border-gammaCyan/60 rounded-xl cursor-pointer text-xs text-slate-400 hover:text-slate-200 transition-colors">
+                  <input
+                    type="file"
+                    accept=".mp3,.flac,.wav,.m4a,.mp4"
+                    disabled={isPushingTrack || !lanConnected}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) uploadFileToPhoneQueue(file);
+                    }}
+                    className="hidden"
+                  />
+                  <span>{isPushingTrack ? 'Sending to phone...' : '📁 Select .mp3 / .flac to queue on phone'}</span>
+                </label>
+              </div>
             </div>
 
             <p className="text-[11px] text-slate-500">
-              Zero cloud accounts required. GAMA's built-in WebSocket engine connects directly between your phone and PC over local Wi-Fi.
+              Zero cloud accounts required. GAMA's built-in WebSocket & HTTP streaming engine connects directly between your phone and PC over local Wi-Fi.
             </p>
           </div>
         </div>
       )}
+
+      {/* Hidden Audio Element for Direct LAN PC Speaker Streaming */}
+      <audio ref={pcAudioRef} preload="none" className="hidden" />
     </div>
   );
 }

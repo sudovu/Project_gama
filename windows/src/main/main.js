@@ -1,10 +1,12 @@
-const { app, BrowserWindow, ipcMain, globalShortcut, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, shell, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const http = require('http');
 
 let mainWindow;
+let tray = null;
+let isQuitting = false;
 
 function getAppDataDir() {
   const dir = path.join(app.getPath('appData'), 'GamaMusic');
@@ -16,6 +18,35 @@ function getAppDataDir() {
     fs.mkdirSync(dlDir, { recursive: true });
   }
   return dir;
+}
+
+function createTray() {
+  if (tray) return;
+  const iconPath = path.join(__dirname, '../../build/icon.ico');
+  const trayIcon = fs.existsSync(iconPath) ? iconPath : nativeImage.createEmpty();
+  tray = new Tray(trayIcon);
+
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'GAMA Cybernetic Player', enabled: false },
+    { type: 'separator' },
+    { label: 'Play / Pause', click: () => mainWindow?.webContents.send('media-command', 'play-pause') },
+    { label: 'Next Track', click: () => mainWindow?.webContents.send('media-command', 'next') },
+    { label: 'Previous Track', click: () => mainWindow?.webContents.send('media-command', 'previous') },
+    { type: 'separator' },
+    { label: 'Show Window', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
+    { label: 'Quit GAMA', click: () => { isQuitting = true; app.quit(); } }
+  ]);
+
+  tray.setToolTip('GAMA - High-Fidelity Audio');
+  tray.setContextMenu(contextMenu);
+  tray.on('double-click', () => {
+    if (mainWindow?.isVisible()) {
+      mainWindow.hide();
+    } else {
+      mainWindow?.show();
+      mainWindow?.focus();
+    }
+  });
 }
 
 function createWindow() {
@@ -51,6 +82,15 @@ function createWindow() {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
+  });
+
+  // Minimize to tray on close
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+      return false;
+    }
   });
 
   // Windows Media Keys Handling
@@ -176,16 +216,29 @@ ipcMain.handle('discover-lan-devices', async () => {
 
 app.whenReady().then(() => {
   createWindow();
+  createTray();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    } else {
+      mainWindow?.show();
+    }
   });
+});
+
+app.on('before-quit', () => {
+  isQuitting = true;
 });
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  if (tray) {
+    tray.destroy();
+    tray = null;
+  }
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  if (process.platform !== 'darwin' && isQuitting) app.quit();
 });
