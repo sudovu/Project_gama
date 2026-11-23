@@ -347,4 +347,84 @@ class AudiophileEngineAndDifferentiatorsTest {
         assertTrue(html.contains("pairWithPin"))
         assertTrue(html.contains("toggleStreamAudio"))
     }
+
+    @Test
+    fun testDirectStreamTrackCreation() {
+        val streamUrl = "https://somafm.com/live/groove_salad_256.mp3"
+        val track = com.example.core.util.StreamPlaylistParser.createDirectStreamTrack(
+            url = streamUrl,
+            fallbackTitle = "Groove Salad",
+            fallbackArtist = "SomaFM"
+        )
+        assertNotNull(track)
+        assertEquals("Groove Salad", track.title)
+        assertEquals("SomaFM", track.artist)
+        assertEquals(streamUrl, track.streamUrl)
+        assertEquals("MP3", track.codec)
+        assertEquals("stream", track.source)
+    }
+
+    @Test
+    fun testM3uContentParsing() {
+        val m3uText = """
+            #EXTM3U
+            #EXTINF:180,Tycho - Awake
+            https://stream.example.com/tycho_awake.flac
+            #EXTINF:240,Boards of Canada - Dayvan Cowboy
+            https://stream.example.com/dayvan_cowboy.ogg
+            #EXTINF:-1,Cyberpunk Ambient Radio
+            https://radio.example.com/live.m3u8
+        """.trimIndent()
+
+        val tracks = com.example.core.util.StreamPlaylistParser.parseM3uContent(m3uText)
+        assertEquals(3, tracks.size)
+
+        assertEquals("Awake", tracks[0].title)
+        assertEquals("Tycho", tracks[0].artist)
+        assertEquals(180, tracks[0].durationSeconds)
+        assertEquals("FLAC", tracks[0].codec)
+
+        assertEquals("Dayvan Cowboy", tracks[1].title)
+        assertEquals("Boards of Canada", tracks[1].artist)
+        assertEquals(240, tracks[1].durationSeconds)
+        assertEquals("OGG", tracks[1].codec)
+
+        assertEquals("Cyberpunk Ambient Radio", tracks[2].title)
+        assertEquals(0, tracks[2].durationSeconds)
+        assertEquals("HLS", tracks[2].codec)
+    }
+
+    @Test
+    fun testStreamPlaylistDiskCache() {
+        val tempCacheDir = java.io.File.createTempFile("stream_cache_test", "").apply {
+            delete()
+            mkdirs()
+        }
+        try {
+            val tracks = listOf(
+                com.example.core.util.StreamPlaylistParser.createDirectStreamTrack(
+                    url = "https://radio.example.com/stream1.aac",
+                    fallbackTitle = "Synthwave 80s",
+                    fallbackArtist = "Cyber Radio"
+                ),
+                com.example.core.util.StreamPlaylistParser.createDirectStreamTrack(
+                    url = "https://radio.example.com/stream2.flac",
+                    fallbackTitle = "Lossless Jazz",
+                    fallbackArtist = "Hi-Res Stream"
+                )
+            )
+
+            // Save to cache
+            com.example.core.util.StreamPlaylistParser.saveToCache(tempCacheDir, "Cyberpunk Favorites", tracks)
+
+            // Reload from cache
+            val loaded = com.example.core.util.StreamPlaylistParser.loadCachedPlaylists(tempCacheDir)
+            assertTrue("Expected cached playlist 'Cyberpunk Favorites'", loaded.containsKey("Cyberpunk Favorites"))
+            assertEquals(2, loaded["Cyberpunk Favorites"]?.size)
+            assertEquals("Synthwave 80s", loaded["Cyberpunk Favorites"]?.get(0)?.title)
+            assertEquals("AAC", loaded["Cyberpunk Favorites"]?.get(0)?.codec)
+        } finally {
+            tempCacheDir.deleteRecursively()
+        }
+    }
 }

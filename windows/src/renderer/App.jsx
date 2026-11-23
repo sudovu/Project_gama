@@ -42,8 +42,46 @@ export default function App() {
   const [isScanningLan, setIsScanningLan] = useState(false);
   const [streamToPc, setStreamToPc] = useState(false);
   const [isPushingTrack, setIsPushingTrack] = useState(false);
+  const [streamInputUrl, setStreamInputUrl] = useState('');
+  const [streamInputTitle, setStreamInputTitle] = useState('');
+  const [importedStreams, setImportedStreams] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('gama_imported_streams') || '[]');
+    } catch { return []; }
+  });
   const lanSocketRef = useRef(null);
   const pcAudioRef = useRef(null);
+
+  const handleImportStream = (urlToImport = streamInputUrl, titleToImport = streamInputTitle) => {
+    const url = urlToImport.trim();
+    if (!url) return;
+    const title = titleToImport.trim() || (url.split('/').pop().replace(/\.[^/.]+$/, '') || 'Live Stream');
+    const artist = 'Direct Stream';
+    const newTrack = {
+      id: `stream_${Date.now()}`,
+      title,
+      artist,
+      artworkUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300',
+      streamUrl: url,
+      duration: 0,
+      source: 'stream'
+    };
+
+    const updated = [newTrack, ...importedStreams.filter(s => s.streamUrl !== url)];
+    setImportedStreams(updated);
+    try {
+      localStorage.setItem('gama_imported_streams', JSON.stringify(updated.slice(0, 30)));
+    } catch {}
+
+    playTrack(newTrack);
+    setStreamInputUrl('');
+    setStreamInputTitle('');
+
+    // If LAN sync is connected, also instruct phone to play stream
+    if (lanConnected && lanPhoneIp) {
+      sendLanCommand('play_stream', { url, title, artist });
+    }
+  };
 
   const scanLanDevices = async () => {
     setIsScanningLan(true);
@@ -745,7 +783,64 @@ export default function App() {
 
           {activeTab === 'search' && (
             <div className="space-y-6">
-              <h3 className="text-xl font-bold">Search & YouTube Streaming</h3>
+              {/* Direct Stream URL & M3U Playlist Import Panel */}
+              <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-gammaCyan flex items-center space-x-2">
+                    <Radio className="w-4 h-4 text-gammaCyan" />
+                    <span>Direct Stream URL &amp; M3U Playlist Import</span>
+                  </h4>
+                  <span className="text-[10px] font-mono text-slate-500">HLS • MP3 • FLAC • AAC • M3U8</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    value={streamInputTitle}
+                    onChange={(e) => setStreamInputTitle(e.target.value)}
+                    placeholder="Stream Title (Optional)"
+                    className="p-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-gammaCyan"
+                  />
+                  <input
+                    type="text"
+                    value={streamInputUrl}
+                    onChange={(e) => setStreamInputUrl(e.target.value)}
+                    placeholder="Paste Stream URL (http://...mp3, .m3u8, etc.)"
+                    className="md:col-span-2 p-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-gammaCyan"
+                  />
+                </div>
+                <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] text-slate-500 font-mono">Quick Streams:</span>
+                    <button
+                      onClick={() => handleImportStream('https://somafm.com/groovesalad130.pls', 'SomaFM Groove Salad')}
+                      className="text-[10px] px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-mono"
+                    >
+                      Groove Salad
+                    </button>
+                    <button
+                      onClick={() => handleImportStream('https://somafm.com/defcon.pls', 'SomaFM DEF CON')}
+                      className="text-[10px] px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-mono"
+                    >
+                      DEF CON Radio
+                    </button>
+                    <button
+                      onClick={() => handleImportStream('https://somafm.com/dronezone130.pls', 'Drone Zone')}
+                      className="text-[10px] px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-mono"
+                    >
+                      Drone Zone
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => handleImportStream()}
+                    disabled={!streamInputUrl.trim()}
+                    className="text-xs px-3 py-1.5 rounded-lg font-bold bg-gammaCyan text-black hover:bg-cyan-300 transition-colors disabled:opacity-40"
+                  >
+                    ▶ Stream Now
+                  </button>
+                </div>
+              </div>
+
+              <h3 className="text-xl font-bold">Search &amp; YouTube Streaming</h3>
               <p className="text-xs text-slate-400">Search library or input any YouTube video link or 11-character video ID to stream instantly.</p>
               <div className="grid grid-cols-1 gap-2">
                 {filteredTracks.map((track) => (

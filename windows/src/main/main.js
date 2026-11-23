@@ -22,9 +22,13 @@ function getAppDataDir() {
 
 function createTray() {
   if (tray) return;
-  const iconPath = path.join(__dirname, '../../build/icon.ico');
-  const trayIcon = fs.existsSync(iconPath) ? iconPath : nativeImage.createEmpty();
-  tray = new Tray(trayIcon);
+  try {
+    const iconPath = path.join(__dirname, '../../build/icon.ico');
+    const altIcon = path.join(process.resourcesPath, 'build/icon.ico');
+    const trayIconPath = fs.existsSync(iconPath) ? iconPath : (fs.existsSync(altIcon) ? altIcon : null);
+    if (!trayIconPath) return;
+
+    tray = new Tray(trayIconPath);
 
   const contextMenu = Menu.buildFromTemplate([
     { label: 'GAMA Cybernetic Player', enabled: false },

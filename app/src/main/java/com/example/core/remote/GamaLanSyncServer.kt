@@ -14,6 +14,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -627,6 +628,29 @@ object GamaLanSyncServer {
                         pm.startSleepTimer(mins)
                     }
                     "cancel_sleep_timer" -> pm.cancelSleepTimer()
+                    "play_stream", "import_stream" -> {
+                        val streamInput = json.optString("url", "").ifEmpty { json.optString("streamUrl", "") }
+                        val streamTitle = json.optString("title", "")
+                        val streamArtist = json.optString("artist", "")
+                        if (streamInput.isNotBlank()) {
+                            CoroutineScope(Dispatchers.IO).launch {
+                                val tracks = com.example.core.util.StreamPlaylistParser.parseStreamOrPlaylist(
+                                    input = streamInput,
+                                    fallbackTitle = streamTitle,
+                                    fallbackArtist = streamArtist,
+                                    cacheDir = appContext?.cacheDir
+                                )
+                                withContext(Dispatchers.Main) {
+                                    if (tracks.isNotEmpty()) {
+                                        pm.playTrack(tracks.first())
+                                        for (i in 1 until tracks.size) {
+                                            pm.addToQueue(tracks[i])
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

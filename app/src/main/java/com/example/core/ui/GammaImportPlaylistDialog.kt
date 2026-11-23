@@ -40,19 +40,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.core.util.StreamPlaylistParser
 import com.example.data.provider.CuratedFrequencies
 import com.example.domain.model.Track
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.example.ui.theme.GammaDivider
 import com.example.ui.theme.GammaGlowCyan
 import com.example.ui.theme.GammaPrimary
@@ -87,6 +93,10 @@ fun GammaImportPlaylistDialog(
     var selectedPlatform by remember { mutableStateOf(ImportPlatform.ALL) }
     var directLinkUrl by remember { mutableStateOf("") }
     var directLinkTitle by remember { mutableStateOf("") }
+    var isImportingStream by remember { mutableStateOf(false) }
+
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     val allRelatablePlaylists = remember {
         val tracks = CuratedFrequencies.allTracks
@@ -277,12 +287,12 @@ fun GammaImportPlaylistDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 if (selectedPlatform == ImportPlatform.LINK) {
-                    // Direct link custom input
+                    // Direct stream URL or M3U/M3U8 playlist custom input
                     OutlinedTextField(
                         value = directLinkTitle,
                         onValueChange = { directLinkTitle = it },
-                        label = { Text("Playlist Name (Optional)") },
-                        placeholder = { Text("e.g. My Custom Soundwaves") },
+                        label = { Text("Playlist or Stream Title (Optional)") },
+                        placeholder = { Text("e.g. Cyberpunk Chill Radio, Ambient Waves") },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = GammaPrimary,
@@ -299,12 +309,13 @@ fun GammaImportPlaylistDialog(
                     OutlinedTextField(
                         value = directLinkUrl,
                         onValueChange = { directLinkUrl = it },
-                        label = { Text("Paste Playlist Link") },
-                        placeholder = { Text("https://open.spotify.com/... or https://music.youtube.com/...") },
+                        label = { Text("Stream URL, M3U/M3U8 Link or Content") },
+                        placeholder = { Text("https://...stream.mp3, .m3u8, or paste playlist") },
                         leadingIcon = {
                             Icon(Icons.Default.Link, contentDescription = null, tint = GammaPrimary)
                         },
-                        singleLine = true,
+                        singleLine = false,
+                        maxLines = 4,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = GammaPrimary,
                             unfocusedBorderColor = GammaDivider,
@@ -319,16 +330,38 @@ fun GammaImportPlaylistDialog(
 
                     Button(
                         onClick = {
-                            val name = directLinkTitle.trim().ifEmpty { "Imported Playlist" }
-                            val matched = CuratedFrequencies.allTracks.take(5)
-                            onImportConfirmed(name, matched)
-                            onDismiss()
+                            val url = directLinkUrl.trim()
+                            if (url.isNotEmpty()) {
+                                isImportingStream = true
+                                scope.launch(Dispatchers.IO) {
+                                    val parsedTracks = StreamPlaylistParser.parseStreamOrPlaylist(
+                                        input = url,
+                                        fallbackTitle = directLinkTitle.trim(),
+                                        cacheDir = context.cacheDir
+                                    ).ifEmpty {
+                                        CuratedFrequencies.allTracks.take(5)
+                                    }
+                                    val name = directLinkTitle.trim().ifEmpty {
+                                        if (parsedTracks.size == 1) parsedTracks[0].title else "Imported Stream Playlist"
+                                    }
+                                    withContext(Dispatchers.Main) {
+                                        isImportingStream = false
+                                        onImportConfirmed(name, parsedTracks)
+                                        onDismiss()
+                                    }
+                                }
+                            }
                         },
+                        enabled = directLinkUrl.isNotBlank() && !isImportingStream,
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = GammaPrimary),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("Import From Link", color = GammaSurfaceElevated, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (isImportingStream) "Parsing Stream / Playlist..." else "Import Stream / Playlist",
+                            color = GammaSurfaceElevated,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 } else {
                     // Search Bar for relatable playlists
