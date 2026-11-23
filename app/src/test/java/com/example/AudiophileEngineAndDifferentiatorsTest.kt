@@ -336,4 +336,15 @@ class AudiophileEngineAndDifferentiatorsTest {
             tempQueueDir.deleteRecursively()
         }
     }
+
+    @Test
+    fun testWebCompanionHtmlRendering() {
+        val html = com.example.core.remote.GamaLanSyncServer.generateWebCompanionHtml()
+        assertNotNull(html)
+        assertTrue(html.contains("<!DOCTYPE html>"))
+        assertTrue(html.contains("GAMA • Web Remote & LAN Stream"))
+        assertTrue(html.contains("canvas id=\"viz\""))
+        assertTrue(html.contains("pairWithPin"))
+        assertTrue(html.contains("toggleStreamAudio"))
+    }
 }

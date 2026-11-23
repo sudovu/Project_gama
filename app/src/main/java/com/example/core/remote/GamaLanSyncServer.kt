@@ -282,6 +282,15 @@ object GamaLanSyncServer {
                                 "Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token\r\n\r\n"
                         output.write(corsResponse.toByteArray(Charsets.UTF_8))
                     }
+                    method == "GET" && (path == "/" || path == "/index.html") && headers["accept"]?.contains("text/html") == true -> {
+                        val html = generateWebCompanionHtml()
+                        val bytes = html.toByteArray(Charsets.UTF_8)
+                        val res = "HTTP/1.1 200 OK\r\n" +
+                                "Content-Type: text/html; charset=utf-8\r\n" +
+                                "Access-Control-Allow-Origin: *\r\n" +
+                                "Content-Length: ${bytes.size}\r\n\r\n" + html
+                        output.write(res.toByteArray(Charsets.UTF_8))
+                    }
                     method == "GET" && (path == "/" || path == "/status") -> {
                         val body = buildStatusJson().toString()
                         val res = "HTTP/1.1 200 OK\r\n" +
@@ -792,6 +801,257 @@ object GamaLanSyncServer {
                 if (totalSize <= (maxTotalBytes * 0.7).toLong() && (dir.listFiles()?.size ?: 0) <= 15) break
             }
         }
+    }
+
+    fun generateWebCompanionHtml(): String {
+        return """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>GAMA • Web Remote & LAN Stream</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: #0a0a0f; color: #f1f5f9; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 20px 16px; }
+    .card { background: #13131f; border: 1px solid rgba(0,245,255,0.25); border-radius: 20px; width: 100%; max-width: 440px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }
+    .badge { font-size: 10px; font-family: monospace; padding: 3px 8px; border-radius: 6px; background: rgba(0,245,255,0.15); color: #00f5ff; border: 1px solid rgba(0,245,255,0.3); display: inline-block; }
+    .title { font-size: 18px; font-weight: 700; margin-top: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .artist { font-size: 13px; color: #94a3b8; margin-top: 2px; }
+    #viz { width: 100%; height: 60px; margin: 16px 0; border-radius: 10px; background: rgba(0,0,0,0.3); }
+    .progress-bar { width: 100%; height: 6px; background: #1e1e2f; border-radius: 3px; position: relative; margin: 12px 0 6px; cursor: pointer; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #00f5ff, #a855f7); border-radius: 3px; width: 0%; }
+    .time-row { display: flex; justify-content: space-between; font-size: 11px; font-family: monospace; color: #64748b; }
+    .controls { display: flex; justify-content: space-around; align-items: center; margin: 18px 0 12px; }
+    .btn { background: #1e1e2f; border: 1px solid #334155; color: #f8fafc; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; transition: all 0.2s; }
+    .btn:active { transform: scale(0.92); }
+    .btn-main { background: #00f5ff; color: #000; width: 56px; height: 56px; font-size: 20px; font-weight: bold; border: none; box-shadow: 0 0 18px rgba(0,245,255,0.4); }
+    .section { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08); }
+    .row { display: flex; gap: 8px; margin-top: 8px; }
+    input[type=text] { background: #0a0a0f; border: 1px solid #334155; border-radius: 10px; padding: 8px 12px; color: #fff; font-size: 13px; width: 100%; }
+    .action-btn { background: rgba(0,245,255,0.15); border: 1px solid rgba(0,245,255,0.4); color: #00f5ff; padding: 8px 14px; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .status-pill { font-size: 11px; font-family: monospace; color: #94a3b8; text-align: center; margin-bottom: 12px; }
+    .toggle-stream { background: #1e1e2f; border: 1px solid #334155; padding: 10px 14px; border-radius: 12px; font-size: 12px; width: 100%; display: flex; justify-content: space-between; align-items: center; color: #e2e8f0; cursor: pointer; }
+    .toggle-stream.active { border-color: #00f5ff; background: rgba(0,245,255,0.1); color: #00f5ff; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <span class="badge" id="qualityBadge">GAMA LAN ENGINE</span>
+      <span style="font-size:11px; color:#64748b; font-family:monospace;" id="devModel">Android</span>
+    </div>
+    <div class="status-pill" id="statusText">Connecting...</div>
+
+    <div class="title" id="trackTitle">GAMA Audio Stream</div>
+    <div class="artist" id="trackArtist">Waiting for telemetry...</div>
+
+    <canvas id="viz" width="400" height="60"></canvas>
+
+    <div class="progress-bar" id="progressBar" onclick="seekClick(event)">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="time-row">
+      <span id="posText">0:00</span>
+      <span id="durText">0:00</span>
+    </div>
+
+    <div class="controls">
+      <button class="btn" onclick="sendCmd('prev')">⏮</button>
+      <button class="btn btn-main" id="playBtn" onclick="sendCmd('play_pause')">▶</button>
+      <button class="btn" onclick="sendCmd('next')">⏭</button>
+    </div>
+
+    <div class="section">
+      <button class="toggle-stream" id="streamToggleBtn" onclick="toggleStreamAudio()">
+        <span>🔊 Stream Audio to this Device</span>
+        <span id="streamIndicator" style="font-size:10px;">OFF</span>
+      </button>
+      <audio id="streamAudio" preload="none"></audio>
+    </div>
+
+    <div class="section">
+      <div style="font-size:11px; font-family:monospace; color:#94a3b8;">PAIRING PIN AUTHENTICATION</div>
+      <div class="row">
+        <input type="text" id="pinInput" placeholder="Enter 4-digit PIN" maxlength="4" style="text-align:center; letter-spacing:4px;">
+        <button class="action-btn" onclick="pairWithPin()">Pair</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div style="font-size:11px; font-family:monospace; color:#94a3b8;">SEND SONG TO PHONE QUEUE</div>
+      <div class="row">
+        <input type="text" id="queueInput" placeholder="YouTube Video ID or Title">
+        <button class="action-btn" onclick="pushToPhone()">+ Queue</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+    let token = localStorage.getItem('gama_token') || '';
+    let isPlaying = false;
+    let posMs = 0;
+    let durMs = 0;
+    let streamActive = false;
+
+    const canvas = document.getElementById('viz');
+    const ctx = canvas.getContext('2d');
+    let bands = new Array(16).fill(0.1);
+
+    function drawViz() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const barWidth = (canvas.width / 16) - 3;
+      for (let i = 0; i < 16; i++) {
+        const h = Math.max(4, bands[i] * canvas.height * 0.9);
+        const grad = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - h);
+        grad.addColorStop(0, '#00f5ff');
+        grad.addColorStop(1, '#a855f7');
+        ctx.fillStyle = grad;
+        ctx.fillRect(i * (barWidth + 3), canvas.height - h, barWidth, h);
+      }
+      requestAnimationFrame(drawViz);
+    }
+    drawViz();
+
+    function formatTime(s) {
+      const m = Math.floor(s / 60);
+      const sec = Math.floor(s % 60);
+      return m + ':' + (sec < 10 ? '0' : '') + sec;
+    }
+
+    async function pairWithPin() {
+      const pin = document.getElementById('pinInput').value.trim();
+      if (!pin) return;
+      try {
+        const res = await fetch('/pair', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin, client: 'Mobile Web Companion' })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          token = data.token;
+          localStorage.setItem('gama_token', token);
+          document.getElementById('statusText').innerText = 'Paired! Connecting WebSocket...';
+          connectWs();
+        } else {
+          document.getElementById('statusText').innerText = 'Invalid PIN (HTTP 401)';
+        }
+      } catch (e) {
+        document.getElementById('statusText').innerText = 'Pair error: ' + e.message;
+      }
+    }
+
+    function connectWs() {
+      if (ws) ws.close();
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = proto + '//' + location.host + '/ws?token=' + encodeURIComponent(token);
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        document.getElementById('statusText').innerText = 'Connected (Live Telemetry)';
+        document.getElementById('statusText').style.color = '#34d399';
+      };
+      ws.onmessage = (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          if (d.type === 'STATUS') {
+            isPlaying = d.isPlaying;
+            document.getElementById('playBtn').innerText = isPlaying ? '⏸' : '▶';
+            posMs = d.positionMs || 0;
+            durMs = d.durationMs || 0;
+            document.getElementById('posText').innerText = formatTime(posMs / 1000);
+            document.getElementById('durText').innerText = formatTime(durMs / 1000);
+            if (durMs > 0) {
+              document.getElementById('progressFill').style.width = ((posMs / durMs) * 100) + '%';
+            }
+            if (d.track) {
+              document.getElementById('trackTitle').innerText = d.track.title || 'Unknown Title';
+              document.getElementById('trackArtist').innerText = d.track.artist || 'Unknown Artist';
+              if (d.track.audioQualityBadge) document.getElementById('qualityBadge').innerText = d.track.audioQualityBadge;
+            }
+            if (d.deviceModel) document.getElementById('devModel').innerText = d.deviceModel;
+            if (d.visualizerBands && d.visualizerBands.length) {
+              bands = d.visualizerBands;
+            }
+            if (streamActive) {
+              const audio = document.getElementById('streamAudio');
+              if (isPlaying && audio.paused) audio.play().catch(() => {});
+              if (!isPlaying && !audio.paused) audio.pause();
+            }
+          }
+        } catch (_) {}
+      };
+      ws.onclose = () => {
+        document.getElementById('statusText').innerText = 'Disconnected. Enter PIN to reconnect.';
+        document.getElementById('statusText').style.color = '#fbbf24';
+      };
+    }
+
+    function sendCmd(action, payload = {}) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action, ...payload }));
+      } else {
+        fetch('/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({ action, ...payload })
+        }).catch(() => {});
+      }
+    }
+
+    function seekClick(e) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pct = (e.clientX - rect.left) / rect.width;
+      if (durMs > 0) {
+        sendCmd('seek', { positionMs: Math.floor(pct * durMs) });
+      }
+    }
+
+    function toggleStreamAudio() {
+      const audio = document.getElementById('streamAudio');
+      const btn = document.getElementById('streamToggleBtn');
+      const ind = document.getElementById('streamIndicator');
+      streamActive = !streamActive;
+      if (streamActive) {
+        audio.src = '/stream?token=' + encodeURIComponent(token);
+        audio.play().catch(() => {});
+        btn.classList.add('active');
+        ind.innerText = 'PLAYING';
+      } else {
+        audio.pause();
+        audio.src = '';
+        btn.classList.remove('active');
+        ind.innerText = 'OFF';
+      }
+    }
+
+    async function pushToPhone() {
+      const input = document.getElementById('queueInput');
+      const val = input.value.trim();
+      if (!val) return;
+      await fetch('/queue/push?token=' + encodeURIComponent(token), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({
+          title: val,
+          artist: 'Mobile Web Companion',
+          youtubeVideoId: val.length === 11 ? val : '',
+          playNow: false
+        })
+      });
+      input.value = '';
+      alert('Pushed to phone queue!');
+    }
+
+    if (token) {
+      connectWs();
+    } else {
+      document.getElementById('statusText').innerText = 'Enter 4-digit PIN below to connect';
+    }
+  </script>
+</body>
+</html>"""
     }
 
     private fun resolveLocalIp(context: Context): String {
