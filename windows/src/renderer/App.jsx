@@ -3,7 +3,7 @@ import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Volume2, VolumeX,
   Compass, Search, Library, Sliders, User, Download, CheckCircle, Heart,
   Maximize2, Minimize2, Radio, Activity, ExternalLink, ShieldCheck, X,
-  Wifi, WifiOff, Smartphone, Laptop
+  Wifi, WifiOff, Smartphone, Laptop, AlertTriangle, AlertCircle, RefreshCw
 } from 'lucide-react';
 import { INITIAL_TRACKS, GENRES } from './mockData';
 import profilePic from './assets/img_vhuwon_profile.jpg';
@@ -44,6 +44,7 @@ export default function App() {
   const [isPushingTrack, setIsPushingTrack] = useState(false);
   const [streamInputUrl, setStreamInputUrl] = useState('');
   const [streamInputTitle, setStreamInputTitle] = useState('');
+  const [playbackError, setPlaybackError] = useState(null);
   const [importedStreams, setImportedStreams] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('gama_imported_streams') || '[]');
@@ -51,6 +52,7 @@ export default function App() {
   });
   const lanSocketRef = useRef(null);
   const pcAudioRef = useRef(null);
+  const isUsingYouTubeRef = useRef(false);
 
   const handleImportStream = (urlToImport = streamInputUrl, titleToImport = streamInputTitle) => {
     const url = urlToImport.trim();
@@ -174,13 +176,25 @@ export default function App() {
             if (streamToPc && pcAudioRef.current) {
               const audio = pcAudioRef.current;
               const token = localStorage.getItem('gama_lan_token') || '';
-              const streamUrl = `http://${ip}:8765/stream?token=${encodeURIComponent(token)}`;
-              if (!audio.src || !audio.src.includes('/stream')) {
+              const trackKey = data.track?.id || data.track?.title || 'active';
+              const streamUrl = `http://${ip}:8765/stream?token=${encodeURIComponent(token)}&trackId=${encodeURIComponent(trackKey)}`;
+              if (!audio.src || !audio.src.includes(`trackId=${encodeURIComponent(trackKey)}`)) {
                 audio.src = streamUrl;
                 audio.load();
               }
               if (data.isPlaying && audio.paused) {
-                audio.play().catch(() => {});
+                audio.play().catch((err) => {
+                  if (err.name !== 'AbortError') {
+                    console.warn('[LAN Stream Play Warning]', err);
+                    setPlaybackError({
+                      code: 'LAN_STREAM_PLAY_ERR',
+                      message: `Could not play LAN stream from phone: ${err.message}. Verify that the song is cached on the phone.`,
+                      trackTitle: data.track?.title || 'Phone Stream',
+                      src: streamUrl,
+                      timestamp: Date.now()
+                    });
+                  }
+                });
               } else if (!data.isPlaying && !audio.paused) {
                 audio.pause();
               }
@@ -351,11 +365,30 @@ export default function App() {
           onStateChange: (e) => {
             if (e.data === window.YT.PlayerState.PLAYING) {
               setIsPlaying(true);
+              setPlaybackError(null);
             } else if (e.data === window.YT.PlayerState.PAUSED) {
               setIsPlaying(false);
             } else if (e.data === window.YT.PlayerState.ENDED) {
               handleNext();
             }
+          },
+          onError: (e) => {
+            let msg = 'Playback error occurred on YouTube video source.';
+            if (e.data === 150 || e.data === 101) {
+              msg = 'Video owner restricts embedding outside YouTube. Try playing via direct stream or connect LAN sync to phone.';
+            } else if (e.data === 100) {
+              msg = 'Video was not found or removed from YouTube.';
+            } else if (e.data === 2) {
+              msg = 'Invalid YouTube video ID parameter.';
+            }
+            console.error(`[YouTube Player Error ${e.data}]`, msg);
+            setPlaybackError({
+              code: `YT_ERR_${e.data}`,
+              message: msg,
+              trackTitle: currentTrack?.title || 'YouTube Track',
+              timestamp: Date.now()
+            });
+            setIsPlaying(false);
           }
         }
       });
@@ -438,12 +471,70 @@ export default function App() {
   const playTrack = (track) => {
     setCurrentTrack(track);
     setCurrentTime(0);
-    setDuration(track.duration);
-    setIsPlaying(true);
-    if (ytPlayerRef.current && ytPlayerRef.current.loadVideoById) {
-      ytPlayerRef.current.loadVideoById(track.youtubeVideoId, 0);
-      ytPlayerRef.current.unMute();
-      ytPlayerRef.current.playVideo();
+    setPlaybackError(null);
+
+    // If LAN sync is connected, command the phone to play track
+    if (lanConnected && sendLanCommand('play_track', { trackId: track.id, title: track.title, streamUrl: track.streamUrl })) {
+      setIsPlaying(true);
+      return;
+    }
+
+    // Determine playback mechanism:
+    const audioUrl = track.streamUrl || track.localAudioUri || track.audioUrl;
+    if (audioUrl) {
+      isUsingYouTubeRef.current = false;
+      ytPlayerRef.current?.pauseVideo();
+      if (pcAudioRef.current) {
+        const audio = pcAudioRef.current;
+        if (audio.src !== audioUrl) {
+          audio.src = audioUrl;
+          audio.load();
+        }
+        audio.volume = isMuted ? 0 : volume / 100;
+        audio.play().then(() => {
+          setIsPlaying(true);
+          setPlaybackError(null);
+        }).catch((err) => {
+          if (err.name !== 'AbortError') {
+            console.error('[Direct Audio Playback Failed]', err);
+            setPlaybackError({
+              code: err.name || 'PLAY_REJECTED',
+              message: err.message || 'Audio playback failed or was blocked by the browser engine.',
+              trackTitle: track.title,
+              src: audioUrl,
+              timestamp: Date.now()
+            });
+            setIsPlaying(false);
+          }
+        });
+      }
+    } else if (track.youtubeVideoId) {
+      isUsingYouTubeRef.current = true;
+      if (pcAudioRef.current) pcAudioRef.current.pause();
+      if (ytPlayerRef.current && ytPlayerRef.current.loadVideoById) {
+        setDuration(track.duration || 0);
+        ytPlayerRef.current.loadVideoById(track.youtubeVideoId, 0);
+        ytPlayerRef.current.unMute();
+        ytPlayerRef.current.setVolume(isMuted ? 0 : volume);
+        ytPlayerRef.current.playVideo();
+        setIsPlaying(true);
+      } else {
+        setPlaybackError({
+          code: 'YOUTUBE_INITIALIZING',
+          message: 'YouTube engine is initializing or offline. Try playing a direct stream or connect LAN sync.',
+          trackTitle: track.title,
+          timestamp: Date.now()
+        });
+        setIsPlaying(false);
+      }
+    } else {
+      setPlaybackError({
+        code: 'NO_PLAYABLE_SOURCE',
+        message: 'This track does not have a valid audio stream URL or YouTube ID.',
+        trackTitle: track.title,
+        timestamp: Date.now()
+      });
+      setIsPlaying(false);
     }
   };
 
@@ -452,20 +543,46 @@ export default function App() {
       setIsPlaying(!isPlaying);
       return;
     }
-    if (isPlaying) {
-      ytPlayerRef.current?.pauseVideo();
-      setIsPlaying(false);
-    } else {
-      ytPlayerRef.current?.playVideo();
-      setIsPlaying(true);
+    if (isUsingYouTubeRef.current) {
+      if (isPlaying) {
+        ytPlayerRef.current?.pauseVideo();
+        setIsPlaying(false);
+      } else {
+        ytPlayerRef.current?.playVideo();
+        setIsPlaying(true);
+      }
+    } else if (pcAudioRef.current) {
+      const audio = pcAudioRef.current;
+      if (isPlaying) {
+        audio.pause();
+        setIsPlaying(false);
+      } else {
+        audio.play().then(() => {
+          setIsPlaying(true);
+        }).catch((err) => {
+          if (err.name !== 'AbortError') {
+            setPlaybackError({
+              code: err.name || 'PLAY_REJECTED',
+              message: err.message || 'Could not resume audio.',
+              trackTitle: currentTrack?.title,
+              timestamp: Date.now()
+            });
+          }
+        });
+      }
     }
   };
 
   const handleNext = () => {
     if (sendLanCommand('next')) return;
     if (repeatMode === 'one') {
-      ytPlayerRef.current?.seekTo(0, true);
-      ytPlayerRef.current?.playVideo();
+      if (isUsingYouTubeRef.current) {
+        ytPlayerRef.current?.seekTo(0, true);
+        ytPlayerRef.current?.playVideo();
+      } else if (pcAudioRef.current) {
+        pcAudioRef.current.currentTime = 0;
+        pcAudioRef.current.play().catch(() => {});
+      }
       return;
     }
     const idx = tracks.findIndex((t) => t.id === currentTrack.id);
@@ -478,7 +595,11 @@ export default function App() {
   const handlePrev = () => {
     if (sendLanCommand('prev')) return;
     if (currentTime > 3) {
-      ytPlayerRef.current?.seekTo(0, true);
+      if (isUsingYouTubeRef.current) {
+        ytPlayerRef.current?.seekTo(0, true);
+      } else if (pcAudioRef.current) {
+        pcAudioRef.current.currentTime = 0;
+      }
       setCurrentTime(0);
       return;
     }
@@ -491,7 +612,11 @@ export default function App() {
     const targetSec = parseFloat(e.target.value);
     setCurrentTime(targetSec);
     if (sendLanCommand('seek', { positionMs: Math.round(targetSec * 1000) })) return;
-    ytPlayerRef.current?.seekTo(targetSec, true);
+    if (isUsingYouTubeRef.current) {
+      ytPlayerRef.current?.seekTo(targetSec, true);
+    } else if (pcAudioRef.current) {
+      pcAudioRef.current.currentTime = targetSec;
+    }
   };
 
   const toggleFavorite = (trackId) => {
@@ -991,6 +1116,42 @@ export default function App() {
         </div>
       </main>
 
+      {/* PLAYBACK ERROR BANNER */}
+      {playbackError && (
+        <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50 max-w-xl w-full px-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="bg-rose-950/95 border border-rose-500/70 backdrop-blur-xl rounded-2xl p-4 shadow-2xl flex items-start space-x-3 text-slate-100">
+            <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-rose-300 font-mono tracking-wider uppercase">Playback Error</span>
+                <button
+                  onClick={() => setPlaybackError(null)}
+                  className="text-slate-400 hover:text-white text-xs font-mono ml-2"
+                >
+                  ✕ Dismiss
+                </button>
+              </div>
+              <p className="text-xs text-slate-200 mt-1 leading-relaxed">{playbackError.message}</p>
+              {playbackError.url && (
+                <p className="text-[10px] font-mono text-rose-300/80 mt-1 truncate">Source: {playbackError.url}</p>
+              )}
+            </div>
+            {playbackError.canRetry && (
+              <button
+                onClick={() => {
+                  setPlaybackError(null);
+                  playTrack(currentTrack);
+                }}
+                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold font-mono flex items-center space-x-1 flex-shrink-0 self-center transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Retry</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* FLOATING MINI-PLAYER (BOTTOM BAR) */}
       <footer className="fixed bottom-0 left-0 right-0 h-24 bg-gammaSurface/95 backdrop-blur-xl border-t border-slate-800 px-6 flex items-center justify-between z-30">
         {/* Track Info */}
@@ -1060,7 +1221,17 @@ export default function App() {
           <canvas ref={visualizerCanvasRef} width={100} height={24} className="hidden md:block" />
 
           <div className="flex items-center space-x-2">
-            <button onClick={() => setIsMuted(!isMuted)} className="text-slate-400 hover:text-white">
+            <button onClick={() => {
+              const nextMute = !isMuted;
+              setIsMuted(nextMute);
+              if (nextMute) {
+                ytPlayerRef.current?.mute();
+                if (pcAudioRef.current) pcAudioRef.current.muted = true;
+              } else {
+                ytPlayerRef.current?.unMute();
+                if (pcAudioRef.current) pcAudioRef.current.muted = false;
+              }
+            }} className="text-slate-400 hover:text-white">
               {isMuted || volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
             </button>
             <input 
@@ -1073,6 +1244,10 @@ export default function App() {
                 setVolume(val);
                 setIsMuted(false);
                 ytPlayerRef.current?.setVolume(val);
+                if (pcAudioRef.current) {
+                  pcAudioRef.current.volume = val / 100;
+                  pcAudioRef.current.muted = false;
+                }
               }}
               className="w-20 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-gammaCyan"
             />
@@ -1302,8 +1477,65 @@ export default function App() {
         </div>
       )}
 
-      {/* Hidden Audio Element for Direct LAN PC Speaker Streaming */}
-      <audio ref={pcAudioRef} preload="none" className="hidden" />
+      {/* Audio Engine for Direct Local / Stream / LAN Playback */}
+      <audio
+        ref={pcAudioRef}
+        preload="metadata"
+        className="hidden"
+        onTimeUpdate={(e) => {
+          if (!isUsingYouTubeRef.current) {
+            setCurrentTime(e.target.currentTime);
+            if (e.target.duration && !isNaN(e.target.duration)) {
+              setDuration(e.target.duration);
+            }
+          }
+        }}
+        onPlaying={() => {
+          if (!isUsingYouTubeRef.current) {
+            setIsPlaying(true);
+            setPlaybackError(null);
+          }
+        }}
+        onPause={() => {
+          if (!isUsingYouTubeRef.current && !streamToPc) {
+            setIsPlaying(false);
+          }
+        }}
+        onEnded={() => {
+          if (!isUsingYouTubeRef.current) {
+            handleNext();
+          }
+        }}
+        onError={(e) => {
+          const err = e.target.error;
+          let msg = 'HTML5 audio element failed to load audio.';
+          if (err) {
+            switch (err.code) {
+              case 1: // MEDIA_ERR_ABORTED
+                return;
+              case 2: // MEDIA_ERR_NETWORK
+                msg = 'Network error: Failed to download audio stream or file.';
+                break;
+              case 3: // MEDIA_ERR_DECODE
+                msg = 'Decode error: The audio file is corrupted or in an unsupported format.';
+                break;
+              case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
+                msg = 'Source error: Format not supported, file missing, or HTTP 404/403.';
+                break;
+              default:
+                msg = `Audio error code ${err.code}: ${err.message || 'Unknown playback error'}`;
+                break;
+            }
+          }
+          console.error('[GAMA Windows Audio] Error:', err, e.target.src);
+          setPlaybackError({
+            message: msg,
+            url: e.target.src,
+            canRetry: true
+          });
+          setIsPlaying(false);
+        }}
+      />
     </div>
   );
 }

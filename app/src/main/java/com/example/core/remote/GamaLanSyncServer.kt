@@ -300,6 +300,14 @@ object GamaLanSyncServer {
                                 "Content-Length: ${body.toByteArray().size}\r\n\r\n" + body
                         output.write(res.toByteArray(Charsets.UTF_8))
                     }
+                    method == "OPTIONS" -> {
+                        val res = "HTTP/1.1 204 No Content\r\n" +
+                                "Access-Control-Allow-Origin: *\r\n" +
+                                "Access-Control-Allow-Methods: GET, POST, OPTIONS, HEAD\r\n" +
+                                "Access-Control-Allow-Headers: Range, Authorization, X-Auth-Token, Content-Type, X-Track-Filename, X-Track-Title, X-Track-Artist\r\n" +
+                                "Access-Control-Max-Age: 86400\r\n\r\n"
+                        output.write(res.toByteArray(Charsets.UTF_8))
+                    }
                     method == "POST" && path == "/pair" -> {
                         val contentLength = headers["content-length"]?.toIntOrNull() ?: 0
                         val bodyChars = CharArray(contentLength)
@@ -716,26 +724,31 @@ object GamaLanSyncServer {
             return
         }
 
-        var targetFile: java.io.File? = null
+        val candidates = mutableListOf<java.io.File>()
         if (track.localAudioUri.isNotBlank()) {
             val path = track.localAudioUri.removePrefix("file://")
-            val f = java.io.File(path)
-            if (f.exists() && f.isFile) {
-                targetFile = f
-            }
+            candidates.add(java.io.File(path))
         }
 
-        if (targetFile == null && context != null) {
+        if (context != null) {
+            val externalMusic = context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC)
+            if (externalMusic != null) {
+                val gamaExternal = java.io.File(externalMusic, "GAMA")
+                candidates.add(java.io.File(gamaExternal, "${track.id}.mp3"))
+                candidates.add(java.io.File(gamaExternal, "${track.id}.flac"))
+                candidates.add(java.io.File(gamaExternal, "${track.id}.m4a"))
+                candidates.add(java.io.File(gamaExternal, "${track.id}.wav"))
+            }
             val dlDir = java.io.File(context.filesDir, "downloads")
-            val candidates = listOf(
-                java.io.File(dlDir, "${track.id}.mp3"),
-                java.io.File(dlDir, "${track.id}.flac"),
-                java.io.File(dlDir, "${track.id}.m4a"),
-                java.io.File(context.cacheDir, "lan_queue/${track.id}.mp3"),
-                java.io.File(context.cacheDir, "lan_uploads/${track.id}.mp3")
-            )
-            targetFile = candidates.firstOrNull { it.exists() && it.isFile }
+            candidates.add(java.io.File(dlDir, "${track.id}.mp3"))
+            candidates.add(java.io.File(dlDir, "${track.id}.flac"))
+            candidates.add(java.io.File(dlDir, "${track.id}.m4a"))
+            candidates.add(java.io.File(context.cacheDir, "lan_queue/${track.id}.mp3"))
+            candidates.add(java.io.File(context.cacheDir, "lan_queue/${track.id}.flac"))
+            candidates.add(java.io.File(context.cacheDir, "lan_uploads/${track.id}.mp3"))
         }
+
+        val targetFile = candidates.firstOrNull { it.exists() && it.isFile && it.length() > 0 }
 
         if (targetFile != null && targetFile.exists()) {
             val totalLength = targetFile.length()
@@ -765,7 +778,9 @@ object GamaLanSyncServer {
                         "Accept-Ranges: bytes\r\n" +
                         "Content-Range: bytes $start-$end/$totalLength\r\n" +
                         "Content-Length: $contentLength\r\n" +
-                        "Access-Control-Allow-Origin: *\r\n\r\n"
+                        "Access-Control-Allow-Origin: *\r\n" +
+                        "Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n" +
+                        "Access-Control-Allow-Headers: Range, Authorization, X-Auth-Token\r\n\r\n"
                 output.write(header.toByteArray(Charsets.UTF_8))
 
                 val fis = java.io.FileInputStream(targetFile)
@@ -785,7 +800,9 @@ object GamaLanSyncServer {
                         "Content-Type: $mimeType\r\n" +
                         "Accept-Ranges: bytes\r\n" +
                         "Content-Length: $totalLength\r\n" +
-                        "Access-Control-Allow-Origin: *\r\n\r\n"
+                        "Access-Control-Allow-Origin: *\r\n" +
+                        "Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n" +
+                        "Access-Control-Allow-Headers: Range, Authorization, X-Auth-Token\r\n\r\n"
                 output.write(header.toByteArray(Charsets.UTF_8))
 
                 val fis = java.io.FileInputStream(targetFile)

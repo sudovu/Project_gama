@@ -4,6 +4,10 @@ const fs = require('fs');
 const os = require('os');
 const http = require('http');
 
+// Enable seamless programmatic audio streaming and local network access
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+app.commandLine.appendSwitch('disable-features', 'BlockInsecurePrivateNetworkRequests');
+
 let mainWindow;
 let tray = null;
 let isQuitting = false;
@@ -66,7 +70,8 @@ function createWindow() {
       preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: true
+      webSecurity: false,
+      allowRunningInsecureContent: true
     }
   });
 
