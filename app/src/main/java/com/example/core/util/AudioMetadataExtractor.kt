@@ -51,8 +51,14 @@ object AudioMetadataExtractor {
             ExtractedAudioMetadata(title = fallbackName, codec = inferCodecFromPath(uri.path ?: ""))
         } finally {
             try {
-                retriever.release()
-            } catch (_: Exception) {}
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    retriever.close()
+                } else {
+                    retriever.release()
+                }
+            } catch (_: Throwable) {
+                try { retriever.release() } catch (_: Throwable) {}
+            }
         }
     }
 
@@ -66,8 +72,14 @@ object AudioMetadataExtractor {
             ExtractedAudioMetadata(title = fallbackName, codec = inferCodecFromPath(file.name))
         } finally {
             try {
-                retriever.release()
-            } catch (_: Exception) {}
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    retriever.close()
+                } else {
+                    retriever.release()
+                }
+            } catch (_: Throwable) {
+                try { retriever.release() } catch (_: Throwable) {}
+            }
         }
     }
 

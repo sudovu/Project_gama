@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Volume2, VolumeX,
   Compass, Search, Library, Sliders, User, Download, CheckCircle, Heart,
-  Maximize2, Minimize2, Radio, Activity, ExternalLink, ShieldCheck, X
+  Maximize2, Minimize2, Radio, Activity, ExternalLink, ShieldCheck, X,
+  Wifi, WifiOff, Smartphone, Laptop
 } from 'lucide-react';
 import { INITIAL_TRACKS, GENRES } from './mockData';
 import profilePic from './assets/img_vhuwon_profile.jpg';
@@ -30,6 +31,79 @@ export default function App() {
   // Equalizer state (gains in dB)
   const [eqGains, setEqGains] = useState([0, 0, 0, 0, 0]);
   const [eqPreset, setEqPreset] = useState('Flat');
+
+  // LAN Remote Control Sync state
+  const [lanConnected, setLanConnected] = useState(false);
+  const [lanPhoneIp, setLanPhoneIp] = useState('192.168.1.100');
+  const [showLanModal, setShowLanModal] = useState(false);
+  const [lanStatusMsg, setLanStatusMsg] = useState('Disconnected');
+  const lanSocketRef = useRef(null);
+
+  const connectLanSync = (ipToConnect) => {
+    const ip = (ipToConnect || lanPhoneIp).trim();
+    if (!ip) return;
+    try {
+      if (lanSocketRef.current) {
+        lanSocketRef.current.close();
+      }
+      setLanStatusMsg(`Connecting to ws://${ip}:8765/ws...`);
+      const ws = new WebSocket(`ws://${ip}:8765/ws`);
+      ws.onopen = () => {
+        setLanConnected(true);
+        setLanStatusMsg(`Connected to GAMA Phone (${ip})`);
+      };
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === 'STATUS') {
+            setIsPlaying(data.isPlaying);
+            if (data.positionMs !== undefined) setCurrentTime(data.positionMs / 1000);
+            if (data.durationMs !== undefined && data.durationMs > 0) setDuration(data.durationMs / 1000);
+            if (data.track) {
+              setCurrentTrack(prev => ({
+                ...prev,
+                id: data.track.id || prev.id,
+                title: data.track.title || prev.title,
+                artist: data.track.artist || prev.artist,
+                artworkUrl: data.track.artworkUrl || prev.artworkUrl,
+                youtubeVideoId: data.track.youtubeVideoId || prev.youtubeVideoId,
+                duration: data.track.durationSeconds || prev.duration,
+                audioQualityBadge: data.track.audioQualityBadge || ''
+              }));
+            }
+          }
+        } catch (_) {}
+      };
+      ws.onclose = () => {
+        setLanConnected(false);
+        setLanStatusMsg('Disconnected from phone');
+      };
+      ws.onerror = () => {
+        setLanConnected(false);
+        setLanStatusMsg('Connection failed. Make sure phone is on same Wi-Fi with GAMA active.');
+      };
+      lanSocketRef.current = ws;
+    } catch (err) {
+      setLanStatusMsg(`Error: ${err.message}`);
+    }
+  };
+
+  const disconnectLanSync = () => {
+    if (lanSocketRef.current) {
+      lanSocketRef.current.close();
+      lanSocketRef.current = null;
+    }
+    setLanConnected(false);
+    setLanStatusMsg('Disconnected');
+  };
+
+  const sendLanCommand = (action, payload = {}) => {
+    if (lanSocketRef.current && lanSocketRef.current.readyState === WebSocket.OPEN) {
+      lanSocketRef.current.send(JSON.stringify({ action, ...payload }));
+      return true;
+    }
+    return false;
+  };
 
   // YouTube Player Ref
   const ytPlayerRef = useRef(null);
@@ -155,6 +229,10 @@ export default function App() {
   };
 
   const togglePlayPause = () => {
+    if (sendLanCommand('play_pause')) {
+      setIsPlaying(!isPlaying);
+      return;
+    }
     if (isPlaying) {
       ytPlayerRef.current?.pauseVideo();
       setIsPlaying(false);
@@ -165,6 +243,7 @@ export default function App() {
   };
 
   const handleNext = () => {
+    if (sendLanCommand('next')) return;
     if (repeatMode === 'one') {
       ytPlayerRef.current?.seekTo(0, true);
       ytPlayerRef.current?.playVideo();
@@ -178,6 +257,7 @@ export default function App() {
   };
 
   const handlePrev = () => {
+    if (sendLanCommand('prev')) return;
     if (currentTime > 3) {
       ytPlayerRef.current?.seekTo(0, true);
       setCurrentTime(0);
@@ -191,6 +271,7 @@ export default function App() {
   const handleSeek = (e) => {
     const targetSec = parseFloat(e.target.value);
     setCurrentTime(targetSec);
+    if (sendLanCommand('seek', { positionMs: Math.round(targetSec * 1000) })) return;
     ytPlayerRef.current?.seekTo(targetSec, true);
   };
 
@@ -332,6 +413,27 @@ export default function App() {
               <span className="w-2 h-2 rounded-full bg-gammaCyan animate-pulse"></span>
               <span>432 Hz Master Resonator</span>
             </span>
+
+            <button
+              onClick={() => setShowLanModal(true)}
+              className={`inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-mono transition-all border ${
+                lanConnected 
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 hover:bg-emerald-500/30' 
+                  : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
+              }`}
+            >
+              {lanConnected ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                  <span>LAN Synced: {lanPhoneIp}</span>
+                </>
+              ) : (
+                <>
+                  <Wifi className="w-3.5 h-3.5 text-slate-400" />
+                  <span>LAN Sync (Off)</span>
+                </>
+              )}
+            </button>
           </div>
 
           <div className="relative w-80">
@@ -611,7 +713,14 @@ export default function App() {
           <div className="overflow-hidden">
             <h4 className="text-sm font-bold text-slate-100 truncate">{currentTrack.title}</h4>
             <p className="text-xs text-slate-400 truncate">{currentTrack.artist}</p>
-            <span className="text-[10px] text-gammaCyan font-mono uppercase">{currentTrack.genre} • 432Hz</span>
+            <div className="flex items-center space-x-1.5 mt-0.5">
+              <span className="text-[10px] text-gammaCyan font-mono uppercase">{currentTrack.genre || 'Frequency'} • 432Hz</span>
+              {currentTrack.audioQualityBadge && (
+                <span className="text-[9px] px-1.5 py-0.2 rounded bg-gammaCyan/20 text-gammaCyan font-mono uppercase border border-gammaCyan/40">
+                  {currentTrack.audioQualityBadge}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -739,6 +848,80 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {/* LAN REMOTE CONTROL SYNC MODAL */}
+      {showLanModal && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gammaSurfaceElevated border border-gammaCyan/40 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
+            <button 
+              onClick={() => setShowLanModal(false)}
+              className="absolute right-4 top-4 text-slate-400 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-gammaCyan/10 border border-gammaCyan/30 flex items-center justify-center text-gammaCyan">
+                <Smartphone className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-100">Cross-Device LAN Sync</h3>
+                <p className="text-xs text-slate-400">Control phone playback & stream live telemetry over Wi-Fi</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="text-xs font-mono text-slate-300 block mb-1">PHONE IP ADDRESS (PORT 8765)</label>
+                <input 
+                  type="text" 
+                  value={lanPhoneIp}
+                  onChange={(e) => setLanPhoneIp(e.target.value)}
+                  placeholder="e.g. 192.168.1.150 or localhost"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 font-mono focus:border-gammaCyan focus:outline-none"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Connection Status:</span>
+                  <span className={`font-mono font-bold ${lanConnected ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {lanConnected ? 'ACTIVE (WEBSOCKET)' : 'DISCONNECTED'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 font-mono">{lanStatusMsg}</p>
+              </div>
+
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => connectLanSync('127.0.0.1')}
+                  className="flex-1 py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg font-mono"
+                >
+                  Localhost
+                </button>
+                <button
+                  onClick={() => connectLanSync(lanPhoneIp)}
+                  className="flex-1 py-1.5 px-2 bg-gammaCyan text-black font-bold text-xs rounded-lg hover:bg-gammaCyan/80"
+                >
+                  {lanConnected ? 'Reconnect' : 'Connect to Phone'}
+                </button>
+                {lanConnected && (
+                  <button
+                    onClick={disconnectLanSync}
+                    className="py-1.5 px-3 bg-red-500/20 text-red-400 text-xs rounded-lg border border-red-500/30"
+                  >
+                    Disconnect
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-500">
+              Zero cloud accounts required. GAMA's built-in WebSocket engine connects directly between your phone and PC over local Wi-Fi.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

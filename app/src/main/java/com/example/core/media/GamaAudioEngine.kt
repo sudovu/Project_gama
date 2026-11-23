@@ -472,13 +472,27 @@ class GamaAudioEngine(private val context: Context) {
 
             try {
                 releaseHardwareVisualizer()
-                hardwareVisualizer = AndroidHardwareVisualizer(sessionId).apply {
-                    captureSize = 256
-                    scalingMode = AndroidHardwareVisualizer.SCALING_MODE_NORMALIZED
-                    enabled = true
+                val hasRecordPermission = try {
+                    androidx.core.content.ContextCompat.checkSelfPermission(
+                        context,
+                        android.Manifest.permission.RECORD_AUDIO
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                } catch (_: Throwable) {
+                    false
                 }
-            } catch (e: Exception) {
+
+                if (hasRecordPermission) {
+                    hardwareVisualizer = AndroidHardwareVisualizer(sessionId).apply {
+                        captureSize = 256
+                        scalingMode = AndroidHardwareVisualizer.SCALING_MODE_NORMALIZED
+                        enabled = true
+                    }
+                } else {
+                    Log.d(TAG, "RECORD_AUDIO not granted; seamless DSP fallback active.")
+                }
+            } catch (e: Throwable) {
                 Log.d(TAG, "Hardware visualizer session attachment (using DSP fallback): ${e.message}")
+                hardwareVisualizer = null
             }
         }
     }

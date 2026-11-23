@@ -1,0 +1,402 @@
+package com.example.core.remote
+
+import android.content.Context
+import android.net.wifi.WifiManager
+import android.util.Base64
+import android.util.Log
+import com.example.core.media.PlaybackManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.io.OutputStream
+import java.net.Inet4Address
+import java.net.NetworkInterface
+import java.net.ServerSocket
+import java.net.Socket
+import java.security.MessageDigest
+import java.util.concurrent.CopyOnWriteArrayList
+
+object GamaLanSyncServer {
+
+    private const val TAG = "GamaLanSyncServer"
+    const val DEFAULT_PORT = 8765
+
+    private var serverSocket: ServerSocket? = null
+    private var serverJob: Job? = null
+    private var broadcastJob: Job? = null
+    private val scope = CoroutineScope(Dispatchers.IO)
+    private val connectedClients = CopyOnWriteArrayList<Socket>()
+    private var playbackManager: PlaybackManager? = null
+
+    @Volatile
+    var isRunning = false
+        private set
+
+    @Volatile
+    var serverIp = "127.0.0.1"
+        private set
+
+    fun start(context: Context, manager: PlaybackManager, port: Int = DEFAULT_PORT) {
+        if (isRunning) return
+        playbackManager = manager
+        serverIp = resolveLocalIp(context)
+
+        serverJob = scope.launch {
+            try {
+                serverSocket = ServerSocket(port)
+                isRunning = true
+                Log.i(TAG, "GAMA LAN Sync Server active at ws://$serverIp:$port/ws (HTTP: http://$serverIp:$port)")
+
+                startBroadcastLoop()
+
+                while (isActive) {
+                    val client = serverSocket?.accept() ?: break
+                    scope.launch {
+                        handleClient(client)
+                    }
+                }
+            } catch (e: Exception) {
+                if (isRunning) {
+                    Log.e(TAG, "Server socket exception: ${e.message}")
+                }
+            } finally {
+                isRunning = false
+            }
+        }
+    }
+
+    fun stop() {
+        isRunning = false
+        serverJob?.cancel()
+        broadcastJob?.cancel()
+        connectedClients.forEach {
+            try { it.close() } catch (_: Exception) {}
+        }
+        connectedClients.clear()
+        try {
+            serverSocket?.close()
+        } catch (_: Exception) {}
+        serverSocket = null
+    }
+
+    private fun startBroadcastLoop() {
+        broadcastJob?.cancel()
+        broadcastJob = scope.launch {
+            while (isActive && isRunning) {
+                delay(100) // ~10Hz smooth telemetry updates for FFT and position
+                if (connectedClients.isNotEmpty()) {
+                    val statusJson = buildStatusJson().toString()
+                    val frame = createWebSocketTextFrame(statusJson)
+                    val dead = mutableListOf<Socket>()
+                    for (client in connectedClients) {
+                        try {
+                            client.getOutputStream().write(frame)
+                            client.getOutputStream().flush()
+                        } catch (_: Exception) {
+                            dead.add(client)
+                        }
+                    }
+                    connectedClients.removeAll(dead)
+                }
+            }
+        }
+    }
+
+    private fun handleClient(socket: Socket) {
+        try {
+            val input = BufferedReader(InputStreamReader(socket.getInputStream()))
+            val output = socket.getOutputStream()
+
+            val requestLine = input.readLine() ?: return
+            val headers = mutableMapOf<String, String>()
+            var line: String?
+
+            while (input.readLine().also { line = it } != null && line!!.isNotBlank()) {
+                val parts = line!!.split(":", limit = 2)
+                if (parts.size == 2) {
+                    headers[parts[0].trim().lowercase()] = parts[1].trim()
+                }
+            }
+
+            val isWebSocket = headers["upgrade"]?.equals("websocket", ignoreCase = true) == true
+
+            if (isWebSocket) {
+                // Perform RFC 6455 WebSocket Handshake
+                val key = headers["sec-websocket-key"] ?: ""
+                val acceptKey = computeWebSocketAcceptKey(key)
+
+                val response = "HTTP/1.1 101 Switching Protocols\r\n" +
+                        "Upgrade: websocket\r\n" +
+                        "Connection: Upgrade\r\n" +
+                        "Sec-WebSocket-Accept: $acceptKey\r\n" +
+                        "Access-Control-Allow-Origin: *\r\n\r\n"
+
+                output.write(response.toByteArray(Charsets.UTF_8))
+                output.flush()
+
+                connectedClients.add(socket)
+                listenWebSocketFrames(socket)
+            } else {
+                // Standard HTTP handling
+                val parts = requestLine.split(" ")
+                val method = parts.getOrNull(0) ?: "GET"
+                val path = parts.getOrNull(1) ?: "/"
+
+                when {
+                    method == "OPTIONS" -> {
+                        val corsResponse = "HTTP/1.1 204 No Content\r\n" +
+                                "Access-Control-Allow-Origin: *\r\n" +
+                                "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n" +
+                                "Access-Control-Allow-Headers: Content-Type\r\n\r\n"
+                        output.write(corsResponse.toByteArray(Charsets.UTF_8))
+                    }
+                    method == "GET" && (path == "/" || path == "/status") -> {
+                        val body = buildStatusJson().toString()
+                        val res = "HTTP/1.1 200 OK\r\n" +
+                                "Content-Type: application/json; charset=utf-8\r\n" +
+                                "Access-Control-Allow-Origin: *\r\n" +
+                                "Content-Length: ${body.toByteArray().size}\r\n\r\n" + body
+                        output.write(res.toByteArray(Charsets.UTF_8))
+                    }
+                    method == "POST" && path == "/command" -> {
+                        val contentLength = headers["content-length"]?.toIntOrNull() ?: 0
+                        val bodyChars = CharArray(contentLength)
+                        input.read(bodyChars, 0, contentLength)
+                        val bodyStr = String(bodyChars)
+                        val result = executeCommand(bodyStr)
+                        val res = "HTTP/1.1 200 OK\r\n" +
+                                "Content-Type: application/json; charset=utf-8\r\n" +
+                                "Access-Control-Allow-Origin: *\r\n" +
+                                "Content-Length: ${result.toByteArray().size}\r\n\r\n" + result
+                        output.write(res.toByteArray(Charsets.UTF_8))
+                    }
+                    else -> {
+                        val notFound = "HTTP/1.1 404 Not Found\r\n\r\n"
+                        output.write(notFound.toByteArray(Charsets.UTF_8))
+                    }
+                }
+                output.flush()
+                socket.close()
+            }
+        } catch (_: Exception) {
+            try { socket.close() } catch (_: Exception) {}
+        }
+    }
+
+    private fun listenWebSocketFrames(socket: Socket) {
+        val inStream = socket.getInputStream()
+        val buffer = ByteArray(4096)
+
+        try {
+            while (isRunning && !socket.isClosed) {
+                val len = inStream.read(buffer)
+                if (len <= 0) break
+
+                val opcode = buffer[0].toInt() and 0x0F
+                if (opcode == 8) { // Close frame
+                    break
+                }
+                if (opcode == 1) { // Text frame
+                    val isMasked = (buffer[1].toInt() and 0x80) != 0
+                    var payloadLen = (buffer[1].toInt() and 0x7F).toLong()
+                    var offset = 2
+
+                    if (payloadLen == 126L) {
+                        payloadLen = (((buffer[2].toInt() and 0xFF) shl 8) or (buffer[3].toInt() and 0xFF)).toLong()
+                        offset = 4
+                    }
+
+                    val maskKey = if (isMasked) {
+                        val key = ByteArray(4)
+                        System.arraycopy(buffer, offset, key, 0, 4)
+                        offset += 4
+                        key
+                    } else null
+
+                    val payload = ByteArray(payloadLen.toInt())
+                    for (i in 0 until payloadLen.toInt()) {
+                        val b = buffer[offset + i]
+                        payload[i] = if (maskKey != null) (b.toInt() xor maskKey[i % 4].toInt()).toByte() else b
+                    }
+
+                    val text = String(payload, Charsets.UTF_8)
+                    executeCommand(text)
+                }
+            }
+        } catch (_: Exception) {
+        } finally {
+            connectedClients.remove(socket)
+            try { socket.close() } catch (_: Exception) {}
+        }
+    }
+
+    fun buildStatusJson(): JSONObject {
+        val pm = playbackManager ?: return JSONObject().apply { put("error", "No manager active") }
+        val state = pm.playbackState.value
+        val track = state.currentTrack
+
+        return JSONObject().apply {
+            put("type", "STATUS")
+            put("isPlaying", state.isPlaying)
+            put("isBuffering", state.isBuffering)
+            put("positionMs", state.positionMs)
+            put("durationMs", state.durationMs)
+            put("isShuffle", state.isShuffle)
+            put("repeatMode", state.repeatMode.name)
+            put("isAudioOnlyMode", state.isAudioOnlyMode)
+            put("playbackSpeed", state.playbackSpeed)
+            put("serverIp", serverIp)
+            put("serverPort", DEFAULT_PORT)
+
+            // Current Track Details
+            if (track != null) {
+                put("track", JSONObject().apply {
+                    put("id", track.id)
+                    put("title", track.title)
+                    put("artist", track.artist)
+                    put("artworkUrl", track.artworkUrl)
+                    put("youtubeVideoId", track.youtubeVideoId)
+                    put("durationSeconds", track.durationSeconds)
+                    put("codec", track.codec)
+                    put("audioQualityBadge", track.audioQualityBadge)
+                })
+            }
+
+            // 16-band Spectrum Analyzer FFT Telemetry
+            val bandsArray = JSONArray()
+            state.visualizerBands.forEach { b -> bandsArray.put(b.toDouble()) }
+            put("visualizerBands", bandsArray)
+
+            // Queue summary
+            val queueArray = JSONArray()
+            state.queue.take(15).forEach { qTrack ->
+                queueArray.put(JSONObject().apply {
+                    put("id", qTrack.id)
+                    put("title", qTrack.title)
+                    put("artist", qTrack.artist)
+                })
+            }
+            put("queue", queueArray)
+        }
+    }
+
+    fun executeCommand(jsonString: String): String {
+        val pm = playbackManager ?: return "{\"error\":\"playbackManager is null\"}"
+
+        return try {
+            val json = JSONObject(jsonString)
+            val action = json.optString("action", "")
+
+            CoroutineScope(Dispatchers.Main).launch {
+                when (action) {
+                    "play_pause", "toggle_play_pause" -> pm.togglePlayPause()
+                    "play" -> if (!pm.playbackState.value.isPlaying) pm.togglePlayPause()
+                    "pause" -> if (pm.playbackState.value.isPlaying) pm.togglePlayPause()
+                    "next", "skip_next" -> pm.skipNext()
+                    "prev", "previous", "skip_prev" -> pm.skipPrevious()
+                    "seek" -> {
+                        val pos = json.optLong("positionMs", 0L)
+                        pm.seekTo(pos)
+                    }
+                    "toggle_shuffle" -> pm.toggleShuffle()
+                    "cycle_repeat" -> pm.cycleRepeatMode()
+                    "toggle_audio_only" -> pm.toggleAudioOnlyMode()
+                    "set_speed" -> {
+                        val speed = json.optDouble("speed", 1.0).toFloat()
+                        pm.setPlaybackSpeed(speed)
+                    }
+                    "sleep_timer" -> {
+                        val mins = json.optInt("minutes", 15)
+                        pm.startSleepTimer(mins)
+                    }
+                    "cancel_sleep_timer" -> pm.cancelSleepTimer()
+                }
+            }
+
+            JSONObject().apply {
+                put("success", true)
+                put("executedAction", action)
+            }.toString()
+        } catch (e: Exception) {
+            "{\"error\":\"${e.message}\"}"
+        }
+    }
+
+    private fun computeWebSocketAcceptKey(clientKey: String): String {
+        val magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+        val md = MessageDigest.getInstance("SHA-1")
+        val hash = md.digest((clientKey + magic).toByteArray(Charsets.UTF_8))
+        return Base64.encodeToString(hash, Base64.NO_WRAP)
+    }
+
+    private fun createWebSocketTextFrame(message: String): ByteArray {
+        val payload = message.toByteArray(Charsets.UTF_8)
+        val len = payload.size
+
+        return when {
+            len <= 125 -> {
+                val frame = ByteArray(2 + len)
+                frame[0] = 0x81.toByte() // FIN + Text
+                frame[1] = len.toByte()
+                System.arraycopy(payload, 0, frame, 2, len)
+                frame
+            }
+            len <= 65535 -> {
+                val frame = ByteArray(4 + len)
+                frame[0] = 0x81.toByte()
+                frame[1] = 126.toByte()
+                frame[2] = ((len shr 8) and 0xFF).toByte()
+                frame[3] = (len and 0xFF).toByte()
+                System.arraycopy(payload, 0, frame, 4, len)
+                frame
+            }
+            else -> {
+                val frame = ByteArray(10 + len)
+                frame[0] = 0x81.toByte()
+                frame[1] = 127.toByte()
+                for (i in 0..7) {
+                    frame[2 + i] = ((len.toLong() shr ((7 - i) * 8)) and 0xFF).toByte()
+                }
+                System.arraycopy(payload, 0, frame, 10, len)
+                frame
+            }
+        }
+    }
+
+    private fun resolveLocalIp(context: Context): String {
+        try {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            val ipInt = wifiManager?.connectionInfo?.ipAddress ?: 0
+            if (ipInt != 0) {
+                return String.format(
+                    "%d.%d.%d.%d",
+                    ipInt and 0xff,
+                    (ipInt shr 8) and 0xff,
+                    (ipInt shr 16) and 0xff,
+                    (ipInt shr 24) and 0xff
+                )
+            }
+
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val iface = interfaces.nextElement()
+                if (iface.isLoopback || !iface.isUp) continue
+                val addresses = iface.inetAddresses
+                while (addresses.hasMoreElements()) {
+                    val addr = addresses.nextElement()
+                    if (addr is Inet4Address && !addr.isLoopbackAddress) {
+                        return addr.hostAddress ?: "127.0.0.1"
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        return "127.0.0.1"
+    }
+}

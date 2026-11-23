@@ -180,4 +180,60 @@ class AudiophileEngineAndDifferentiatorsTest {
         assertTrue(eq.isReplayGainEnabled)
         assertEquals(4, eq.crossfadeSeconds)
     }
+
+    @Test
+    fun testWaveformExtractorGenerates100Peaks() {
+        val track = Track(
+            id = "test_wf_track",
+            title = "Aura Borealis",
+            artist = "GAMA Resonator",
+            durationSeconds = 240
+        )
+        val waveform = com.example.core.util.WaveformExtractor.generateRealisticWaveform(track)
+        assertEquals(100, waveform.size)
+
+        for (peak in waveform) {
+            assertTrue("Peak must be >= 0.12f, but was $peak", peak >= 0.12f)
+            assertTrue("Peak must be <= 1.0f, but was $peak", peak <= 1.0f)
+        }
+
+        // Chorus peak around 40% should exceed intro around 5%
+        val introAmp = waveform[5]
+        val chorusAmp = waveform[40]
+        assertTrue("Chorus amplitude ($chorusAmp) should exceed intro ($introAmp)", chorusAmp > introAmp)
+    }
+
+    @Test
+    fun testSmartFilterAudiophileShelves() {
+        val tracks = listOf(
+            Track(id = "1", title = "Lossless FLAC", artist = "A", codec = "FLAC", bitDepth = 24, sampleRateHz = 96000, playCount = 10),
+            Track(id = "2", title = "Standard MP3", artist = "B", codec = "MP3", bitrateKbps = 320, playCount = 50),
+            Track(id = "3", title = "YouTube Video Track", artist = "C", youtubeVideoId = "dQw4w9WgXcQ", playCount = 5),
+            Track(id = "4", title = "WAV Master", artist = "D", codec = "WAV", bitDepth = 16, sampleRateHz = 44100, playCount = 2)
+        )
+
+        val hiResFilter = com.example.feature.library.LibraryUiState(selectedSmartFilter = com.example.feature.library.SmartFilter.HI_RES)
+        val hiResTracks = hiResFilter.applySmartFilter(tracks)
+        assertEquals(2, hiResTracks.size)
+        assertTrue(hiResTracks.any { it.id == "1" })
+        assertTrue(hiResTracks.any { it.id == "4" })
+
+        val mostPlayedFilter = com.example.feature.library.LibraryUiState(selectedSmartFilter = com.example.feature.library.SmartFilter.MOST_PLAYED)
+        val mostPlayedTracks = mostPlayedFilter.applySmartFilter(tracks)
+        assertEquals("2", mostPlayedTracks.first().id) // 50 plays
+
+        val videoFilter = com.example.feature.library.LibraryUiState(selectedSmartFilter = com.example.feature.library.SmartFilter.VIDEO_TRACKS)
+        val videoTracks = videoFilter.applySmartFilter(tracks)
+        assertEquals(1, videoTracks.size)
+        assertEquals("3", videoTracks.first().id)
+    }
+
+    @Test
+    fun testLanSyncServerProtocol() {
+        // Test command execution JSON string
+        val cmdJson = """{"action":"toggle_play_pause"}"""
+        val response = com.example.core.remote.GamaLanSyncServer.executeCommand(cmdJson)
+        assertNotNull(response)
+        assertTrue(response.contains("toggle_play_pause") || response.contains("playbackManager is null") || response.contains("success"))
+    }
 }

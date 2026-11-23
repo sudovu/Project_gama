@@ -31,9 +31,18 @@ enum class PlaylistFilter(val title: String) {
     LEAST_PLAYED("Least Played")
 }
 
+enum class SmartFilter(val title: String) {
+    ALL("All Tracks"),
+    HI_RES("💎 Hi-Res / Lossless"),
+    MOST_PLAYED("⚡ Most Played"),
+    RECENTLY_ADDED("🕒 Recently Added"),
+    VIDEO_TRACKS("🎬 Video Tracks")
+}
+
 data class LibraryUiState(
     val selectedTab: LibraryTab = LibraryTab.FAVORITES,
     val selectedPlaylistFilter: PlaylistFilter = PlaylistFilter.ALL,
+    val selectedSmartFilter: SmartFilter = SmartFilter.ALL,
     val favorites: List<Track> = emptyList(),
     val downloaded: List<Track> = emptyList(),
     val discoveryHistory: List<Track> = emptyList(),
@@ -45,7 +54,23 @@ data class LibraryUiState(
     val favoriteIds: Set<String> = emptySet(),
     val downloadedIds: Set<String> = emptySet(),
     val downloadingTrackId: String? = null
-)
+) {
+    fun applySmartFilter(tracks: List<Track>): List<Track> {
+        return when (selectedSmartFilter) {
+            SmartFilter.ALL -> tracks
+            SmartFilter.HI_RES -> tracks.filter { track ->
+                val codec = track.codec.uppercase()
+                codec == "FLAC" || codec == "WAV" || codec == "ALAC" ||
+                        track.bitDepth >= 24 || track.sampleRateHz >= 96000 ||
+                        track.audioQualityBadge.contains("Hi-Res", ignoreCase = true) ||
+                        track.audioQualityBadge.contains("Lossless", ignoreCase = true)
+            }
+            SmartFilter.MOST_PLAYED -> tracks.sortedByDescending { it.playCount }
+            SmartFilter.RECENTLY_ADDED -> tracks.reversed()
+            SmartFilter.VIDEO_TRACKS -> tracks.filter { it.youtubeVideoId.isNotBlank() }
+        }
+    }
+}
 
 private data class LibraryData(
     val favorites: List<Track>,
@@ -74,6 +99,9 @@ class LibraryViewModel(
 
     private val _selectedPlaylistFilter = MutableStateFlow(PlaylistFilter.ALL)
     val selectedPlaylistFilter: StateFlow<PlaylistFilter> = _selectedPlaylistFilter.asStateFlow()
+
+    private val _selectedSmartFilter = MutableStateFlow(SmartFilter.ALL)
+    val selectedSmartFilter: StateFlow<SmartFilter> = _selectedSmartFilter.asStateFlow()
 
     private val _playStatsData = combine(
         repository.getMostPlayedTracks(),
@@ -114,11 +142,13 @@ class LibraryViewModel(
     val uiState: StateFlow<LibraryUiState> = combine(
         _selectedTab,
         _selectedPlaylistFilter,
+        _selectedSmartFilter,
         _dataState
-    ) { tab, filter, data ->
+    ) { tab, pFilter, sFilter, data ->
         LibraryUiState(
             selectedTab = tab,
-            selectedPlaylistFilter = filter,
+            selectedPlaylistFilter = pFilter,
+            selectedSmartFilter = sFilter,
             favorites = data.base.favorites,
             downloaded = data.downloaded,
             discoveryHistory = data.base.discoveryHistory,
@@ -143,6 +173,10 @@ class LibraryViewModel(
 
     fun selectPlaylistFilter(filter: PlaylistFilter) {
         _selectedPlaylistFilter.value = filter
+    }
+
+    fun selectSmartFilter(filter: SmartFilter) {
+        _selectedSmartFilter.value = filter
     }
 
     fun playTrack(track: Track, queue: List<Track>) {

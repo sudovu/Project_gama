@@ -91,6 +91,9 @@ class PlaybackManager(val context: Context) {
             scope.launch { handlePlaybackError(track, error) }
         }
         startProgressTicker()
+        try {
+            com.example.core.remote.GamaLanSyncServer.start(context, this)
+        } catch (_: Exception) {}
     }
 
     fun setCandidateProvider(provider: suspend () -> List<Track>) {

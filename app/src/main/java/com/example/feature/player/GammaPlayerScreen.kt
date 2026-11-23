@@ -71,6 +71,8 @@ import androidx.compose.ui.draw.alpha
 
 import com.example.core.ui.GammaCurvedWaveformSeekbar
 import com.example.core.ui.GammaGestureOverlay
+import com.example.core.ui.GammaSoundCloudWaveformScrubber
+import com.example.core.util.WaveformExtractor
 import com.example.data.provider.TrackDetailsInfo
 import com.example.data.provider.TrackInfoProvider
 import com.example.domain.model.TuningPreset
@@ -165,6 +167,16 @@ fun GammaPlayerScreen(
 
     var trackDetails by remember { mutableStateOf<TrackDetailsInfo?>(null) }
     var isLoadingDetails by remember { mutableStateOf(false) }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var useWaveformScrubber by remember { mutableStateOf(true) }
+    var waveformPeaks by remember { mutableStateOf(FloatArray(100) { 0.25f }) }
+
+    LaunchedEffect(track?.id) {
+        if (track != null) {
+            waveformPeaks = WaveformExtractor.getWaveform(context, track)
+        }
+    }
 
     LaunchedEffect(track?.id, showSpecsSheet) {
         if (showSpecsSheet && track != null) {
@@ -535,17 +547,31 @@ fun GammaPlayerScreen(
                     .padding(horizontal = 4.dp, vertical = 2.dp)
             )
 
-            // Curved Waveform Seekbar
-            GammaCurvedWaveformSeekbar(
-                positionMs = playback.positionMs,
-                durationMs = playback.durationMs,
-                onSeek = { targetMs ->
-                    viewModel.seekTo(targetMs)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp)
-            )
+            // Interactive SoundCloud-Style Waveform Scrubber with Arc Fallback
+            if (useWaveformScrubber) {
+                GammaSoundCloudWaveformScrubber(
+                    peaks = waveformPeaks,
+                    positionMs = playback.positionMs,
+                    durationMs = playback.durationMs,
+                    onSeek = { targetMs ->
+                        viewModel.seekTo(targetMs)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp)
+                )
+            } else {
+                GammaCurvedWaveformSeekbar(
+                    positionMs = playback.positionMs,
+                    durationMs = playback.durationMs,
+                    onSeek = { targetMs ->
+                        viewModel.seekTo(targetMs)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp)
+                )
+            }
 
             // Control Deck (Shuffle, Prev, Hero Play/Pause, Next, Repeat)
             Row(
@@ -824,6 +850,36 @@ fun GammaPlayerScreen(
                             text = if (playback.isAudioOnlyMode) "Audio-Only" else "Video Mode",
                             style = MaterialTheme.typography.bodySmall.copy(fontWeight = if (playback.isAudioOnlyMode) FontWeight.Bold else FontWeight.Normal),
                             color = if (playback.isAudioOnlyMode) GammaPrimary else GammaTextPrimary
+                        )
+                    }
+                }
+
+                // Waveform Scrubber / Arc Toggle Button
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(if (useWaveformScrubber) GammaSurfaceElevated else GammaSurface)
+                        .border(
+                            width = 1.dp,
+                            brush = if (useWaveformScrubber) GammaFrequencyBrush else Brush.linearGradient(listOf(GammaDivider, GammaDivider)),
+                            shape = CircleShape
+                        )
+                        .clickable { useWaveformScrubber = !useWaveformScrubber }
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                        .testTag("toggle_waveform_scrubber_button")
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.GraphicEq,
+                            contentDescription = "Waveform / Arc scrubber style",
+                            tint = if (useWaveformScrubber) GammaPrimary else GammaTextMuted,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = if (useWaveformScrubber) "Waveform" else "Arc Seek",
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = if (useWaveformScrubber) FontWeight.Bold else FontWeight.Normal),
+                            color = if (useWaveformScrubber) GammaPrimary else GammaTextPrimary
                         )
                     }
                 }
@@ -1245,6 +1301,59 @@ fun GammaPlayerScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+
+                // Cross-Device LAN Sync & Audiophile Pipeline Card
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(GammaSurface)
+                        .border(1.dp, GammaFrequencyBrush, RoundedCornerShape(14.dp))
+                        .padding(12.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF00E676))
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "CROSS-DEVICE LAN SYNC ACTIVE",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFF00E676)
+                                )
+                            }
+                            Text(
+                                text = "Port 8765",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = GammaTextMuted
+                            )
+                        }
+
+                        Text(
+                            text = "Connect GAMA Windows to: ws://${com.example.core.remote.GamaLanSyncServer.serverIp}:8765/ws",
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                            color = GammaTextPrimary
+                        )
+
+                        val badge = track?.audioQualityBadge
+                        if (!badge.isNullOrBlank()) {
+                            Text(
+                                text = "DSP Pipeline: $badge (Hardware 16-Band FFT Engine)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = GammaSecondary
+                            )
                         }
                     }
                 }

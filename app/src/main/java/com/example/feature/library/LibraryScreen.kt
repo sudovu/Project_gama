@@ -207,7 +207,7 @@ fun LibraryScreen(
                 }
             }
 
-            // 2-Column Echo-Music Quick Action Cards Grid
+            // 2-Column Quick Action Orbit Cards Grid
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -215,7 +215,7 @@ fun LibraryScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // Card 1: Starred / Favorites
-                EchoLibraryCard(
+                GammaLibraryCard(
                     title = "Liked Tracks",
                     count = uiState.favorites.size,
                     icon = Icons.Default.Favorite,
@@ -226,7 +226,7 @@ fun LibraryScreen(
                 )
 
                 // Card 2: Offline Downloads
-                EchoLibraryCard(
+                GammaLibraryCard(
                     title = "Downloaded",
                     count = uiState.downloaded.size,
                     icon = Icons.Default.DownloadDone,
@@ -244,7 +244,7 @@ fun LibraryScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // Card 3: Tuned Uploads & Local
-                EchoLibraryCard(
+                GammaLibraryCard(
                     title = "Uploaded Audio",
                     count = uiState.uploads.size,
                     icon = Icons.Default.Sensors,
@@ -255,7 +255,7 @@ fun LibraryScreen(
                 )
 
                 // Card 4: Playlists
-                EchoLibraryCard(
+                GammaLibraryCard(
                     title = "Playlists",
                     count = uiState.playlists.size,
                     icon = Icons.AutoMirrored.Filled.QueueMusic,
@@ -292,15 +292,49 @@ fun LibraryScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Smart Audiophile Filter Chips
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(SmartFilter.entries) { filter ->
+                    val isSelected = uiState.selectedSmartFilter == filter
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) GammaPrimary.copy(alpha = 0.18f) else GammaSurface)
+                            .border(
+                                width = 1.dp,
+                                color = if (isSelected) GammaPrimary else GammaDivider.copy(alpha = 0.6f),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .clickable { viewModel.selectSmartFilter(filter) }
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                            .testTag("smart_filter_${filter.name.lowercase()}")
+                    ) {
+                        Text(
+                            text = filter.title,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal),
+                            color = if (isSelected) GammaPrimary else GammaTextSecondary
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Tab contents
             when (uiState.selectedTab) {
                 LibraryTab.FAVORITES -> {
-                    if (uiState.favorites.isEmpty()) {
+                    val filteredFavorites = uiState.applySmartFilter(uiState.favorites)
+                    if (filteredFavorites.isEmpty()) {
                         GammaEmptyState(
-                            title = "No Starred Signals",
-                            message = "Tap the heart on any frequency in Discover or Search to store it in your orbit.",
+                            title = if (uiState.selectedSmartFilter != SmartFilter.ALL) "No Matching Signals" else "No Starred Signals",
+                            message = if (uiState.selectedSmartFilter != SmartFilter.ALL) "No tracks match the active \"${uiState.selectedSmartFilter.title}\" filter." else "Tap the heart on any frequency in Discover or Search to store it in your orbit.",
                             icon = Icons.Default.Favorite
                         )
                     } else {
@@ -320,20 +354,20 @@ fun LibraryScreen(
                                     GammaPrimaryButton(
                                         text = "Play All",
                                         icon = Icons.Default.PlayArrow,
-                                        onClick = { viewModel.playAll(uiState.favorites, shuffle = false) },
+                                        onClick = { viewModel.playAll(filteredFavorites, shuffle = false) },
                                         modifier = Modifier.weight(1f)
                                     )
                                     GammaSecondaryButton(
                                         text = "Shuffle",
                                         icon = Icons.Default.Shuffle,
-                                        onClick = { viewModel.playAll(uiState.favorites, shuffle = true) },
+                                        onClick = { viewModel.playAll(filteredFavorites, shuffle = true) },
                                         modifier = Modifier.weight(1f)
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                             }
 
-                            items(uiState.favorites, key = { it.id }) { track ->
+                            items(filteredFavorites, key = { it.id }) { track ->
                                 val isCurr = track.id == currentPlayingTrackId
                                 val isDown = uiState.downloadedIds.contains(track.id) || track.isDownloaded || track.localAudioUri.isNotBlank()
                                 Box(
@@ -345,7 +379,7 @@ fun LibraryScreen(
                                         isPlaying = isPlaying && isCurr,
                                         isDownloaded = isDown,
                                         isDownloading = uiState.downloadingTrackId == track.id,
-                                        onClick = { onTrackClick(track, uiState.favorites) },
+                                        onClick = { onTrackClick(track, filteredFavorites) },
                                         onFavoriteToggle = { viewModel.toggleFavorite(track) },
                                         onDownloadClick = { viewModel.downloadTrack(track) }
                                     )
@@ -356,10 +390,11 @@ fun LibraryScreen(
                 }
 
                 LibraryTab.DOWNLOADED -> {
-                    if (uiState.downloaded.isEmpty()) {
+                    val filteredDownloaded = uiState.applySmartFilter(uiState.downloaded)
+                    if (filteredDownloaded.isEmpty()) {
                         GammaEmptyState(
-                            title = "No Downloaded Signals",
-                            message = "Download tracks to listen offline with full hardware equalizer DSP.",
+                            title = if (uiState.selectedSmartFilter != SmartFilter.ALL) "No Matching Signals" else "No Downloaded Signals",
+                            message = if (uiState.selectedSmartFilter != SmartFilter.ALL) "No downloaded tracks match the active \"${uiState.selectedSmartFilter.title}\" filter." else "Download tracks to listen offline with full hardware equalizer DSP.",
                             icon = Icons.Default.DownloadDone
                         )
                     } else {
@@ -377,22 +412,22 @@ fun LibraryScreen(
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
                                     GammaPrimaryButton(
-                                        text = "Play All (${uiState.downloaded.size})",
+                                        text = "Play All (${filteredDownloaded.size})",
                                         icon = Icons.Default.PlayArrow,
-                                        onClick = { viewModel.playAll(uiState.downloaded, shuffle = false) },
+                                        onClick = { viewModel.playAll(filteredDownloaded, shuffle = false) },
                                         modifier = Modifier.weight(1f)
                                     )
                                     GammaSecondaryButton(
                                         text = "Shuffle",
                                         icon = Icons.Default.Shuffle,
-                                        onClick = { viewModel.playAll(uiState.downloaded, shuffle = true) },
+                                        onClick = { viewModel.playAll(filteredDownloaded, shuffle = true) },
                                         modifier = Modifier.weight(1f)
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                             }
 
-                            items(uiState.downloaded, key = { "dl_" + it.id }) { track ->
+                            items(filteredDownloaded, key = { "dl_" + it.id }) { track ->
                                 val isCurr = track.id == currentPlayingTrackId
                                 val isFav = uiState.favoriteIds.contains(track.id)
                                 Box(
@@ -404,7 +439,7 @@ fun LibraryScreen(
                                         isPlaying = isPlaying && isCurr,
                                         isDownloaded = true,
                                         isDownloading = uiState.downloadingTrackId == track.id,
-                                        onClick = { onTrackClick(track, uiState.downloaded) },
+                                        onClick = { onTrackClick(track, filteredDownloaded) },
                                         onFavoriteToggle = { viewModel.toggleFavorite(track) },
                                         onDownloadClick = { viewModel.downloadTrack(track) }
                                     )
@@ -415,10 +450,11 @@ fun LibraryScreen(
                 }
 
                 LibraryTab.DISCOVERY -> {
-                    if (uiState.discoveryHistory.isEmpty()) {
+                    val filteredDiscovery = uiState.applySmartFilter(uiState.discoveryHistory)
+                    if (filteredDiscovery.isEmpty()) {
                         GammaEmptyState(
-                            title = "No Discovery Cache",
-                            message = "Tracks and frequencies you explore in Discover and Search are automatically cached in Room for offline access.",
+                            title = if (uiState.selectedSmartFilter != SmartFilter.ALL) "No Matching Signals" else "No Discovery Cache",
+                            message = if (uiState.selectedSmartFilter != SmartFilter.ALL) "No discovery tracks match the active \"${uiState.selectedSmartFilter.title}\" filter." else "Tracks and frequencies you explore in Discover and Search are automatically cached in Room for offline access.",
                             icon = Icons.Default.Sensors
                         )
                     } else {
@@ -438,20 +474,20 @@ fun LibraryScreen(
                                     GammaPrimaryButton(
                                         text = "Play All",
                                         icon = Icons.Default.PlayArrow,
-                                        onClick = { viewModel.playAll(uiState.discoveryHistory, shuffle = false) },
+                                        onClick = { viewModel.playAll(filteredDiscovery, shuffle = false) },
                                         modifier = Modifier.weight(1f)
                                     )
                                     GammaSecondaryButton(
                                         text = "Shuffle",
                                         icon = Icons.Default.Shuffle,
-                                        onClick = { viewModel.playAll(uiState.discoveryHistory, shuffle = true) },
+                                        onClick = { viewModel.playAll(filteredDiscovery, shuffle = true) },
                                         modifier = Modifier.weight(1f)
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                             }
 
-                            items(uiState.discoveryHistory, key = { "disc_" + it.id }) { track ->
+                            items(filteredDiscovery, key = { "disc_" + it.id }) { track ->
                                 val isFav = uiState.favoriteIds.contains(track.id)
                                 val isCurr = track.id == currentPlayingTrackId
                                 val isDown = uiState.downloadedIds.contains(track.id) || track.isDownloaded || track.localAudioUri.isNotBlank()
@@ -464,7 +500,7 @@ fun LibraryScreen(
                                         isPlaying = isPlaying && isCurr,
                                         isDownloaded = isDown,
                                         isDownloading = uiState.downloadingTrackId == track.id,
-                                        onClick = { onTrackClick(track, uiState.discoveryHistory) },
+                                        onClick = { onTrackClick(track, filteredDiscovery) },
                                         onFavoriteToggle = { viewModel.toggleFavorite(track) },
                                         onDownloadClick = { viewModel.downloadTrack(track) }
                                     )
@@ -475,7 +511,8 @@ fun LibraryScreen(
                 }
 
                 LibraryTab.UPLOADS -> {
-                    if (uiState.uploads.isEmpty()) {
+                    val filteredUploads = uiState.applySmartFilter(uiState.uploads)
+                    if (filteredUploads.isEmpty()) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -483,8 +520,8 @@ fun LibraryScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             GammaEmptyState(
-                                title = "No Uploaded Signals",
-                                message = "Upload your audio files, personal frequencies, or YouTube music to make them discoverable across the app.",
+                                title = if (uiState.selectedSmartFilter != SmartFilter.ALL) "No Matching Signals" else "No Uploaded Signals",
+                                message = if (uiState.selectedSmartFilter != SmartFilter.ALL) "No uploaded tracks match the active \"${uiState.selectedSmartFilter.title}\" filter." else "Upload your audio files, personal frequencies, or YouTube music to make them discoverable across the app.",
                                 icon = Icons.Default.CloudUpload
                             )
                             Spacer(modifier = Modifier.height(16.dp))
@@ -511,7 +548,7 @@ fun LibraryScreen(
                                     GammaPrimaryButton(
                                         text = "Play All",
                                         icon = Icons.Default.PlayArrow,
-                                        onClick = { viewModel.playAll(uiState.uploads, shuffle = false) },
+                                        onClick = { viewModel.playAll(filteredUploads, shuffle = false) },
                                         modifier = Modifier.weight(1f)
                                     )
                                     GammaSecondaryButton(
@@ -524,7 +561,7 @@ fun LibraryScreen(
                                 Spacer(modifier = Modifier.height(8.dp))
                             }
 
-                            items(uiState.uploads, key = { "up_lib_" + it.id }) { track ->
+                            items(filteredUploads, key = { "up_lib_" + it.id }) { track ->
                                 val isFav = uiState.favoriteIds.contains(track.id)
                                 val isCurr = track.id == currentPlayingTrackId
                                 val isDown = uiState.downloadedIds.contains(track.id) || track.isDownloaded || track.localAudioUri.isNotBlank()
@@ -537,7 +574,7 @@ fun LibraryScreen(
                                         isPlaying = isPlaying && isCurr,
                                         isDownloaded = isDown,
                                         isDownloading = uiState.downloadingTrackId == track.id,
-                                        onClick = { onTrackClick(track, uiState.uploads) },
+                                        onClick = { onTrackClick(track, filteredUploads) },
                                         onFavoriteToggle = { viewModel.toggleFavorite(track) },
                                         onDownloadClick = { viewModel.downloadTrack(track) }
                                     )
@@ -784,10 +821,11 @@ fun LibraryScreen(
                 }
 
                 LibraryTab.HISTORY -> {
-                    if (uiState.history.isEmpty()) {
+                    val filteredHistory = uiState.applySmartFilter(uiState.history)
+                    if (filteredHistory.isEmpty()) {
                         GammaEmptyState(
-                            title = "Clear Orbit",
-                            message = "Signals you listen to will appear here so you can replay any past journey.",
+                            title = if (uiState.selectedSmartFilter != SmartFilter.ALL) "No Matching Signals" else "Clear Orbit",
+                            message = if (uiState.selectedSmartFilter != SmartFilter.ALL) "No played tracks match the active \"${uiState.selectedSmartFilter.title}\" filter." else "Signals you listen to will appear here so you can replay any past journey.",
                             icon = Icons.Default.History
                         )
                     } else {
@@ -797,7 +835,7 @@ fun LibraryScreen(
                                 .testTag("history_list"),
                             contentPadding = PaddingValues(bottom = 120.dp)
                         ) {
-                            items(uiState.history, key = { "${it.id}_${it.durationSeconds}" }) { track ->
+                            items(filteredHistory, key = { "${it.id}_${it.durationSeconds}" }) { track ->
                                 val isFav = uiState.favoriteIds.contains(track.id)
                                 val isCurr = track.id == currentPlayingTrackId
                                 val isDown = uiState.downloadedIds.contains(track.id) || track.isDownloaded || track.localAudioUri.isNotBlank()
@@ -810,7 +848,7 @@ fun LibraryScreen(
                                         isPlaying = isPlaying && isCurr,
                                         isDownloaded = isDown,
                                         isDownloading = uiState.downloadingTrackId == track.id,
-                                        onClick = { onTrackClick(track, uiState.history) },
+                                        onClick = { onTrackClick(track, filteredHistory) },
                                         onFavoriteToggle = { viewModel.toggleFavorite(track) },
                                         onDownloadClick = { viewModel.downloadTrack(track) }
                                     )
@@ -1046,7 +1084,7 @@ private fun SmartPlaylistCard(
 }
 
 @Composable
-private fun EchoLibraryCard(
+private fun GammaLibraryCard(
     title: String,
     count: Int,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
