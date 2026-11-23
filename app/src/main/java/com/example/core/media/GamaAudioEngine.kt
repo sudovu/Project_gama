@@ -321,6 +321,12 @@ class GamaAudioEngine(private val context: Context) {
         currentPlaybackPositionMs = 0L
     }
 
+    fun release() {
+        stop()
+        releaseHardwareVisualizer()
+        releaseNextMediaPlayer()
+    }
+
     fun seekTo(positionMs: Long) {
         currentPlaybackPositionMs = positionMs
         try {

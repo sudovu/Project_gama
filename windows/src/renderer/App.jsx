@@ -32,25 +32,94 @@ export default function App() {
   const [eqGains, setEqGains] = useState([0, 0, 0, 0, 0]);
   const [eqPreset, setEqPreset] = useState('Flat');
 
-  // LAN Remote Control Sync state
+  // LAN Remote Control Sync state & Discovery
   const [lanConnected, setLanConnected] = useState(false);
   const [lanPhoneIp, setLanPhoneIp] = useState('192.168.1.100');
+  const [lanPin, setLanPin] = useState(() => localStorage.getItem('gama_lan_pin') || '');
   const [showLanModal, setShowLanModal] = useState(false);
   const [lanStatusMsg, setLanStatusMsg] = useState('Disconnected');
+  const [discoveredDevices, setDiscoveredDevices] = useState([]);
+  const [isScanningLan, setIsScanningLan] = useState(false);
   const lanSocketRef = useRef(null);
 
-  const connectLanSync = (ipToConnect) => {
+  const scanLanDevices = async () => {
+    setIsScanningLan(true);
+    try {
+      if (window.electronAPI?.discoverLanDevices) {
+        const devs = await window.electronAPI.discoverLanDevices();
+        setDiscoveredDevices(devs || []);
+      } else {
+        const probes = ['127.0.0.1', '192.168.1.100', '192.168.1.105', '192.168.0.100'];
+        const found = [];
+        await Promise.all(probes.map(async (ip) => {
+          try {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 600);
+            const res = await fetch(`http://${ip}:8765/status`, { signal: ctrl.signal });
+            clearTimeout(timer);
+            if (res.ok) {
+              const data = await res.json();
+              found.push({
+                ip,
+                port: 8765,
+                deviceModel: data.deviceModel || 'GAMA Android',
+                pairingPin: data.pairingPin || '',
+                protocolVersion: data.protocolVersion || '1.2.0'
+              });
+            }
+          } catch (_) {}
+        }));
+        setDiscoveredDevices(found);
+      }
+    } catch (_) {}
+    setIsScanningLan(false);
+  };
+
+  const connectLanSync = async (ipToConnect, pinOverride) => {
     const ip = (ipToConnect || lanPhoneIp).trim();
     if (!ip) return;
+    const pin = (pinOverride || lanPin).trim();
+
     try {
       if (lanSocketRef.current) {
         lanSocketRef.current.close();
       }
+
+      let token = localStorage.getItem('gama_lan_token');
+
+      // If no token or pin is specified, execute PIN pairing handshake first
+      if (!token && pin) {
+        setLanStatusMsg(`Pairing with ${ip}:8765 using PIN ${pin}...`);
+        try {
+          const pairRes = await fetch(`http://${ip}:8765/pair`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pin, client: 'Windows Desktop' })
+          });
+          if (pairRes.ok) {
+            const pairData = await pairRes.json();
+            if (pairData.token) {
+              token = pairData.token;
+              localStorage.setItem('gama_lan_token', token);
+              localStorage.setItem('gama_lan_pin', pin);
+            }
+          } else {
+            setLanStatusMsg('PIN Pairing failed (HTTP 401). Check PIN displayed on phone.');
+            return;
+          }
+        } catch (pairErr) {
+          setLanStatusMsg(`Pairing request error: ${pairErr.message}`);
+          return;
+        }
+      }
+
       setLanStatusMsg(`Connecting to ws://${ip}:8765/ws...`);
-      const ws = new WebSocket(`ws://${ip}:8765/ws`);
+      const wsUrl = token ? `ws://${ip}:8765/ws?token=${encodeURIComponent(token)}` : `ws://${ip}:8765/ws`;
+      const ws = new WebSocket(wsUrl);
+
       ws.onopen = () => {
         setLanConnected(true);
-        setLanStatusMsg(`Connected to GAMA Phone (${ip})`);
+        setLanStatusMsg(`Connected to GAMA Phone (${ip}) [Authenticated]`);
       };
       ws.onmessage = (e) => {
         try {
@@ -74,13 +143,18 @@ export default function App() {
           }
         } catch (_) {}
       };
-      ws.onclose = () => {
+      ws.onclose = (e) => {
         setLanConnected(false);
-        setLanStatusMsg('Disconnected from phone');
+        if (e.code === 1006 || e.reason?.includes('401')) {
+          setLanStatusMsg('Authentication expired or invalid PIN. Please re-enter 4-digit PIN.');
+          localStorage.removeItem('gama_lan_token');
+        } else {
+          setLanStatusMsg('Disconnected from phone');
+        }
       };
       ws.onerror = () => {
         setLanConnected(false);
-        setLanStatusMsg('Connection failed. Make sure phone is on same Wi-Fi with GAMA active.');
+        setLanStatusMsg('Connection failed. Verify phone IP and 4-digit PIN.');
       };
       lanSocketRef.current = ws;
     } catch (err) {
@@ -415,7 +489,10 @@ export default function App() {
             </span>
 
             <button
-              onClick={() => setShowLanModal(true)}
+              onClick={() => {
+                setShowLanModal(true);
+                scanLanDevices();
+              }}
               className={`inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-mono transition-all border ${
                 lanConnected 
                   ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 hover:bg-emerald-500/30' 
@@ -871,22 +948,71 @@ export default function App() {
             </div>
 
             <div className="space-y-4 mb-6">
-              <div>
-                <label className="text-xs font-mono text-slate-300 block mb-1">PHONE IP ADDRESS (PORT 8765)</label>
-                <input 
-                  type="text" 
-                  value={lanPhoneIp}
-                  onChange={(e) => setLanPhoneIp(e.target.value)}
-                  placeholder="e.g. 192.168.1.150 or localhost"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 font-mono focus:border-gammaCyan focus:outline-none"
-                />
+              {/* Auto Discovery / Quick Connect */}
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-mono text-slate-300">mDNS ZERO-CONFIG DISCOVERY</span>
+                <button
+                  onClick={scanLanDevices}
+                  disabled={isScanningLan}
+                  className="text-[11px] text-gammaCyan hover:underline font-mono"
+                >
+                  {isScanningLan ? 'Scanning Wi-Fi...' : '🔄 Scan for Phones'}
+                </button>
+              </div>
+
+              {discoveredDevices.length > 0 && (
+                <div className="space-y-2 p-2.5 rounded-xl bg-slate-900 border border-gammaCyan/30">
+                  <div className="text-[10px] text-gammaCyan font-mono uppercase tracking-wider">Discovered GAMA Devices</div>
+                  {discoveredDevices.map((dev) => (
+                    <div key={dev.ip} className="flex items-center justify-between p-2 rounded-lg bg-slate-800/80 hover:bg-slate-800">
+                      <div>
+                        <div className="text-xs font-bold text-slate-200">{dev.deviceModel}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">{dev.ip}:8765 {dev.pairingPin ? `• PIN: ${dev.pairingPin}` : ''}</div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setLanPhoneIp(dev.ip);
+                          if (dev.pairingPin) setLanPin(dev.pairingPin);
+                          connectLanSync(dev.ip, dev.pairingPin);
+                        }}
+                        className="py-1 px-2.5 bg-gammaCyan text-black font-bold text-xs rounded-md hover:bg-gammaCyan/80"
+                      >
+                        1-Click Connect
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <label className="text-xs font-mono text-slate-300 block mb-1">PHONE IP ADDRESS</label>
+                  <input 
+                    type="text" 
+                    value={lanPhoneIp}
+                    onChange={(e) => setLanPhoneIp(e.target.value)}
+                    placeholder="e.g. 192.168.1.150"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 font-mono focus:border-gammaCyan focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-mono text-slate-300 block mb-1">4-DIGIT PIN</label>
+                  <input 
+                    type="text" 
+                    maxLength={4}
+                    value={lanPin}
+                    onChange={(e) => setLanPin(e.target.value.replace(/\D/g, ''))}
+                    placeholder="PIN"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 font-mono text-center tracking-widest focus:border-gammaCyan focus:outline-none"
+                  />
+                </div>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300 space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Connection Status:</span>
                   <span className={`font-mono font-bold ${lanConnected ? 'text-emerald-400' : 'text-amber-400'}`}>
-                    {lanConnected ? 'ACTIVE (WEBSOCKET)' : 'DISCONNECTED'}
+                    {lanConnected ? 'ACTIVE (AUTHENTICATED)' : 'DISCONNECTED'}
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400 font-mono">{lanStatusMsg}</p>
@@ -900,10 +1026,10 @@ export default function App() {
                   Localhost
                 </button>
                 <button
-                  onClick={() => connectLanSync(lanPhoneIp)}
+                  onClick={() => connectLanSync(lanPhoneIp, lanPin)}
                   className="flex-1 py-1.5 px-2 bg-gammaCyan text-black font-bold text-xs rounded-lg hover:bg-gammaCyan/80"
                 >
-                  {lanConnected ? 'Reconnect' : 'Connect to Phone'}
+                  {lanConnected ? 'Reconnect' : 'Pair & Connect'}
                 </button>
                 {lanConnected && (
                   <button

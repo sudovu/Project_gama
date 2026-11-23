@@ -164,6 +164,9 @@ class GamaPlaybackService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         try {
+            PlaybackManager.activeInstance?.release()
+        } catch (_: Exception) {}
+        try {
             mediaSession?.isActive = false
             mediaSession?.release()
             mediaSession = null

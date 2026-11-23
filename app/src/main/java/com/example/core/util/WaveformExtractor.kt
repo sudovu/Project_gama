@@ -15,6 +15,8 @@ import kotlin.math.sin
 object WaveformExtractor {
 
     private const val BAR_COUNT = 100
+    const val MAX_DISK_CACHE_BYTES = 50L * 1024L * 1024L // 50 MB
+    const val TARGET_DISK_CACHE_BYTES = 40L * 1024L * 1024L // 40 MB
     private val memoryCache = ConcurrentHashMap<String, FloatArray>()
 
     suspend fun getWaveform(context: Context, track: Track): FloatArray = withContext(Dispatchers.Default) {
@@ -27,6 +29,7 @@ object WaveformExtractor {
         if (diskFile.exists() && diskFile.length() == (BAR_COUNT * 4).toLong()) {
             try {
                 val bytes = diskFile.readBytes()
+                diskFile.setLastModified(System.currentTimeMillis())
                 val buffer = ByteBuffer.wrap(bytes)
                 val peaks = FloatArray(BAR_COUNT)
                 for (i in 0 until BAR_COUNT) {
@@ -52,9 +55,39 @@ object WaveformExtractor {
                 buffer.putFloat(p)
             }
             diskFile.writeBytes(buffer.array())
+            diskFile.setLastModified(System.currentTimeMillis())
+            trimDiskCacheIfNeeded(diskCacheDir)
         } catch (_: Exception) {}
 
         peaks
+    }
+
+    fun trimDiskCacheIfNeeded(dir: File, maxBytes: Long = MAX_DISK_CACHE_BYTES, targetBytes: Long = TARGET_DISK_CACHE_BYTES) {
+        if (!dir.exists() || !dir.isDirectory) return
+        val files = dir.listFiles { file -> file.extension == "bin" } ?: return
+        var totalSize = files.sumOf { it.length() }
+        if (totalSize > maxBytes) {
+            val sorted = files.sortedBy { it.lastModified() }
+            for (file in sorted) {
+                if (totalSize <= targetBytes) break
+                val len = file.length()
+                if (file.delete()) {
+                    totalSize -= len
+                }
+            }
+        }
+    }
+
+    fun getDiskCacheSizeBytes(context: Context): Long {
+        val diskCacheDir = File(context.cacheDir, "waveforms")
+        if (!diskCacheDir.exists()) return 0L
+        return diskCacheDir.listFiles { f -> f.extension == "bin" }?.sumOf { it.length() } ?: 0L
+    }
+
+    fun clearDiskCache(context: Context): Boolean {
+        memoryCache.clear()
+        val diskCacheDir = File(context.cacheDir, "waveforms")
+        return diskCacheDir.deleteRecursively()
     }
 
     private fun extractFromLocalAudio(pathOrUri: String): FloatArray? {

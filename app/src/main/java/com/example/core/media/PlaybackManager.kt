@@ -1101,4 +1101,18 @@ class PlaybackManager(val context: Context) {
             }
         }
     }
+
+    fun release() {
+        try {
+            audioEngine.release()
+        } catch (_: Exception) {}
+        try {
+            com.example.core.remote.GamaLanSyncServer.stop()
+        } catch (_: Exception) {}
+        tickerJob?.cancel()
+        sleepTimerJob?.cancel()
+        if (activeInstance == this) {
+            activeInstance = null
+        }
+    }
 }

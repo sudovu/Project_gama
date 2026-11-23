@@ -1347,6 +1347,31 @@ fun GammaPlayerScreen(
                             color = GammaTextPrimary
                         )
 
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Pairing PIN: ${com.example.core.remote.GamaLanSyncServer.pairingPin}",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                ),
+                                color = GammaGlowCyan
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .background(GammaGlowCyan.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "mDNS: _gama-sync._tcp",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                    color = GammaGlowCyan
+                                )
+                            }
+                        }
+
                         val badge = track?.audioQualityBadge
                         if (!badge.isNullOrBlank()) {
                             Text(

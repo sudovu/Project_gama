@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, globalShortcut, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const http = require('http');
 
 let mainWindow;
 
@@ -102,6 +104,74 @@ ipcMain.handle('download-track', async (event, track) => {
   } catch (e) {
     return { success: false, error: e.message };
   }
+});
+
+ipcMain.handle('discover-lan-devices', async () => {
+  const discovered = [];
+  const interfaces = os.networkInterfaces();
+  const subnets = new Set();
+
+  for (const name of Object.keys(interfaces)) {
+    for (const net of interfaces[name]) {
+      if (net.family === 'IPv4' && !net.internal) {
+        const parts = net.address.split('.');
+        if (parts.length === 4) {
+          subnets.add(`${parts[0]}.${parts[1]}.${parts[2]}`);
+        }
+      }
+    }
+  }
+
+  const candidateIps = ['127.0.0.1'];
+  for (const subnet of subnets) {
+    for (let i = 1; i <= 254; i++) {
+      candidateIps.push(`${subnet}.${i}`);
+    }
+  }
+
+  const checkIp = (ip) => {
+    return new Promise((resolve) => {
+      const req = http.get(`http://${ip}:8765/status`, { timeout: 450 }, (res) => {
+        if (res.statusCode === 200) {
+          let rawData = '';
+          res.on('data', (chunk) => { rawData += chunk; });
+          res.on('end', () => {
+            try {
+              const data = JSON.parse(rawData);
+              resolve({
+                ip,
+                port: 8765,
+                deviceModel: data.deviceModel || 'GAMA Device',
+                protocolVersion: data.protocolVersion || '1.2.0',
+                pairingPin: data.pairingPin || '',
+                trackTitle: data.track?.title || ''
+              });
+            } catch (_) {
+              resolve(null);
+            }
+          });
+        } else {
+          resolve(null);
+        }
+      });
+      req.on('error', () => resolve(null));
+      req.on('timeout', () => { req.destroy(); resolve(null); });
+    });
+  };
+
+  const chunkSize = 35;
+  for (let i = 0; i < candidateIps.length; i += chunkSize) {
+    const chunk = candidateIps.slice(i, i + chunkSize);
+    const results = await Promise.all(chunk.map(checkIp));
+    for (const res of results) {
+      if (res && !discovered.some((d) => d.ip === res.ip)) {
+        discovered.push(res);
+      }
+    }
+    if (discovered.length > 0 && i >= 70) break;
+  }
+
+  return discovered;
 });
 
 app.whenReady().then(() => {

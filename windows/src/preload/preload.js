@@ -5,5 +5,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getStorageData: (key) => ipcRenderer.invoke('get-local-storage-data', key),
   saveStorageData: (key, data) => ipcRenderer.invoke('save-local-storage-data', key, data),
   downloadTrack: (track) => ipcRenderer.invoke('download-track', track),
+  discoverLanDevices: () => ipcRenderer.invoke('discover-lan-devices'),
   onMediaCommand: (callback) => ipcRenderer.on('media-command', (event, cmd) => callback(cmd))
 });

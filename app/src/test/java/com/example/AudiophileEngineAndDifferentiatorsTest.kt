@@ -236,4 +236,60 @@ class AudiophileEngineAndDifferentiatorsTest {
         assertNotNull(response)
         assertTrue(response.contains("toggle_play_pause") || response.contains("playbackManager is null") || response.contains("success"))
     }
+
+    @Test
+    fun testLanSyncPinPairingAndTokenValidation() {
+        val server = com.example.core.remote.GamaLanSyncServer
+        val pin = server.pairingPin
+        assertEquals(4, pin.length)
+        assertTrue(pin.all { it.isDigit() })
+
+        // Test invalid PIN
+        val invalidToken = server.pairWithPin("invalid_pin_99999")
+        org.junit.Assert.assertNull(invalidToken)
+
+        // Test valid PIN
+        val validToken = server.pairWithPin(pin)
+        assertNotNull(validToken)
+        assertTrue(validToken!!.isNotBlank())
+        assertTrue(server.validateToken(validToken))
+        org.junit.Assert.assertFalse(server.validateToken("fake_random_token_xyz"))
+
+        // Test reset PIN revokes active tokens
+        val newPin = server.resetPin()
+        assertEquals(4, newPin.length)
+        org.junit.Assert.assertFalse(server.validateToken(validToken))
+    }
+
+    @Test
+    fun testWaveformExtractorLruEviction() {
+        val tempDir = java.io.File.createTempFile("waveforms_test", "").apply {
+            delete()
+            mkdirs()
+        }
+        try {
+            // Create 5 fake .bin files with different timestamps
+            val files = (1..5).map { i ->
+                val f = java.io.File(tempDir, "track_$i.bin")
+                f.writeBytes(ByteArray(1024 * 10)) // 10 KB each
+                f.setLastModified(1000L * i) // track_1 is oldest, track_5 is newest
+                f
+            }
+
+            // Total size is 50 KB. Trim with maxBytes = 35 KB, targetBytes = 25 KB
+            com.example.core.util.WaveformExtractor.trimDiskCacheIfNeeded(
+                dir = tempDir,
+                maxBytes = 35 * 1024L,
+                targetBytes = 25 * 1024L
+            )
+
+            // Oldest files (track_1, track_2, track_3) should be evicted
+            org.junit.Assert.assertFalse("track_1 should be evicted", java.io.File(tempDir, "track_1.bin").exists())
+            org.junit.Assert.assertFalse("track_2 should be evicted", java.io.File(tempDir, "track_2.bin").exists())
+            assertTrue("track_5 should be kept", java.io.File(tempDir, "track_5.bin").exists())
+            assertTrue("track_4 should be kept", java.io.File(tempDir, "track_4.bin").exists())
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
 }

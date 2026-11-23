@@ -1,7 +1,10 @@
 package com.example.core.remote
 
 import android.content.Context
+import android.net.nsd.NsdManager
+import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.util.Base64
 import android.util.Log
 import com.example.core.media.PlaybackManager
@@ -21,12 +24,15 @@ import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
 import java.security.MessageDigest
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
 object GamaLanSyncServer {
 
     private const val TAG = "GamaLanSyncServer"
     const val DEFAULT_PORT = 8765
+    const val SERVICE_TYPE = "_gama-sync._tcp"
 
     private var serverSocket: ServerSocket? = null
     private var serverJob: Job? = null
@@ -35,6 +41,9 @@ object GamaLanSyncServer {
     private val connectedClients = CopyOnWriteArrayList<Socket>()
     private var playbackManager: PlaybackManager? = null
 
+    private var nsdManager: NsdManager? = null
+    private var registrationListener: NsdManager.RegistrationListener? = null
+
     @Volatile
     var isRunning = false
         private set
@@ -42,6 +51,44 @@ object GamaLanSyncServer {
     @Volatile
     var serverIp = "127.0.0.1"
         private set
+
+    @Volatile
+    var pairingPin: String = generateNewPin()
+        private set
+
+    private val sessionTokens = ConcurrentHashMap.newKeySet<String>()
+
+    fun resetPin(): String {
+        pairingPin = generateNewPin()
+        sessionTokens.clear()
+        Log.i(TAG, "GAMA LAN Sync PIN reset to $pairingPin; all prior sessions revoked.")
+        return pairingPin
+    }
+
+    private fun generateNewPin(): String = String.format("%04d", (1000..9999).random())
+
+    fun pairWithPin(pin: String): String? {
+        if (pin.trim() == pairingPin) {
+            val token = UUID.randomUUID().toString().replace("-", "")
+            sessionTokens.add(token)
+            Log.i(TAG, "Client successfully paired with PIN. Generated session token: ${token.take(6)}...")
+            return token
+        }
+        return null
+    }
+
+    fun validateToken(token: String?): Boolean {
+        if (token.isNullOrBlank()) return false
+        return sessionTokens.contains(token.trim())
+    }
+
+    fun addTestSessionToken(token: String) {
+        sessionTokens.add(token.trim())
+    }
+
+    fun clearSessionTokens() {
+        sessionTokens.clear()
+    }
 
     fun start(context: Context, manager: PlaybackManager, port: Int = DEFAULT_PORT) {
         if (isRunning) return
@@ -53,6 +100,9 @@ object GamaLanSyncServer {
                 serverSocket = ServerSocket(port)
                 isRunning = true
                 Log.i(TAG, "GAMA LAN Sync Server active at ws://$serverIp:$port/ws (HTTP: http://$serverIp:$port)")
+
+                // Register mDNS Zero-Config Discovery
+                registerMdnsService(context, port)
 
                 startBroadcastLoop()
 
@@ -67,13 +117,15 @@ object GamaLanSyncServer {
                     Log.e(TAG, "Server socket exception: ${e.message}")
                 }
             } finally {
-                isRunning = false
+                stop()
             }
         }
     }
 
     fun stop() {
+        if (!isRunning && serverSocket == null) return
         isRunning = false
+        unregisterMdnsService()
         serverJob?.cancel()
         broadcastJob?.cancel()
         connectedClients.forEach {
@@ -84,6 +136,53 @@ object GamaLanSyncServer {
             serverSocket?.close()
         } catch (_: Exception) {}
         serverSocket = null
+        Log.i(TAG, "GamaLanSyncServer stopped cleanly. Sockets closed, mDNS unregistered.")
+    }
+
+    private fun registerMdnsService(context: Context, port: Int) {
+        try {
+            nsdManager = context.applicationContext.getSystemService(Context.NSD_SERVICE) as? NsdManager
+            val cleanModel = Build.MODEL.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+            val serviceInfo = NsdServiceInfo().apply {
+                serviceName = "GAMA-$cleanModel"
+                serviceType = SERVICE_TYPE
+                setPort(port)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    setAttribute("model", Build.MODEL)
+                    setAttribute("version", "1.2.0")
+                    setAttribute("port", port.toString())
+                }
+            }
+
+            registrationListener = object : NsdManager.RegistrationListener {
+                override fun onServiceRegistered(service: NsdServiceInfo) {
+                    Log.i(TAG, "mDNS Service registered: ${service.serviceName} (${service.serviceType}) on port $port")
+                }
+                override fun onRegistrationFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
+                    Log.w(TAG, "mDNS Service registration failed with code: $errorCode")
+                }
+                override fun onServiceUnregistered(service: NsdServiceInfo) {
+                    Log.i(TAG, "mDNS Service unregistered: ${service.serviceName}")
+                }
+                override fun onUnregistrationFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
+                    Log.w(TAG, "mDNS Service unregistration failed with code: $errorCode")
+                }
+            }
+
+            nsdManager?.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, registrationListener)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to register mDNS service: ${e.message}")
+        }
+    }
+
+    private fun unregisterMdnsService() {
+        try {
+            registrationListener?.let {
+                nsdManager?.unregisterService(it)
+            }
+        } catch (_: Exception) {}
+        registrationListener = null
+        nsdManager = null
     }
 
     private fun startBroadcastLoop() {
@@ -125,9 +224,36 @@ object GamaLanSyncServer {
                 }
             }
 
+            val parts = requestLine.split(" ")
+            val method = parts.getOrNull(0) ?: "GET"
+            val fullPath = parts.getOrNull(1) ?: "/"
+            val path = fullPath.substringBefore("?")
+            val queryString = if (fullPath.contains("?")) fullPath.substringAfter("?") else ""
+            val queryParams = queryString.split("&").mapNotNull {
+                val kv = it.split("=", limit = 2)
+                if (kv.isNotEmpty()) kv[0] to (kv.getOrNull(1) ?: "") else null
+            }.toMap()
+
             val isWebSocket = headers["upgrade"]?.equals("websocket", ignoreCase = true) == true
 
             if (isWebSocket) {
+                // Check auth token for WebSocket: query param ?token=... or header Authorization: Bearer ...
+                val token = queryParams["token"]
+                    ?: headers["authorization"]?.removePrefix("Bearer ")?.trim()
+                    ?: headers["x-auth-token"]
+
+                if (!validateToken(token)) {
+                    val unauthorized = "HTTP/1.1 401 Unauthorized\r\n" +
+                            "Content-Type: application/json; charset=utf-8\r\n" +
+                            "Access-Control-Allow-Origin: *\r\n" +
+                            "Content-Length: 59\r\n\r\n" +
+                            "{\"success\":false,\"error\":\"Unauthorized. PIN pairing required.\"}"
+                    output.write(unauthorized.toByteArray(Charsets.UTF_8))
+                    output.flush()
+                    socket.close()
+                    return
+                }
+
                 // Perform RFC 6455 WebSocket Handshake
                 val key = headers["sec-websocket-key"] ?: ""
                 val acceptKey = computeWebSocketAcceptKey(key)
@@ -145,16 +271,12 @@ object GamaLanSyncServer {
                 listenWebSocketFrames(socket)
             } else {
                 // Standard HTTP handling
-                val parts = requestLine.split(" ")
-                val method = parts.getOrNull(0) ?: "GET"
-                val path = parts.getOrNull(1) ?: "/"
-
                 when {
                     method == "OPTIONS" -> {
                         val corsResponse = "HTTP/1.1 204 No Content\r\n" +
                                 "Access-Control-Allow-Origin: *\r\n" +
                                 "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n" +
-                                "Access-Control-Allow-Headers: Content-Type\r\n\r\n"
+                                "Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token\r\n\r\n"
                         output.write(corsResponse.toByteArray(Charsets.UTF_8))
                     }
                     method == "GET" && (path == "/" || path == "/status") -> {
@@ -165,17 +287,67 @@ object GamaLanSyncServer {
                                 "Content-Length: ${body.toByteArray().size}\r\n\r\n" + body
                         output.write(res.toByteArray(Charsets.UTF_8))
                     }
+                    method == "POST" && path == "/pair" -> {
+                        val contentLength = headers["content-length"]?.toIntOrNull() ?: 0
+                        val bodyChars = CharArray(contentLength)
+                        input.read(bodyChars, 0, contentLength)
+                        val bodyStr = String(bodyChars)
+                        val pairJson = try { JSONObject(bodyStr) } catch (_: Exception) { JSONObject() }
+                        val pin = pairJson.optString("pin", "").trim()
+                        val token = pairWithPin(pin)
+
+                        if (token != null) {
+                            val resObj = JSONObject().apply {
+                                put("success", true)
+                                put("token", token)
+                                put("deviceModel", Build.MODEL)
+                                put("message", "Paired successfully")
+                            }
+                            val body = resObj.toString()
+                            val res = "HTTP/1.1 200 OK\r\n" +
+                                    "Content-Type: application/json; charset=utf-8\r\n" +
+                                    "Access-Control-Allow-Origin: *\r\n" +
+                                    "Content-Length: ${body.toByteArray().size}\r\n\r\n" + body
+                            output.write(res.toByteArray(Charsets.UTF_8))
+                        } else {
+                            val resObj = JSONObject().apply {
+                                put("success", false)
+                                put("error", "Invalid 4-digit pairing PIN")
+                            }
+                            val body = resObj.toString()
+                            val res = "HTTP/1.1 401 Unauthorized\r\n" +
+                                    "Content-Type: application/json; charset=utf-8\r\n" +
+                                    "Access-Control-Allow-Origin: *\r\n" +
+                                    "Content-Length: ${body.toByteArray().size}\r\n\r\n" + body
+                            output.write(res.toByteArray(Charsets.UTF_8))
+                        }
+                    }
                     method == "POST" && path == "/command" -> {
                         val contentLength = headers["content-length"]?.toIntOrNull() ?: 0
                         val bodyChars = CharArray(contentLength)
                         input.read(bodyChars, 0, contentLength)
                         val bodyStr = String(bodyChars)
-                        val result = executeCommand(bodyStr)
-                        val res = "HTTP/1.1 200 OK\r\n" +
-                                "Content-Type: application/json; charset=utf-8\r\n" +
-                                "Access-Control-Allow-Origin: *\r\n" +
-                                "Content-Length: ${result.toByteArray().size}\r\n\r\n" + result
-                        output.write(res.toByteArray(Charsets.UTF_8))
+
+                        val authHeader = headers["authorization"]?.removePrefix("Bearer ")?.trim()
+                            ?: headers["x-auth-token"]
+                        val jsonToken = try { JSONObject(bodyStr).optString("token", "") } catch (_: Exception) { "" }
+                        val effectiveToken = if (!authHeader.isNullOrBlank()) authHeader else jsonToken
+
+                        if (!validateToken(effectiveToken)) {
+                            val errBody = "{\"success\":false,\"error\":\"Unauthorized. Valid pairing token required.\"}"
+                            val res = "HTTP/1.1 401 Unauthorized\r\n" +
+                                    "Content-Type: application/json; charset=utf-8\r\n" +
+                                    "Access-Control-Allow-Origin: *\r\n" +
+                                    "Content-Length: ${errBody.toByteArray().size}\r\n\r\n" + errBody
+                            output.write(res.toByteArray(Charsets.UTF_8))
+                        } else {
+                            val result = executeCommand(bodyStr)
+                            val res = "HTTP/1.1 200 OK\r\n" +
+                                    "Content-Type: application/json; charset=utf-8\r\n" +
+                                    "Access-Control-Allow-Origin: *\r\n" +
+                                    "Content-Length: ${result.toByteArray().size}\r\n\r\n" + result
+                            output.write(res.toByteArray(Charsets.UTF_8))
+                        }
                     }
                     else -> {
                         val notFound = "HTTP/1.1 404 Not Found\r\n\r\n"
@@ -238,12 +410,22 @@ object GamaLanSyncServer {
     }
 
     fun buildStatusJson(): JSONObject {
-        val pm = playbackManager ?: return JSONObject().apply { put("error", "No manager active") }
+        val pm = playbackManager ?: return JSONObject().apply {
+            put("error", "No manager active")
+            put("pairingPin", pairingPin)
+            put("deviceModel", Build.MODEL)
+            put("protocolVersion", "1.2.0")
+        }
         val state = pm.playbackState.value
         val track = state.currentTrack
 
         return JSONObject().apply {
             put("type", "STATUS")
+            put("protocolVersion", "1.2.0")
+            put("deviceModel", Build.MODEL)
+            put("pairingPin", pairingPin)
+            put("pinAuthRequired", true)
+            put("activeSessions", sessionTokens.size)
             put("isPlaying", state.isPlaying)
             put("isBuffering", state.isBuffering)
             put("positionMs", state.positionMs)
