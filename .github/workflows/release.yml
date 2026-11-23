@@ -1,0 +1,121 @@
+name: GAMA Multi-Platform Automated Release (Android & Windows)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    name: Build & Test Android Release APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run Android Unit Tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Prepare Android Artifact
+        run: |
+          mkdir -p release-android
+          cp app/build/outputs/apk/release/app-release.apk release-android/GAMA-release.apk
+          ls -lh release-android/
+
+      - name: Upload Android APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GAMA-Android-Release-APK
+          path: release-android/GAMA-release.apk
+          retention-days: 7
+
+  windows:
+    name: Build & Package Windows Executables (.exe)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: windows/package-lock.json
+
+      - name: Install Windows Dependencies
+        working-directory: windows
+        run: npm ci
+
+      - name: Build Web Bundle
+        working-directory: windows
+        run: npm run build
+
+      - name: Package Standalone Executables
+        working-directory: windows
+        run: npm run dist
+
+      - name: Prepare Windows Artifacts
+        shell: bash
+        run: |
+          mkdir -p release-windows
+          cp windows/release/*.exe release-windows/
+          ls -lh release-windows/
+
+      - name: Upload Windows Executables Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GAMA-Windows-Release-Executables
+          path: release-windows/*.exe
+          retention-days: 7
+
+  publish:
+    name: Publish Official GitHub Release
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Android Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: GAMA-Android-Release-APK
+          path: release-artifacts
+
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: GAMA-Windows-Release-Executables
+          path: release-artifacts
+
+      - name: Display Release Files
+        run: ls -lh release-artifacts/
+
+      - name: Create GitHub Release & Upload Assets
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        with:
+          files: release-artifacts/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

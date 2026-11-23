@@ -423,12 +423,24 @@ object GamaLanSyncServer {
                                 val artist = headers["x-track-artist"] ?: "Windows PC"
                                 val playNow = headers["x-play-now"]?.equals("true", ignoreCase = true) == true
 
-                                val uploadDir = java.io.File(appContext?.cacheDir, "lan_uploads").apply { mkdirs() }
-                                val savedFile = java.io.File(uploadDir, "${System.currentTimeMillis()}_$filename")
+                                val uploadDir = java.io.File(appContext?.cacheDir, "lan_queue").apply { mkdirs() }
+                                cleanupLanQueueDirectory(uploadDir)
+                                val cleanFilename = filename.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+                                val savedFile = java.io.File(uploadDir, "${System.currentTimeMillis()}_$cleanFilename")
 
-                                val bodyChars = CharArray(contentLength)
-                                input.read(bodyChars, 0, contentLength)
-                                savedFile.writeBytes(String(bodyChars).toByteArray(Charsets.ISO_8859_1))
+                                val fos = java.io.FileOutputStream(savedFile)
+                                val buffer = CharArray(8192)
+                                var bytesRemaining = contentLength
+                                while (bytesRemaining > 0) {
+                                    val toRead = bytesRemaining.coerceAtMost(buffer.size)
+                                    val read = input.read(buffer, 0, toRead)
+                                    if (read <= 0) break
+                                    val bytes = String(buffer, 0, read).toByteArray(Charsets.ISO_8859_1)
+                                    fos.write(bytes)
+                                    bytesRemaining -= read
+                                }
+                                fos.flush()
+                                fos.close()
 
                                 val pushedTrack = com.example.domain.model.Track(
                                     id = "lan_" + UUID.randomUUID().toString().take(8),
@@ -686,6 +698,7 @@ object GamaLanSyncServer {
                 java.io.File(dlDir, "${track.id}.mp3"),
                 java.io.File(dlDir, "${track.id}.flac"),
                 java.io.File(dlDir, "${track.id}.m4a"),
+                java.io.File(context.cacheDir, "lan_queue/${track.id}.mp3"),
                 java.io.File(context.cacheDir, "lan_uploads/${track.id}.mp3")
             )
             targetFile = candidates.firstOrNull { it.exists() && it.isFile }
@@ -762,6 +775,22 @@ object GamaLanSyncServer {
                     "Content-Length: 53\r\n\r\n" +
                     "{\"error\":\"Track audio not available locally for stream\"}"
             output.write(notFound.toByteArray(Charsets.UTF_8))
+        }
+    }
+
+    fun cleanupLanQueueDirectory(dir: java.io.File, maxTotalBytes: Long = 100L * 1024L * 1024L) {
+        if (!dir.exists() || !dir.isDirectory) return
+        val files = dir.listFiles() ?: return
+        var totalSize = files.sumOf { it.length() }
+        if (totalSize > maxTotalBytes || files.size > 20) {
+            val sorted = files.sortedBy { it.lastModified() }
+            for (f in sorted) {
+                val len = f.length()
+                if (f.delete()) {
+                    totalSize -= len
+                }
+                if (totalSize <= (maxTotalBytes * 0.7).toLong() && (dir.listFiles()?.size ?: 0) <= 15) break
+            }
         }
     }
 

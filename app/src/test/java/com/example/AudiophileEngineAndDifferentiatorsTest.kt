@@ -309,4 +309,31 @@ class AudiophileEngineAndDifferentiatorsTest {
         assertNotNull(res)
         assertTrue(res.contains("toggle_shuffle") || res.contains("playbackManager is null") || res.contains("success"))
     }
+
+    @Test
+    fun testLanQueueCleanupHygiene() {
+        val tempQueueDir = java.io.File.createTempFile("lan_queue_test", "").apply {
+            delete()
+            mkdirs()
+        }
+        try {
+            // Create 25 mock audio upload files
+            (1..25).forEach { i ->
+                val f = java.io.File(tempQueueDir, "test_track_$i.mp3")
+                f.writeBytes(ByteArray(1024 * 50)) // 50 KB each
+                f.setLastModified(1000L * i)
+            }
+            assertEquals(25, tempQueueDir.listFiles()?.size)
+
+            // Trigger cleanup with maxTotalBytes = 500 KB
+            com.example.core.remote.GamaLanSyncServer.cleanupLanQueueDirectory(tempQueueDir, maxTotalBytes = 500 * 1024L)
+
+            // Older files should be pruned, remaining files <= 15
+            val remaining = tempQueueDir.listFiles() ?: emptyArray()
+            assertTrue("Expected <= 15 remaining files after cleanup, got ${remaining.size}", remaining.size <= 15)
+            assertTrue("Newest file should still exist", java.io.File(tempQueueDir, "test_track_25.mp3").exists())
+        } finally {
+            tempQueueDir.deleteRecursively()
+        }
+    }
 }

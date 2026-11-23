@@ -24,6 +24,12 @@ app/build
 windows/node_modules/
 windows/dist/
 windows/.vite/
+windows/release/
+*.exe
+
+# Application Packages
+*.apk
+*.aab
 
 # iOS
 ios/build/
