@@ -45,6 +45,9 @@ export default function App() {
   const [streamInputUrl, setStreamInputUrl] = useState('');
   const [streamInputTitle, setStreamInputTitle] = useState('');
   const [playbackError, setPlaybackError] = useState(null);
+  const [isReconnectingStream, setIsReconnectingStream] = useState(false);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [streamMetadata, setStreamMetadata] = useState('');
   const [importedStreams, setImportedStreams] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('gama_imported_streams') || '[]');
@@ -53,6 +56,148 @@ export default function App() {
   const lanSocketRef = useRef(null);
   const pcAudioRef = useRef(null);
   const isUsingYouTubeRef = useRef(false);
+  const reconnectTimerRef = useRef(null);
+
+  const parseM3uText = (text, dirPath = '') => {
+    const lines = text.split(/\r?\n/);
+    const parsed = [];
+    let curTitle = '';
+    let curArtist = '';
+    let curDuration = 0;
+
+    for (let rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      if (line.toUpperCase().startsWith('#EXTINF:')) {
+        const info = line.substring(8).trim();
+        const commaIdx = info.indexOf(',');
+        if (commaIdx !== -1) {
+          curDuration = parseInt(info.substring(0, commaIdx).trim(), 10) || 0;
+          const name = info.substring(commaIdx + 1).trim();
+          if (name.includes(' - ')) {
+            const parts = name.split(' - ');
+            curArtist = parts[0].trim();
+            curTitle = parts.slice(1).join(' - ').trim();
+          } else {
+            curTitle = name;
+            curArtist = 'M3U Audio';
+          }
+        }
+      } else if (!line.startsWith('#')) {
+        let streamUrl = line;
+        if (!line.startsWith('http://') && !line.startsWith('https://') && !line.startsWith('rtsp://') && !line.startsWith('file://')) {
+          if (dirPath) {
+            const separator = dirPath.includes('/') ? '/' : '\\';
+            streamUrl = `${dirPath}${separator}${line}`;
+          }
+        }
+        const title = curTitle || (line.split(/[/\\]/).pop().replace(/\.[^/.]+$/, '') || 'Stream Track');
+        const artist = curArtist || 'M3U Playlist';
+        parsed.push({
+          id: `m3u_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          title,
+          artist,
+          streamUrl,
+          duration: curDuration,
+          artworkUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300',
+          source: 'stream'
+        });
+        curTitle = '';
+        curArtist = '';
+        curDuration = 0;
+      }
+    }
+    return parsed;
+  };
+
+  const handlePickM3uFile = async () => {
+    try {
+      if (window.electronAPI?.openM3uFile) {
+        const fileData = await window.electronAPI.openM3uFile();
+        if (fileData?.content) {
+          const parsedTracks = parseM3uText(fileData.content, fileData.dirPath);
+          if (parsedTracks.length > 0) {
+            const updated = [...parsedTracks, ...importedStreams];
+            setImportedStreams(updated);
+            try {
+              localStorage.setItem('gama_imported_streams', JSON.stringify(updated.slice(0, 50)));
+            } catch {}
+            playTrack(parsedTracks[0]);
+          }
+        }
+      } else {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.m3u,.m3u8';
+        input.onchange = (e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+              const text = evt.target.result;
+              const parsed = parseM3uText(text);
+              if (parsed.length > 0) {
+                const updated = [...parsed, ...importedStreams];
+                setImportedStreams(updated);
+                try {
+                  localStorage.setItem('gama_imported_streams', JSON.stringify(updated.slice(0, 50)));
+                } catch {}
+                playTrack(parsed[0]);
+              }
+            };
+            reader.readAsText(file);
+          }
+        };
+        input.click();
+      }
+    } catch (err) {
+      console.error('[GAMA M3U Pick Error]:', err);
+    }
+  };
+
+  const triggerStreamReconnect = (trackToReconnect = currentTrack) => {
+    if (!trackToReconnect?.streamUrl && !streamToPc) return;
+    if (reconnectAttempt >= 4) {
+      setIsReconnectingStream(false);
+      setPlaybackError({
+        message: 'Live stream disconnected after 4 reconnect attempts.',
+        url: trackToReconnect.streamUrl || `${lanPhoneIp}:8765/stream`,
+        canRetry: true
+      });
+      return;
+    }
+
+    const nextAttempt = reconnectAttempt + 1;
+    setReconnectAttempt(nextAttempt);
+    setIsReconnectingStream(true);
+
+    const backoffMs = Math.min(1000 * Math.pow(2, nextAttempt - 1), 8000);
+    setPlaybackError({
+      message: `Live stream connection interrupted. Auto-reconnecting (${nextAttempt}/4)...`,
+      url: trackToReconnect.streamUrl || `${lanPhoneIp}:8765/stream`,
+      canRetry: false
+    });
+
+    clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = setTimeout(() => {
+      if (pcAudioRef.current) {
+        if (streamToPc) {
+          const trackKey = trackToReconnect ? `${trackToReconnect.id}_${Date.now()}` : `${Date.now()}`;
+          pcAudioRef.current.src = `http://${lanPhoneIp}:8765/stream?token=${encodeURIComponent(lanPin)}&trackId=${trackKey}`;
+        } else if (trackToReconnect.streamUrl) {
+          pcAudioRef.current.src = trackToReconnect.streamUrl;
+        }
+        pcAudioRef.current.load();
+        pcAudioRef.current.play().then(() => {
+          setIsReconnectingStream(false);
+          setReconnectAttempt(0);
+          setPlaybackError(null);
+        }).catch((err) => {
+          console.warn('[GAMA Reconnect] Retry failed:', err.message);
+        });
+      }
+    }, backoffMs);
+  };
 
   const handleImportStream = (urlToImport = streamInputUrl, titleToImport = streamInputTitle) => {
     const url = urlToImport.trim();
@@ -204,6 +349,16 @@ export default function App() {
                   audio.currentTime = targetSec;
                 }
               }
+            }
+
+            if (data.streamMetadata !== undefined) {
+              setStreamMetadata(data.streamMetadata || '');
+            }
+            if (data.isReconnecting !== undefined) {
+              setIsReconnectingStream(data.isReconnecting);
+            }
+            if (data.reconnectAttempt !== undefined) {
+              setReconnectAttempt(data.reconnectAttempt);
             }
 
             if (data.track) {
@@ -472,6 +627,10 @@ export default function App() {
     setCurrentTrack(track);
     setCurrentTime(0);
     setPlaybackError(null);
+    clearTimeout(reconnectTimerRef.current);
+    setIsReconnectingStream(false);
+    setReconnectAttempt(0);
+    setStreamMetadata('');
 
     // If LAN sync is connected, command the phone to play track
     if (lanConnected && sendLanCommand('play_track', { trackId: track.id, title: track.title, streamUrl: track.streamUrl })) {
@@ -545,6 +704,8 @@ export default function App() {
     }
     if (isUsingYouTubeRef.current) {
       if (isPlaying) {
+        clearTimeout(reconnectTimerRef.current);
+        setIsReconnectingStream(false);
         ytPlayerRef.current?.pauseVideo();
         setIsPlaying(false);
       } else {
@@ -554,6 +715,8 @@ export default function App() {
     } else if (pcAudioRef.current) {
       const audio = pcAudioRef.current;
       if (isPlaying) {
+        clearTimeout(reconnectTimerRef.current);
+        setIsReconnectingStream(false);
         audio.pause();
         setIsPlaying(false);
       } else {
@@ -955,13 +1118,21 @@ export default function App() {
                       Drone Zone
                     </button>
                   </div>
-                  <button
-                    onClick={() => handleImportStream()}
-                    disabled={!streamInputUrl.trim()}
-                    className="text-xs px-3 py-1.5 rounded-lg font-bold bg-gammaCyan text-black hover:bg-cyan-300 transition-colors disabled:opacity-40"
-                  >
-                    ▶ Stream Now
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handlePickM3uFile}
+                      className="text-xs px-3 py-1.5 rounded-lg font-bold bg-slate-800 hover:bg-slate-700 text-gammaCyan border border-gammaCyan/40 transition-colors flex items-center gap-1.5 font-mono"
+                    >
+                      📁 Pick .m3u / .m3u8 File
+                    </button>
+                    <button
+                      onClick={() => handleImportStream()}
+                      disabled={!streamInputUrl.trim()}
+                      className="text-xs px-3 py-1.5 rounded-lg font-bold bg-gammaCyan text-black hover:bg-cyan-300 transition-colors disabled:opacity-40"
+                    >
+                      ▶ Stream Now
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1163,7 +1334,16 @@ export default function App() {
             <h4 className="text-sm font-bold text-slate-100 truncate">{currentTrack.title}</h4>
             <p className="text-xs text-slate-400 truncate">{currentTrack.artist}</p>
             <div className="flex items-center space-x-1.5 mt-0.5">
-              <span className="text-[10px] text-gammaCyan font-mono uppercase">{currentTrack.genre || 'Frequency'} • 432Hz</span>
+              {(currentTrack.source === 'stream' || currentTrack.streamUrl) && (
+                <span className="text-[9px] px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-400 font-mono font-bold uppercase border border-rose-500/40 animate-pulse">
+                  ● LIVE
+                </span>
+              )}
+              {streamMetadata ? (
+                <span className="text-[10px] text-gammaCyan font-mono truncate max-w-[140px]">{streamMetadata}</span>
+              ) : (
+                <span className="text-[10px] text-gammaCyan font-mono uppercase">{currentTrack.genre || 'Frequency'} • 432Hz</span>
+              )}
               {currentTrack.audioQualityBadge && (
                 <span className="text-[9px] px-1.5 py-0.2 rounded bg-gammaCyan/20 text-gammaCyan font-mono uppercase border border-gammaCyan/40">
                   {currentTrack.audioQualityBadge}
@@ -1204,15 +1384,21 @@ export default function App() {
 
           <div className="w-full flex items-center space-x-3 text-[11px] font-mono text-slate-400">
             <span>{formatTime(currentTime)}</span>
-            <input 
-              type="range"
-              min="0"
-              max={duration || 100}
-              value={currentTime}
-              onChange={handleSeek}
-              className="flex-1 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-gammaCyan"
-            />
-            <span>{formatTime(duration)}</span>
+            {(currentTrack.source === 'stream' || currentTrack.streamUrl) && (!duration || duration <= 0) ? (
+              <div className="flex-1 h-1.5 bg-slate-800 rounded-lg overflow-hidden relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-gammaCyan via-rose-500 to-gammaViolet animate-pulse"></div>
+              </div>
+            ) : (
+              <input 
+                type="range"
+                min="0"
+                max={duration || 100}
+                value={currentTime}
+                onChange={handleSeek}
+                className="flex-1 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-gammaCyan"
+              />
+            )}
+            <span>{(currentTrack.source === 'stream' || currentTrack.streamUrl) && (!duration || duration <= 0) ? 'LIVE' : formatTime(duration)}</span>
           </div>
         </div>
 
@@ -1493,12 +1679,16 @@ export default function App() {
         onPlaying={() => {
           if (!isUsingYouTubeRef.current) {
             setIsPlaying(true);
+            setIsReconnectingStream(false);
+            setReconnectAttempt(0);
             setPlaybackError(null);
           }
         }}
         onPause={() => {
           if (!isUsingYouTubeRef.current && !streamToPc) {
             setIsPlaying(false);
+            clearTimeout(reconnectTimerRef.current);
+            setIsReconnectingStream(false);
           }
         }}
         onEnded={() => {
@@ -1506,13 +1696,23 @@ export default function App() {
             handleNext();
           }
         }}
+        onStalled={() => {
+          if ((currentTrack?.streamUrl || streamToPc) && isPlaying && !isReconnectingStream) {
+            triggerStreamReconnect();
+          }
+        }}
         onError={(e) => {
           const err = e.target.error;
+          if (err && err.code === 1) return; // MEDIA_ERR_ABORTED
+
+          if ((currentTrack?.streamUrl || streamToPc) && isPlaying) {
+            triggerStreamReconnect();
+            return;
+          }
+
           let msg = 'HTML5 audio element failed to load audio.';
           if (err) {
             switch (err.code) {
-              case 1: // MEDIA_ERR_ABORTED
-                return;
               case 2: // MEDIA_ERR_NETWORK
                 msg = 'Network error: Failed to download audio stream or file.';
                 break;

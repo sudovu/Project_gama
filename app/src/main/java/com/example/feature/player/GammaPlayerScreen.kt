@@ -473,25 +473,60 @@ fun GammaPlayerScreen(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    val qualityBadge = track?.audioQualityBadge
-                    if (!qualityBadge.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(GammaPrimary.copy(alpha = 0.12f))
-                                .border(0.5.dp, GammaPrimary.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = qualityBadge,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.SemiBold,
-                                    letterSpacing = 0.8.sp
-                                ),
-                                color = GammaPrimary
-                            )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (playback.isLiveStream) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFFE11D48).copy(alpha = 0.2f))
+                                    .border(0.5.dp, Color(0xFFE11D48), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "● LIVE",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.8.sp
+                                    ),
+                                    color = Color(0xFFFF4D6D)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
                         }
+
+                        val qualityBadge = track?.audioQualityBadge
+                        if (!qualityBadge.isNullOrBlank()) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(GammaPrimary.copy(alpha = 0.12f))
+                                    .border(0.5.dp, GammaPrimary.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = qualityBadge,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                        letterSpacing = 0.8.sp
+                                    ),
+                                    color = GammaPrimary
+                                )
+                            }
+                        }
+                    }
+
+                    if (!playback.streamMetadataTitle.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "Now Playing: ${playback.streamMetadataTitle}",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                color = GammaPrimary
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
 
@@ -533,6 +568,43 @@ fun GammaPlayerScreen(
                             modifier = Modifier.size(28.dp)
                         )
                     }
+                }
+            }
+
+            // Stream Reconnecting Status Banner
+            if (playback.isReconnecting) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF854D0E).copy(alpha = 0.25f))
+                        .border(1.dp, Color(0xFFEAB308).copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color(0xFFEAB308),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Reconnecting stream (${playback.reconnectAttempt}/5)...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFFEF08A)
+                        )
+                    }
+                    Text(
+                        text = "Retry Now",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = GammaPrimary,
+                        modifier = Modifier
+                            .clickable { viewModel.playbackManager.retryLiveStream() }
+                            .padding(4.dp)
+                    )
                 }
             }
 

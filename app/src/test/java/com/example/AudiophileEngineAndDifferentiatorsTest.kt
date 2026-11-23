@@ -427,4 +427,97 @@ class AudiophileEngineAndDifferentiatorsTest {
             tempCacheDir.deleteRecursively()
         }
     }
+
+    @Test
+    fun testM3uRelativePathResolution() {
+        val parser = com.example.core.util.StreamPlaylistParser
+        val baseFile = java.io.File("/storage/emulated/0/Music/Playlists/chill.m3u")
+
+        // Relative track in same folder
+        val resolvedSame = parser.resolveUrl(baseFile.absolutePath, "ambient_01.flac")
+        val expectedSame = java.io.File("/storage/emulated/0/Music/Playlists/ambient_01.flac").absolutePath
+        assertEquals(expectedSame, resolvedSame)
+
+        // Relative track in subfolder
+        val resolvedSub = parser.resolveUrl(baseFile.absolutePath, "subfolder/ambient_02.wav")
+        val expectedSub = java.io.File("/storage/emulated/0/Music/Playlists/subfolder/ambient_02.wav").absolutePath
+        assertEquals(expectedSub, resolvedSub)
+
+        // Absolute URL remains unchanged
+        val remoteUrl = "https://stream.example.com/live.m3u8"
+        val resolvedRemote = parser.resolveUrl(baseFile.absolutePath, remoteUrl)
+        assertEquals(remoteUrl, resolvedRemote)
+    }
+
+    @Test
+    fun testM3uInputStreamParsing() {
+        val m3uText = """
+            #EXTM3U
+            #EXTINF:215,Solaris Pulse - Neon Horizon
+            relative_track.mp3
+            #EXTINF:0,Cyber Radio Live
+            https://live.somafm.com/groovesalad.mp3
+        """.trimIndent()
+
+        val inputStream = java.io.ByteArrayInputStream(m3uText.toByteArray(Charsets.UTF_8))
+        val tracks = com.example.core.util.StreamPlaylistParser.parseM3uInputStream(
+            inputStream = inputStream,
+            baseUriOrPath = "/sdcard/Music/playlist.m3u",
+            fallbackTitle = "Synthwave Stream",
+            fallbackArtist = "Cyber Lab"
+        )
+
+        assertEquals(2, tracks.size)
+        assertEquals("Neon Horizon", tracks[0].title)
+        assertEquals("Solaris Pulse", tracks[0].artist)
+        assertEquals(215, tracks[0].durationSeconds)
+        assertTrue(tracks[0].streamUrl.endsWith("relative_track.mp3"))
+
+        assertEquals("Cyber Radio Live", tracks[1].title)
+        assertEquals("https://live.somafm.com/groovesalad.mp3", tracks[1].streamUrl)
+        assertEquals(0, tracks[1].durationSeconds)
+        assertTrue(tracks[1].isLiveStream)
+    }
+
+    @Test
+    fun testLiveStreamDetectionAndTrackProperties() {
+        val vodTrack = Track(
+            id = "vod_1",
+            title = "Finite Song",
+            artist = "Artist",
+            durationSeconds = 180,
+            streamUrl = "https://example.com/audio.mp3"
+        )
+        assertTrue(!vodTrack.isLiveStream)
+
+        val liveTrack = Track(
+            id = "live_1",
+            title = "Continuous Radio",
+            artist = "Broadcaster",
+            durationSeconds = 0,
+            streamUrl = "https://example.com/live.aac"
+        )
+        assertTrue(liveTrack.isLiveStream)
+
+        val hlsTrack = Track(
+            id = "hls_1",
+            title = "HLS Stream",
+            artist = "Broadcaster",
+            durationSeconds = 300,
+            streamUrl = "https://example.com/stream.m3u8",
+            codec = "HLS"
+        )
+        assertTrue(hlsTrack.isLiveStream)
+    }
+
+    @Test
+    fun testLiveStreamBackoffCalculation() {
+        val pm = com.example.core.media.PlaybackManager
+        assertEquals(1000L, pm.computeBackoffMs(1)) // 1s
+        assertEquals(2000L, pm.computeBackoffMs(2)) // 2s
+        assertEquals(4000L, pm.computeBackoffMs(3)) // 4s
+        assertEquals(8000L, pm.computeBackoffMs(4)) // 8s
+        assertEquals(8000L, pm.computeBackoffMs(5)) // Capped at 8s
+        assertEquals(8000L, pm.computeBackoffMs(10)) // Capped at 8s
+    }
 }

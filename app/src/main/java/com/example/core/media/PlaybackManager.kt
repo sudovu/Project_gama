@@ -40,13 +40,23 @@ class PlaybackManager(val context: Context) {
 
     companion object {
         private const val TAG = "PlaybackManager"
+        const val MAX_LIVE_STREAM_RETRIES = 5
         var activeInstance: PlaybackManager? = null
+
+        fun computeBackoffMs(attempt: Int): Long {
+            val exponent = (attempt - 1).coerceAtLeast(0)
+            return (1000L * (1L shl exponent)).coerceIn(1000L, 8000L)
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val audioEngine = GamaAudioEngine(context)
     val musicDownloader = com.example.core.download.MusicDownloader(context)
+
+    private var reconnectJob: Job? = null
+    private var liveStreamRetryCount = 0
+    private var metadataJob: Job? = null
 
     private val _playbackState = MutableStateFlow(PlaybackState())
     val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
@@ -89,6 +99,17 @@ class PlaybackManager(val context: Context) {
         }
         audioEngine.onPlaybackErrorListener = { track, error ->
             scope.launch { handlePlaybackError(track, error) }
+        }
+        audioEngine.onPlaybackStartedListener = { track ->
+            liveStreamRetryCount = 0
+            _playbackState.update {
+                it.copy(
+                    isReconnecting = false,
+                    reconnectAttempt = 0,
+                    isBuffering = false,
+                    errorMessage = null
+                )
+            }
         }
         startProgressTicker()
         try {
@@ -179,6 +200,45 @@ class PlaybackManager(val context: Context) {
     private fun handlePlaybackError(track: Track?, error: String) {
         val failingTrack = track ?: _playbackState.value.currentTrack ?: return
         Log.w(TAG, "Audio playback error for '${failingTrack.title}': $error")
+
+        // Live stream auto-reconnect with bounded exponential backoff
+        if (failingTrack.streamUrl.isNotEmpty()) {
+            val isLive = failingTrack.isLiveStream || failingTrack.durationSeconds <= 0
+            if (isLive && _playbackState.value.isPlaying && liveStreamRetryCount < MAX_LIVE_STREAM_RETRIES) {
+                liveStreamRetryCount++
+                val backoffMs = computeBackoffMs(liveStreamRetryCount)
+                Log.i(TAG, "Live stream connection dropped for '${failingTrack.title}'. Auto-reconnecting attempt $liveStreamRetryCount/$MAX_LIVE_STREAM_RETRIES in ${backoffMs}ms...")
+                _playbackState.update {
+                    it.copy(
+                        isReconnecting = true,
+                        reconnectAttempt = liveStreamRetryCount,
+                        isBuffering = true,
+                        errorMessage = "Reconnecting stream ($liveStreamRetryCount/$MAX_LIVE_STREAM_RETRIES)..."
+                    )
+                }
+                reconnectJob?.cancel()
+                reconnectJob = scope.launch {
+                    delay(backoffMs)
+                    if (isActive && _playbackState.value.isPlaying && _playbackState.value.currentTrack?.id == failingTrack.id) {
+                        Log.i(TAG, "Executing live stream reconnect attempt $liveStreamRetryCount for '${failingTrack.title}'")
+                        audioEngine.playTrack(failingTrack)
+                    }
+                }
+                return
+            } else if (isLive && liveStreamRetryCount >= MAX_LIVE_STREAM_RETRIES) {
+                Log.w(TAG, "Max reconnect retries ($MAX_LIVE_STREAM_RETRIES) reached for live stream '${failingTrack.title}'.")
+                _playbackState.update {
+                    it.copy(
+                        isPlaying = false,
+                        isReconnecting = false,
+                        isBuffering = false,
+                        errorMessage = "Live stream disconnected. Tap Play to reconnect."
+                    )
+                }
+                return
+            }
+        }
+
         if (failingTrack.localAudioUri.isNotEmpty()) {
             musicDownloader.deleteDownload(failingTrack.id)
             val fallbackTrack = failingTrack.copy(localAudioUri = "", isDownloaded = false)
@@ -234,7 +294,14 @@ class PlaybackManager(val context: Context) {
         }
 
         isTransitioningTrack = true
-        val trackDurationMs = (playableTrack.durationSeconds * 1000L).coerceAtLeast(1000L)
+        reconnectJob?.cancel()
+        reconnectJob = null
+        liveStreamRetryCount = 0
+        metadataJob?.cancel()
+        metadataJob = null
+
+        val isLive = playableTrack.isLiveStream || (playableTrack.streamUrl.isNotEmpty() && playableTrack.durationSeconds <= 0)
+        val trackDurationMs = if (isLive) 0L else (playableTrack.durationSeconds * 1000L).coerceAtLeast(1000L)
         audioEngine.setExternalPosition(0L, trackDurationMs)
 
         _playbackState.update { current ->
@@ -250,8 +317,16 @@ class PlaybackManager(val context: Context) {
                 isAudioOnlyMode = false,
                 isVideoUnavailable = false,
                 playedTracksHistory = updatedHistory,
-                smartQueueProfile = profile
+                smartQueueProfile = profile,
+                isLiveStream = isLive,
+                streamMetadataTitle = null,
+                isReconnecting = false,
+                reconnectAttempt = 0
             )
+        }
+
+        if (isLive && playableTrack.streamUrl.isNotEmpty()) {
+            fetchLiveStreamMetadata(playableTrack.streamUrl)
         }
 
         // Play via Native GamaAudioEngine (handles local downloaded files or stops MediaPlayer for YouTube)
@@ -346,7 +421,9 @@ class PlaybackManager(val context: Context) {
     }
 
     fun pause() {
-        _playbackState.update { it.copy(isPlaying = false) }
+        reconnectJob?.cancel()
+        reconnectJob = null
+        _playbackState.update { it.copy(isPlaying = false, isReconnecting = false) }
         audioEngine.pause()
         playerBridge?.pauseVideo()
 
@@ -365,16 +442,61 @@ class PlaybackManager(val context: Context) {
     }
 
     fun stopPlayback() {
+        reconnectJob?.cancel()
+        reconnectJob = null
+        metadataJob?.cancel()
+        metadataJob = null
+        liveStreamRetryCount = 0
         _playbackState.update {
             it.copy(
                 isPlaying = false,
                 currentTrack = null,
-                positionMs = 0L
+                positionMs = 0L,
+                isLiveStream = false,
+                streamMetadataTitle = null,
+                isReconnecting = false,
+                reconnectAttempt = 0
             )
         }
         audioEngine.stop()
         playerBridge?.pauseVideo()
         GamaPlaybackService.stop(context)
+    }
+
+    fun updateStreamMetadata(title: String) {
+        if (title.isNotBlank()) {
+            _playbackState.update { it.copy(streamMetadataTitle = title) }
+        }
+    }
+
+    fun fetchLiveStreamMetadata(streamUrl: String) {
+        metadataJob?.cancel()
+        if (streamUrl.isBlank()) return
+        metadataJob = scope.launch(Dispatchers.IO) {
+            val meta = com.example.core.util.StreamPlaylistParser.fetchIcyStreamMetadata(streamUrl)
+            if (!meta.isNullOrBlank()) {
+                withContext(Dispatchers.Main) {
+                    updateStreamMetadata(meta)
+                }
+            }
+        }
+    }
+
+    fun retryLiveStream() {
+        val track = _playbackState.value.currentTrack ?: return
+        liveStreamRetryCount = 0
+        reconnectJob?.cancel()
+        _playbackState.update {
+            it.copy(
+                isPlaying = true,
+                isReconnecting = true,
+                reconnectAttempt = 1,
+                isBuffering = true,
+                errorMessage = "Retrying live stream..."
+            )
+        }
+        audioEngine.playTrack(track)
+        fetchLiveStreamMetadata(track.streamUrl)
     }
 
     fun seekTo(positionMs: Long) {
@@ -1103,6 +1225,10 @@ class PlaybackManager(val context: Context) {
     }
 
     fun release() {
+        reconnectJob?.cancel()
+        reconnectJob = null
+        metadataJob?.cancel()
+        metadataJob = null
         try {
             audioEngine.release()
         } catch (_: Exception) {}

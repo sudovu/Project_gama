@@ -1,5 +1,7 @@
 package com.example.core.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -97,6 +99,47 @@ fun GammaImportPlaylistDialog(
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    val m3uPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            isImportingStream = true
+            scope.launch(Dispatchers.IO) {
+                try {
+                    var displayName = "Local Playlist"
+                    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex != -1 && cursor.moveToFirst()) {
+                            displayName = cursor.getString(nameIndex) ?: displayName
+                        }
+                    }
+
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    if (inputStream != null) {
+                        val tracks = StreamPlaylistParser.parseM3uInputStream(
+                            inputStream = inputStream,
+                            baseUriOrPath = uri.toString(),
+                            fallbackTitle = displayName.substringBeforeLast("."),
+                            fallbackArtist = "Local M3U"
+                        )
+                        val playlistName = displayName.substringBeforeLast(".").ifBlank { "Local M3U Playlist" }
+                        withContext(Dispatchers.Main) {
+                            isImportingStream = false
+                            if (tracks.isNotEmpty()) {
+                                onImportConfirmed(playlistName, tracks)
+                                onDismiss()
+                            }
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) { isImportingStream = false }
+                    }
+                } catch (_: Exception) {
+                    withContext(Dispatchers.Main) { isImportingStream = false }
+                }
+            }
+        }
+    }
 
     val allRelatablePlaylists = remember {
         val tracks = CuratedFrequencies.allTracks
@@ -304,7 +347,49 @@ fun GammaImportPlaylistDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Local .m3u / .m3u8 File Picker Button
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            m3uPickerLauncher.launch(arrayOf("*/*", "audio/x-mpegurl", "application/vnd.apple.mpegurl"))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = GammaPrimary
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, GammaPrimary.copy(alpha = 0.6f)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudDownload,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "📁 Pick Local .m3u / .m3u8 File",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(modifier = Modifier.weight(1f).height(1.dp).background(GammaDivider))
+                        Text(
+                            text = " OR PASTE URL / CONTENT ",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = GammaTextMuted,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+                        Box(modifier = Modifier.weight(1f).height(1.dp).background(GammaDivider))
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     OutlinedTextField(
                         value = directLinkUrl,

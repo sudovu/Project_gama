@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, globalShortcut, shell, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, shell, Tray, Menu, nativeImage, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -152,6 +152,35 @@ ipcMain.handle('download-track', async (event, track) => {
     return { success: true, localPath: dlPath };
   } catch (e) {
     return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('open-m3u-file', async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select .m3u or .m3u8 Playlist',
+    filters: [
+      { name: 'Playlists (*.m3u, *.m3u8)', extensions: ['m3u', 'm3u8'] },
+      { name: 'All Files', extensions: ['*'] }
+    ],
+    properties: ['openFile']
+  });
+
+  if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+    return null;
+  }
+
+  const filePath = result.filePaths[0];
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return {
+      filePath,
+      fileName: path.basename(filePath),
+      dirPath: path.dirname(filePath),
+      content
+    };
+  } catch (err) {
+    return { error: err.message };
   }
 });
 

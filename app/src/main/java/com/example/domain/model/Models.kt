@@ -45,6 +45,9 @@ data class Track(
                 else -> "STEREO 320k"
             }
         }
+
+    val isLiveStream: Boolean
+        get() = (durationSeconds <= 0 && streamUrl.isNotBlank()) || codec.equals("HLS", ignoreCase = true) || codec.equals("RTSP", ignoreCase = true)
 }
 
 data class Artist(
@@ -208,7 +211,11 @@ data class PlaybackState(
     val isSleepTimerEndOfTrack: Boolean = false,
     val playbackSpeed: Float = 1.0f,
     val isAudioOnlyMode: Boolean = false,
-    val isVideoUnavailable: Boolean = false
+    val isVideoUnavailable: Boolean = false,
+    val isLiveStream: Boolean = false,
+    val streamMetadataTitle: String? = null,
+    val isReconnecting: Boolean = false,
+    val reconnectAttempt: Int = 0
 ) {
     val progress: Float
         get() = if (durationMs > 0) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
@@ -268,6 +275,10 @@ data class PlaybackState(
         if (playbackSpeed != other.playbackSpeed) return false
         if (isAudioOnlyMode != other.isAudioOnlyMode) return false
         if (isVideoUnavailable != other.isVideoUnavailable) return false
+        if (isLiveStream != other.isLiveStream) return false
+        if (streamMetadataTitle != other.streamMetadataTitle) return false
+        if (isReconnecting != other.isReconnecting) return false
+        if (reconnectAttempt != other.reconnectAttempt) return false
 
         return true
     }
@@ -298,6 +309,10 @@ data class PlaybackState(
         result = 31 * result + playbackSpeed.hashCode()
         result = 31 * result + isAudioOnlyMode.hashCode()
         result = 31 * result + isVideoUnavailable.hashCode()
+        result = 31 * result + isLiveStream.hashCode()
+        result = 31 * result + (streamMetadataTitle?.hashCode() ?: 0)
+        result = 31 * result + isReconnecting.hashCode()
+        result = 31 * result + reconnectAttempt
         return result
     }
 }

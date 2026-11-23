@@ -238,6 +238,7 @@ class GamaAudioEngine(private val context: Context) {
     private var externalDurationMs: Long = 0L
 
     var onTrackCompletedListener: (() -> Unit)? = null
+    var onPlaybackStartedListener: ((track: Track) -> Unit)? = null
     var onPlaybackErrorListener: ((track: Track?, error: String) -> Unit)? = null
 
     fun playTrack(track: Track) {
@@ -420,6 +421,7 @@ class GamaAudioEngine(private val context: Context) {
                             mp.seekTo(currentPlaybackPositionMs.toInt())
                         }
                         attachEqualizerToSession(mp.audioSessionId)
+                        currentTrack?.let { onPlaybackStartedListener?.invoke(it) }
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to start playback after prepare: ${e.message}")
                     }
@@ -452,6 +454,7 @@ class GamaAudioEngine(private val context: Context) {
                         start()
                         isEnginePlaying.set(true)
                         attachEqualizerToSession(audioSessionId)
+                        currentTrack?.let { onPlaybackStartedListener?.invoke(it) }
                     } catch (e: Exception) {
                         Log.e(TAG, "Local file prepare failed: ${e.message}", e)
                         onPlaybackErrorListener?.invoke(currentTrack, e.message ?: "Prepare failed")

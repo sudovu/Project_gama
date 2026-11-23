@@ -208,19 +208,143 @@ object StreamPlaylistParser {
         }
     }
 
-    private fun resolveUrl(baseUrl: String?, relativeOrAbsolute: String): String {
-        if (relativeOrAbsolute.startsWith("http://", ignoreCase = true) ||
-            relativeOrAbsolute.startsWith("https://", ignoreCase = true) ||
-            relativeOrAbsolute.startsWith("rtsp://", ignoreCase = true)
+    /**
+     * Resolves local file paths or remote URLs, handling both relative filesystem entries
+     * and HTTP/HTTPS/RTSP base URLs.
+     */
+    fun resolveUrl(baseUrl: String?, relativeOrAbsolute: String): String {
+        val trimmed = relativeOrAbsolute.trim()
+        if (trimmed.startsWith("http://", ignoreCase = true) ||
+            trimmed.startsWith("https://", ignoreCase = true) ||
+            trimmed.startsWith("rtsp://", ignoreCase = true) ||
+            trimmed.startsWith("content://", ignoreCase = true) ||
+            trimmed.startsWith("file://", ignoreCase = true)
         ) {
-            return relativeOrAbsolute
+            return trimmed
         }
-        if (baseUrl == null) return relativeOrAbsolute
+
+        // Direct absolute path on Unix/Android or Windows
+        if (trimmed.startsWith("/") || trimmed.matches(Regex("^[a-zA-Z]:[/\\\\].*"))) {
+            return trimmed
+        }
+
+        if (baseUrl.isNullOrBlank()) return trimmed
+
         return try {
-            val baseUri = URI(baseUrl)
-            baseUri.resolve(relativeOrAbsolute).toString()
+            if (baseUrl.startsWith("http://", ignoreCase = true) ||
+                baseUrl.startsWith("https://", ignoreCase = true) ||
+                baseUrl.startsWith("rtsp://", ignoreCase = true)
+            ) {
+                URI(baseUrl).resolve(trimmed).toString()
+            } else if (baseUrl.startsWith("file://", ignoreCase = true)) {
+                val fileUri = URI(baseUrl)
+                val parent = File(fileUri.path).parentFile
+                if (parent != null) {
+                    val resolved = File(parent, trimmed)
+                    "file://${resolved.absolutePath.replace('\\', '/')}"
+                } else {
+                    fileUri.resolve(trimmed).toString()
+                }
+            } else {
+                // Local filesystem path
+                val parent = File(baseUrl).parentFile
+                if (parent != null) {
+                    File(parent, trimmed).absolutePath
+                } else {
+                    trimmed
+                }
+            }
         } catch (_: Exception) {
-            relativeOrAbsolute
+            trimmed
+        }
+    }
+
+    /**
+     * Parses an M3U or M3U8 playlist file from local storage.
+     */
+    fun parseM3uFile(
+        file: File,
+        fallbackTitle: String = "",
+        fallbackArtist: String = ""
+    ): List<Track> {
+        if (!file.exists() || !file.isFile) return emptyList()
+        val text = file.readText(Charsets.UTF_8)
+        val title = fallbackTitle.ifBlank { file.nameWithoutExtension.replace('_', ' ') }
+        return parseM3uContent(
+            content = text,
+            baseUrl = file.absolutePath,
+            fallbackTitle = title,
+            fallbackArtist = fallbackArtist
+        )
+    }
+
+    /**
+     * Parses an M3U or M3U8 playlist from an InputStream (e.g. Android ContentResolver).
+     */
+    fun parseM3uInputStream(
+        inputStream: java.io.InputStream,
+        baseUriOrPath: String? = null,
+        fallbackTitle: String = "",
+        fallbackArtist: String = ""
+    ): List<Track> {
+        val text = inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        return parseM3uContent(
+            content = text,
+            baseUrl = baseUriOrPath,
+            fallbackTitle = fallbackTitle,
+            fallbackArtist = fallbackArtist
+        )
+    }
+
+    /**
+     * Fetches live ICY metadata (e.g. Shoutcast/Icecast StreamTitle) from a streaming URL.
+     */
+    fun fetchIcyStreamMetadata(streamUrl: String): String? {
+        if (!streamUrl.startsWith("http://", ignoreCase = true) && !streamUrl.startsWith("https://", ignoreCase = true)) {
+            return null
+        }
+        return try {
+            val url = URL(streamUrl)
+            val conn = url.openConnection() as HttpURLConnection
+            conn.connectTimeout = 3500
+            conn.readTimeout = 4000
+            conn.setRequestProperty("Icy-MetaData", "1")
+            conn.setRequestProperty("User-Agent", "GAMA/2.3 (Android; Cybernetic Live Audio Engine)")
+            conn.connect()
+
+            val icyName = conn.getHeaderField("icy-name")
+            val metaInt = conn.getHeaderField("icy-metaint")?.toIntOrNull() ?: 0
+
+            var streamTitle: String? = null
+            if (metaInt in 1..65536) {
+                conn.inputStream.use { stream ->
+                    var skipped = 0L
+                    while (skipped < metaInt) {
+                        val skip = stream.skip(metaInt - skipped)
+                        if (skip <= 0) break
+                        skipped += skip
+                    }
+                    val metaLengthByte = stream.read()
+                    if (metaLengthByte > 0) {
+                        val metaLength = metaLengthByte * 16
+                        val metaBytes = ByteArray(metaLength)
+                        var read = 0
+                        while (read < metaLength) {
+                            val r = stream.read(metaBytes, read, metaLength - read)
+                            if (r <= 0) break
+                            read += r
+                        }
+                        val metaString = String(metaBytes, 0, read, Charsets.UTF_8)
+                        val titleMatch = Regex("StreamTitle='([^']*)';").find(metaString)
+                        streamTitle = titleMatch?.groupValues?.getOrNull(1)?.trim()
+                    }
+                }
+            } else {
+                conn.disconnect()
+            }
+            if (!streamTitle.isNullOrBlank()) streamTitle else icyName?.trim()
+        } catch (_: Exception) {
+            null
         }
     }
 

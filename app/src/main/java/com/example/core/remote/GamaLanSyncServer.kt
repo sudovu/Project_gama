@@ -573,6 +573,10 @@ object GamaLanSyncServer {
             put("playbackSpeed", state.playbackSpeed)
             put("serverIp", serverIp)
             put("serverPort", DEFAULT_PORT)
+            put("isLiveStream", state.isLiveStream)
+            put("streamMetadata", state.streamMetadataTitle ?: "")
+            put("isReconnecting", state.isReconnecting)
+            put("reconnectAttempt", state.reconnectAttempt)
 
             // Current Track Details
             if (track != null) {
@@ -620,6 +624,7 @@ object GamaLanSyncServer {
                     "pause" -> if (pm.playbackState.value.isPlaying) pm.togglePlayPause()
                     "next", "skip_next" -> pm.skipNext()
                     "prev", "previous", "skip_prev" -> pm.skipPrevious()
+                    "retry_stream", "reconnect_stream" -> pm.retryLiveStream()
                     "seek" -> {
                         val pos = json.optLong("positionMs", 0L)
                         pm.seekTo(pos)
