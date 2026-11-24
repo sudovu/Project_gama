@@ -1,5 +1,6 @@
 package com.example.core.util
 
+import android.content.Context
 import com.example.domain.model.Track
 import org.json.JSONArray
 import org.json.JSONObject
@@ -362,6 +363,127 @@ object StreamPlaylistParser {
             }
         } catch (_: Exception) {
             null
+        }
+    }
+
+    // ==========================================
+    // STREAM FAVORITES & RECENT HISTORY PERSISTENCE
+    // ==========================================
+    private const val PREFS_STREAMS = "gama_streams_store"
+    private const val KEY_FAVORITES = "favorite_streams_json"
+    private const val KEY_RECENTS = "recent_streams_json"
+    private const val MAX_RECENTS = 25
+
+    fun getFavoriteStreams(context: Context): List<Track> {
+        return try {
+            val prefs = context.getSharedPreferences(PREFS_STREAMS, Context.MODE_PRIVATE)
+            val jsonStr = prefs.getString(KEY_FAVORITES, null) ?: return emptyList()
+            deserializeTrackList(jsonStr)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun isStreamFavorite(context: Context, streamUrl: String): Boolean {
+        if (streamUrl.isBlank()) return false
+        val favorites = getFavoriteStreams(context)
+        return favorites.any { it.streamUrl.equals(streamUrl, ignoreCase = true) }
+    }
+
+    fun toggleFavoriteStream(context: Context, track: Track): Boolean {
+        if (track.streamUrl.isBlank()) return false
+        return try {
+            val prefs = context.getSharedPreferences(PREFS_STREAMS, Context.MODE_PRIVATE)
+            val current = getFavoriteStreams(context).toMutableList()
+            val index = current.indexOfFirst { it.streamUrl.equals(track.streamUrl, ignoreCase = true) }
+            val isNowFavorite = if (index != -1) {
+                current.removeAt(index)
+                false
+            } else {
+                current.add(0, track)
+                true
+            }
+            prefs.edit().putString(KEY_FAVORITES, serializeTrackList(current)).apply()
+            isNowFavorite
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun getRecentStreams(context: Context): List<Track> {
+        return try {
+            val prefs = context.getSharedPreferences(PREFS_STREAMS, Context.MODE_PRIVATE)
+            val jsonStr = prefs.getString(KEY_RECENTS, null) ?: return emptyList()
+            deserializeTrackList(jsonStr)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun recordRecentStream(context: Context, track: Track) {
+        if (track.streamUrl.isBlank()) return
+        try {
+            val prefs = context.getSharedPreferences(PREFS_STREAMS, Context.MODE_PRIVATE)
+            val current = getRecentStreams(context).toMutableList()
+            current.removeAll { it.streamUrl.equals(track.streamUrl, ignoreCase = true) }
+            current.add(0, track)
+            if (current.size > MAX_RECENTS) {
+                current.subList(MAX_RECENTS, current.size).clear()
+            }
+            prefs.edit().putString(KEY_RECENTS, serializeTrackList(current)).apply()
+        } catch (_: Exception) {}
+    }
+
+    fun clearRecentStreams(context: Context) {
+        try {
+            context.getSharedPreferences(PREFS_STREAMS, Context.MODE_PRIVATE)
+                .edit().remove(KEY_RECENTS).apply()
+        } catch (_: Exception) {}
+    }
+
+    fun serializeTrackList(tracks: List<Track>): String {
+        val array = JSONArray()
+        for (t in tracks) {
+            array.put(
+                JSONObject().apply {
+                    put("id", t.id)
+                    put("title", t.title)
+                    put("artist", t.artist)
+                    put("durationSeconds", t.durationSeconds)
+                    put("streamUrl", t.streamUrl)
+                    put("codec", t.codec)
+                    put("source", t.source)
+                }
+            )
+        }
+        return array.toString()
+    }
+
+    fun deserializeTrackList(jsonStr: String): List<Track> {
+        return try {
+            val array = JSONArray(jsonStr)
+            val list = mutableListOf<Track>()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val streamUrl = obj.optString("streamUrl", "")
+                if (streamUrl.isNotBlank()) {
+                    list.add(
+                        Track(
+                            id = obj.optString("id", "stream_" + UUID.randomUUID().toString().take(8)),
+                            title = obj.optString("title", "Live Stream"),
+                            artist = obj.optString("artist", "Stream"),
+                            durationSeconds = obj.optInt("durationSeconds", 0),
+                            streamUrl = streamUrl,
+                            codec = obj.optString("codec", extractCodecFromUrl(streamUrl)),
+                            source = STREAM_SOURCE,
+                            frequencyHz = 432
+                        )
+                    )
+                }
+            }
+            list
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 

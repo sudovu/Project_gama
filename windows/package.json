@@ -1,6 +1,6 @@
 {
     "name":  "gama-music-windows",
-    "version":  "1.2.2",
+    "version":  "1.2.3",
     "description":  "GAMA - Cybernetic Music Frequency Platform for Windows Desktop",
     "main":  "src/main/main.js",
     "author":  "VHUWON MATHERS",

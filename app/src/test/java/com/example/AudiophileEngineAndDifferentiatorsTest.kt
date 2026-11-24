@@ -520,4 +520,42 @@ class AudiophileEngineAndDifferentiatorsTest {
         assertEquals(8000L, pm.computeBackoffMs(5)) // Capped at 8s
         assertEquals(8000L, pm.computeBackoffMs(10)) // Capped at 8s
     }
+
+    @Test
+    fun testStreamSerializationAndDeserialization() {
+        val parser = com.example.core.util.StreamPlaylistParser
+        val sampleStreams = listOf(
+            Track(
+                id = "stream_fav_01",
+                title = "Cyber Ambient Chill",
+                artist = "SomaFM",
+                durationSeconds = 0,
+                streamUrl = "https://somafm.com/groovesalad130.pls",
+                codec = "MP3",
+                source = "stream"
+            ),
+            Track(
+                id = "stream_fav_02",
+                title = "DEF CON Radio",
+                artist = "DEF CON",
+                durationSeconds = 0,
+                streamUrl = "https://somafm.com/defcon.pls",
+                codec = "AAC",
+                source = "stream"
+            )
+        )
+
+        val json = parser.serializeTrackList(sampleStreams)
+        assertTrue(json.contains("Cyber Ambient Chill"))
+        assertTrue(json.contains("defcon"))
+
+        val deserialized = parser.deserializeTrackList(json)
+        assertEquals(2, deserialized.size)
+        assertEquals("Cyber Ambient Chill", deserialized[0].title)
+        assertEquals("https://somafm.com/groovesalad130.pls", deserialized[0].streamUrl)
+        assertEquals("DEF CON Radio", deserialized[1].title)
+        assertEquals("https://somafm.com/defcon.pls", deserialized[1].streamUrl)
+        assertTrue(deserialized[0].isLiveStream)
+        assertTrue(deserialized[1].isLiveStream)
+    }
 }

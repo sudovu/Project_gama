@@ -367,6 +367,13 @@ class PlaybackManager(val context: Context) {
 
         if (isLive && playableTrack.streamUrl.isNotEmpty()) {
             fetchLiveStreamMetadata(playableTrack.streamUrl)
+            scope.launch(Dispatchers.IO) {
+                com.example.core.util.StreamPlaylistParser.recordRecentStream(context, playableTrack)
+            }
+        } else if (playableTrack.streamUrl.isNotEmpty() || playableTrack.source == "stream") {
+            scope.launch(Dispatchers.IO) {
+                com.example.core.util.StreamPlaylistParser.recordRecentStream(context, playableTrack)
+            }
         }
 
         // Play via Native GamaAudioEngine (handles local downloaded files or stops MediaPlayer for YouTube)

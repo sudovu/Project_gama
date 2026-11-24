@@ -4,7 +4,7 @@ import {
   Compass, Search, Library, Sliders, User, Download, CheckCircle, Heart,
   Maximize2, Minimize2, Radio, Activity, ExternalLink, ShieldCheck, X,
   Wifi, WifiOff, Smartphone, Laptop, AlertTriangle, AlertCircle, RefreshCw,
-  Mic, Sparkles, Film, FileText, Music, Layers, BarChart2
+  Mic, Sparkles, Film, FileText, Music, Layers, BarChart2, Star, History
 } from 'lucide-react';
 import { INITIAL_TRACKS, GENRES } from './mockData';
 import profilePic from './assets/img_vhuwon_profile.jpg';
@@ -85,6 +85,16 @@ export default function App() {
   const [importedStreams, setImportedStreams] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('gama_imported_streams') || '[]');
+    } catch { return []; }
+  });
+  const [favoriteStreams, setFavoriteStreams] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('gama_favorite_streams') || '[]');
+    } catch { return []; }
+  });
+  const [recentStreams, setRecentStreams] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('gama_recent_streams') || '[]');
     } catch { return []; }
   });
   const lanSocketRef = useRef(null);
@@ -252,6 +262,38 @@ export default function App() {
     }, backoffMs);
   };
 
+  const toggleFavoriteStream = (track) => {
+    if (!track?.streamUrl) return;
+    const isFav = favoriteStreams.some(s => s.streamUrl === track.streamUrl);
+    let updated;
+    if (isFav) {
+      updated = favoriteStreams.filter(s => s.streamUrl !== track.streamUrl);
+    } else {
+      updated = [track, ...favoriteStreams];
+    }
+    setFavoriteStreams(updated);
+    try {
+      localStorage.setItem('gama_favorite_streams', JSON.stringify(updated.slice(0, 50)));
+    } catch {}
+  };
+
+  const recordRecentStream = (track) => {
+    if (!track?.streamUrl) return;
+    const filtered = recentStreams.filter(s => s.streamUrl !== track.streamUrl);
+    const updated = [track, ...filtered].slice(0, 25);
+    setRecentStreams(updated);
+    try {
+      localStorage.setItem('gama_recent_streams', JSON.stringify(updated));
+    } catch {}
+  };
+
+  const clearRecentStreams = () => {
+    setRecentStreams([]);
+    try {
+      localStorage.removeItem('gama_recent_streams');
+    } catch {}
+  };
+
   const handleImportStream = (urlToImport = streamInputUrl, titleToImport = streamInputTitle) => {
     const url = urlToImport.trim();
     if (!url) return;
@@ -273,6 +315,7 @@ export default function App() {
       localStorage.setItem('gama_imported_streams', JSON.stringify(updated.slice(0, 30)));
     } catch {}
 
+    recordRecentStream(newTrack);
     playTrack(newTrack);
     setStreamInputUrl('');
     setStreamInputTitle('');
@@ -802,6 +845,10 @@ export default function App() {
     setIsReconnectingStream(false);
     setReconnectAttempt(0);
     setStreamMetadata('');
+
+    if (track.streamUrl || track.source === 'stream') {
+      recordRecentStream(track);
+    }
 
     // If LAN sync is connected, command the phone to play track
     if (lanConnected && sendLanCommand('play_track', { trackId: track.id, title: track.title, streamUrl: track.streamUrl })) {
@@ -1382,6 +1429,95 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+
+                {/* Favorite Streams Section */}
+                {favoriteStreams.length > 0 && (
+                  <div className="pt-2 border-t border-slate-800/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-300 font-mono flex items-center gap-1.5">
+                        <Star className="w-3.5 h-3.5 text-gammaCyan fill-gammaCyan" />
+                        <span>FAVORITE STREAMS ({favoriteStreams.length})</span>
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {favoriteStreams.map((st) => (
+                        <div
+                          key={st.streamUrl}
+                          className="p-2 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center justify-between"
+                        >
+                          <div className="flex items-center space-x-2 min-w-0 pr-2">
+                            <button
+                              onClick={() => toggleFavoriteStream(st)}
+                              title="Remove from favorites"
+                              className="text-gammaCyan hover:text-slate-400 p-1"
+                            >
+                              <Star className="w-3.5 h-3.5 fill-gammaCyan" />
+                            </button>
+                            <div className="truncate">
+                              <p className="text-xs font-bold text-slate-200 truncate">{st.title}</p>
+                              <p className="text-[10px] text-slate-500 font-mono truncate">{st.streamUrl}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => playTrack(st)}
+                            className="text-[11px] px-2.5 py-1 rounded bg-gammaCyan/20 hover:bg-gammaCyan text-gammaCyan hover:text-black font-bold transition-colors font-mono shrink-0"
+                          >
+                            ▶ Play
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recent Stream History Section */}
+                {recentStreams.length > 0 && (
+                  <div className="pt-2 border-t border-slate-800/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-300 font-mono flex items-center gap-1.5">
+                        <History className="w-3.5 h-3.5 text-slate-400" />
+                        <span>RECENT STREAMS ({recentStreams.length})</span>
+                      </span>
+                      <button
+                        onClick={clearRecentStreams}
+                        className="text-[10px] text-slate-500 hover:text-rose-400 font-mono transition-colors"
+                      >
+                        Clear History
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {recentStreams.map((st) => {
+                        const isFav = favoriteStreams.some(s => s.streamUrl === st.streamUrl);
+                        return (
+                          <div
+                            key={st.streamUrl}
+                            className="p-2 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center justify-between"
+                          >
+                            <div className="flex items-center space-x-2 min-w-0 pr-2">
+                              <button
+                                onClick={() => toggleFavoriteStream(st)}
+                                title={isFav ? "Remove from favorites" : "Add to favorites"}
+                                className={`p-1 transition-colors ${isFav ? 'text-gammaCyan' : 'text-slate-600 hover:text-gammaCyan'}`}
+                              >
+                                <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-gammaCyan' : ''}`} />
+                              </button>
+                              <div className="truncate">
+                                <p className="text-xs font-bold text-slate-200 truncate">{st.title}</p>
+                                <p className="text-[10px] text-slate-500 font-mono truncate">{st.streamUrl}</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => playTrack(st)}
+                              className="text-[11px] px-2.5 py-1 rounded bg-gammaCyan/20 hover:bg-gammaCyan text-gammaCyan hover:text-black font-bold transition-colors font-mono shrink-0"
+                            >
+                              ▶ Play
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <h3 className="text-xl font-bold">Search &amp; YouTube Streaming</h3>
@@ -1850,11 +1986,20 @@ export default function App() {
           <div className="w-full flex items-center space-x-3 text-[11px] font-mono text-slate-400">
             <span>{formatTime(currentTime)}</span>
             {(currentTrack.source === 'stream' || currentTrack.streamUrl) && (!duration || duration <= 0) ? (
-              <div className="flex-1 h-3 bg-slate-900/80 rounded-lg overflow-hidden relative border border-rose-500/30">
-                <div className="absolute inset-0 bg-gradient-to-r from-gammaCyan via-rose-500 to-gammaViolet animate-pulse opacity-80"></div>
-                <div className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white tracking-widest font-mono">
-                  LIVE STREAMING • BUFFER RESILIENT
+              <div className="flex-1 flex items-center space-x-2">
+                <div className="flex-1 h-3 bg-slate-900/80 rounded-lg overflow-hidden relative border border-rose-500/30">
+                  <div className="absolute inset-0 bg-gradient-to-r from-gammaCyan via-rose-500 to-gammaViolet animate-pulse opacity-80"></div>
+                  <div className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white tracking-widest font-mono">
+                    LIVE STREAMING • BUFFER RESILIENT
+                  </div>
                 </div>
+                <button
+                  onClick={() => toggleFavoriteStream(currentTrack)}
+                  title={favoriteStreams.some(s => s.streamUrl === currentTrack.streamUrl) ? "Unfavorite stream" : "Favorite stream"}
+                  className="p-1 text-slate-400 hover:text-gammaCyan transition-colors shrink-0"
+                >
+                  <Star className={`w-3.5 h-3.5 ${favoriteStreams.some(s => s.streamUrl === currentTrack.streamUrl) ? 'text-gammaCyan fill-gammaCyan' : ''}`} />
+                </button>
               </div>
             ) : (
               <div className="flex-1 flex flex-col justify-center space-y-1 group py-1">

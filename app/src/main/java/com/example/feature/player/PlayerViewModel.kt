@@ -230,6 +230,9 @@ class PlayerViewModel(
         val current = playbackManager.playbackState.value.currentTrack ?: return
         viewModelScope.launch {
             repository.toggleFavorite(current)
+            if (current.streamUrl.isNotEmpty()) {
+                com.example.core.util.StreamPlaylistParser.toggleFavoriteStream(playbackManager.context, current)
+            }
         }
     }
 

@@ -23,12 +23,18 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -96,9 +102,15 @@ fun GammaImportPlaylistDialog(
     var directLinkUrl by remember { mutableStateOf("") }
     var directLinkTitle by remember { mutableStateOf("") }
     var isImportingStream by remember { mutableStateOf(false) }
-
-    val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var favoriteStreams by remember {
+        mutableStateOf(StreamPlaylistParser.getFavoriteStreams(context))
+    }
+    var recentStreams by remember {
+        mutableStateOf(StreamPlaylistParser.getRecentStreams(context))
+    }
 
     val m3uPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -330,123 +342,376 @@ fun GammaImportPlaylistDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 if (selectedPlatform == ImportPlatform.LINK) {
-                    // Direct stream URL or M3U/M3U8 playlist custom input
-                    OutlinedTextField(
-                        value = directLinkTitle,
-                        onValueChange = { directLinkTitle = it },
-                        label = { Text("Playlist or Stream Title (Optional)") },
-                        placeholder = { Text("e.g. Cyberpunk Chill Radio, Ambient Waves") },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = GammaPrimary,
-                            unfocusedBorderColor = GammaDivider,
-                            focusedTextColor = GammaTextPrimary,
-                            unfocusedTextColor = GammaTextPrimary
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Local .m3u / .m3u8 File Picker Button
-                    androidx.compose.material3.OutlinedButton(
-                        onClick = {
-                            m3uPickerLauncher.launch(arrayOf("*/*", "audio/x-mpegurl", "application/vnd.apple.mpegurl"))
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = GammaPrimary
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, GammaPrimary.copy(alpha = 0.6f)),
-                        shape = RoundedCornerShape(12.dp)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 440.dp)
+                            .verticalScroll(rememberScrollState())
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CloudDownload,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                        // Direct stream URL or M3U/M3U8 playlist custom input
+                        OutlinedTextField(
+                            value = directLinkTitle,
+                            onValueChange = { directLinkTitle = it },
+                            label = { Text("Playlist or Stream Title (Optional)") },
+                            placeholder = { Text("e.g. Cyberpunk Chill Radio, Ambient Waves") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GammaPrimary,
+                                unfocusedBorderColor = GammaDivider,
+                                focusedTextColor = GammaTextPrimary,
+                                unfocusedTextColor = GammaTextPrimary
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "📁 Pick Local .m3u / .m3u8 File",
-                            fontWeight = FontWeight.SemiBold
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Local .m3u / .m3u8 File Picker Button
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = {
+                                m3uPickerLauncher.launch(arrayOf("*/*", "audio/x-mpegurl", "application/vnd.apple.mpegurl"))
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = GammaPrimary
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, GammaPrimary.copy(alpha = 0.6f)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CloudDownload,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "📁 Pick Local .m3u / .m3u8 File",
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(modifier = Modifier.weight(1f).height(1.dp).background(GammaDivider))
+                            Text(
+                                text = " OR PASTE URL / CONTENT ",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = GammaTextMuted,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            )
+                            Box(modifier = Modifier.weight(1f).height(1.dp).background(GammaDivider))
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = directLinkUrl,
+                            onValueChange = { directLinkUrl = it },
+                            label = { Text("Stream URL, M3U/M3U8 Link or Content") },
+                            placeholder = { Text("https://...stream.mp3, .m3u8, or paste playlist") },
+                            leadingIcon = {
+                                Icon(Icons.Default.Link, contentDescription = null, tint = GammaPrimary)
+                            },
+                            singleLine = false,
+                            maxLines = 4,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GammaPrimary,
+                                unfocusedBorderColor = GammaDivider,
+                                focusedTextColor = GammaTextPrimary,
+                                unfocusedTextColor = GammaTextPrimary
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
                         )
-                    }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(modifier = Modifier.weight(1f).height(1.dp).background(GammaDivider))
-                        Text(
-                            text = " OR PASTE URL / CONTENT ",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = GammaTextMuted,
-                            modifier = Modifier.padding(horizontal = 8.dp)
-                        )
-                        Box(modifier = Modifier.weight(1f).height(1.dp).background(GammaDivider))
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    OutlinedTextField(
-                        value = directLinkUrl,
-                        onValueChange = { directLinkUrl = it },
-                        label = { Text("Stream URL, M3U/M3U8 Link or Content") },
-                        placeholder = { Text("https://...stream.mp3, .m3u8, or paste playlist") },
-                        leadingIcon = {
-                            Icon(Icons.Default.Link, contentDescription = null, tint = GammaPrimary)
-                        },
-                        singleLine = false,
-                        maxLines = 4,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = GammaPrimary,
-                            unfocusedBorderColor = GammaDivider,
-                            focusedTextColor = GammaTextPrimary,
-                            unfocusedTextColor = GammaTextPrimary
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Button(
-                        onClick = {
-                            val url = directLinkUrl.trim()
-                            if (url.isNotEmpty()) {
-                                isImportingStream = true
-                                scope.launch(Dispatchers.IO) {
-                                    val parsedTracks = StreamPlaylistParser.parseStreamOrPlaylist(
-                                        input = url,
-                                        fallbackTitle = directLinkTitle.trim(),
-                                        cacheDir = context.cacheDir
-                                    ).ifEmpty {
-                                        CuratedFrequencies.allTracks.take(5)
+                        Button(
+                            onClick = {
+                                val url = directLinkUrl.trim()
+                                if (url.isNotEmpty()) {
+                                    isImportingStream = true
+                                    scope.launch(Dispatchers.IO) {
+                                        val parsedTracks = StreamPlaylistParser.parseStreamOrPlaylist(
+                                            input = url,
+                                            fallbackTitle = directLinkTitle.trim(),
+                                            cacheDir = context.cacheDir
+                                        ).ifEmpty {
+                                            CuratedFrequencies.allTracks.take(5)
+                                        }
+                                        val name = directLinkTitle.trim().ifEmpty {
+                                            if (parsedTracks.size == 1) parsedTracks[0].title else "Imported Stream Playlist"
+                                        }
+                                        withContext(Dispatchers.Main) {
+                                            isImportingStream = false
+                                            onImportConfirmed(name, parsedTracks)
+                                            onDismiss()
+                                        }
                                     }
-                                    val name = directLinkTitle.trim().ifEmpty {
-                                        if (parsedTracks.size == 1) parsedTracks[0].title else "Imported Stream Playlist"
-                                    }
-                                    withContext(Dispatchers.Main) {
-                                        isImportingStream = false
-                                        onImportConfirmed(name, parsedTracks)
-                                        onDismiss()
+                                }
+                            },
+                            enabled = directLinkUrl.isNotBlank() && !isImportingStream,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = GammaPrimary),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = if (isImportingStream) "Parsing Stream / Playlist..." else "Import Stream / Playlist",
+                                color = GammaSurfaceElevated,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Quick Stream Presets
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "PRESET RADIO STREAMS",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                letterSpacing = 1.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = GammaTextMuted
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(GammaSurfaceHighlight)
+                                        .clickable {
+                                            directLinkTitle = "SomaFM Groove Salad"
+                                            directLinkUrl = "https://somafm.com/groovesalad130.pls"
+                                        }
+                                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                                ) {
+                                    Text("Groove Salad", fontSize = 11.sp, color = GammaPrimary, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(GammaSurfaceHighlight)
+                                        .clickable {
+                                            directLinkTitle = "SomaFM DEF CON"
+                                            directLinkUrl = "https://somafm.com/defcon.pls"
+                                        }
+                                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                                ) {
+                                    Text("DEF CON Radio", fontSize = 11.sp, color = GammaPrimary, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(GammaSurfaceHighlight)
+                                        .clickable {
+                                            directLinkTitle = "SomaFM Drone Zone"
+                                            directLinkUrl = "https://somafm.com/dronezone130.pls"
+                                        }
+                                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                                ) {
+                                    Text("Drone Zone", fontSize = 11.sp, color = GammaPrimary, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                        }
+
+                        // Favorite Streams Section
+                        if (favoriteStreams.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Star,
+                                        contentDescription = null,
+                                        tint = GammaPrimary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "FAVORITE STREAMS (${favoriteStreams.size})",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            letterSpacing = 1.sp,
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        color = GammaTextPrimary
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                favoriteStreams.forEach { streamTrack ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(GammaSurfaceHighlight)
+                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        IconButton(
+                                            onClick = {
+                                                StreamPlaylistParser.toggleFavoriteStream(context, streamTrack)
+                                                favoriteStreams = StreamPlaylistParser.getFavoriteStreams(context)
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Star,
+                                                contentDescription = "Unstar",
+                                                tint = GammaPrimary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = streamTrack.title,
+                                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                                color = GammaTextPrimary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = streamTrack.artist.ifBlank { streamTrack.codec },
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = GammaTextMuted,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Button(
+                                            onClick = {
+                                                onImportConfirmed(streamTrack.title, listOf(streamTrack))
+                                                onDismiss()
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = GammaPrimary.copy(alpha = 0.2f)),
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(28.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.PlayArrow,
+                                                contentDescription = "Play",
+                                                tint = GammaPrimary,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(2.dp))
+                                            Text("Play", color = GammaPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                 }
                             }
-                        },
-                        enabled = directLinkUrl.isNotBlank() && !isImportingStream,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = GammaPrimary),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = if (isImportingStream) "Parsing Stream / Playlist..." else "Import Stream / Playlist",
-                            color = GammaSurfaceElevated,
-                            fontWeight = FontWeight.Bold
-                        )
+                        }
+
+                        // Recent Stream History Section
+                        if (recentStreams.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "RECENT STREAM HISTORY (${recentStreams.size})",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        letterSpacing = 1.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = GammaTextMuted
+                                )
+                                Text(
+                                    text = "Clear",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = GammaPrimary,
+                                    modifier = Modifier.clickable {
+                                        StreamPlaylistParser.clearRecentStreams(context)
+                                        recentStreams = emptyList()
+                                    }
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                recentStreams.forEach { streamTrack ->
+                                    val isFav = favoriteStreams.any { it.streamUrl.equals(streamTrack.streamUrl, ignoreCase = true) }
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(GammaSurfaceHighlight)
+                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        IconButton(
+                                            onClick = {
+                                                StreamPlaylistParser.toggleFavoriteStream(context, streamTrack)
+                                                favoriteStreams = StreamPlaylistParser.getFavoriteStreams(context)
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isFav) Icons.Default.Star else Icons.Default.StarBorder,
+                                                contentDescription = if (isFav) "Unstar" else "Star",
+                                                tint = if (isFav) GammaPrimary else GammaTextMuted,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = streamTrack.title,
+                                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                                color = GammaTextPrimary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = streamTrack.artist.ifBlank { streamTrack.codec },
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = GammaTextMuted,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Button(
+                                            onClick = {
+                                                onImportConfirmed(streamTrack.title, listOf(streamTrack))
+                                                onDismiss()
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = GammaPrimary.copy(alpha = 0.2f)),
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(28.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.PlayArrow,
+                                                contentDescription = "Play",
+                                                tint = GammaPrimary,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(2.dp))
+                                            Text("Play", color = GammaPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 } else {
                     // Search Bar for relatable playlists
