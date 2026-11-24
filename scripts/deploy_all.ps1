@@ -271,7 +271,7 @@ if (Test-Path $WebsiteRepoPath) {
 # 6B: GAMA Git Repository (Project_gama)
 try {
     git fetch origin main
-    git add app/ windows/ scripts/ README.md
+    git add app/ windows/ ios/ scripts/ README.md
     $gamaCommitMsg = if ($ReleaseNotes) {
         "feat(release): v$targetVersionName (code $targetCode) - $ReleaseNotes"
     } else {

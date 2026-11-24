@@ -75,11 +75,9 @@ class PlayerViewModel(
                     _lyricsOffsetMs.value = 0L
                     if (track != null) {
                         fetchLyricsForTrack(track)
-                        extractAmbientArtworkColor(track)
                     } else {
                         _lyricsState.value = LyricsUiState.Empty
                         lastFetchedTrackId = null
-                        com.example.ui.theme.GammaThemeManager.clearAmbientArtworkColor()
                     }
                 }
         }
@@ -173,22 +171,8 @@ class PlayerViewModel(
     }
 
     private fun extractAmbientArtworkColor(track: Track) {
-        val artUrl = if (track.artworkUrl.isNotBlank()) {
-            track.artworkUrl
-        } else if (track.youtubeVideoId.isNotBlank()) {
-            "https://img.youtube.com/vi/${track.youtubeVideoId}/hqdefault.jpg"
-        } else {
-            ""
-        }
-        val source = if (artUrl.isNotBlank()) artUrl else track.localAudioUri
-        if (source.isNotBlank()) {
-            viewModelScope.launch {
-                val color = com.example.ui.theme.DynamicPaletteExtractor.extractFromUrlOrPath(playbackManager.context, source)
-                if (color != null) {
-                    com.example.ui.theme.GammaThemeManager.setAmbientArtworkColor(color)
-                }
-            }
-        }
+        // Strict Color Theme Lock: Disabled. Track changes and album art must NEVER trigger
+        // dynamic palette changes or override the active theme / color harmonics.
     }
 
     fun togglePlayPause() = playbackManager.togglePlayPause()

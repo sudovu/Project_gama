@@ -159,13 +159,15 @@ object GammaThemeManager {
     var customAccentColor by mutableStateOf<Color?>(null)
         private set
 
-    var isAmbientThemingEnabled by mutableStateOf(true)
+    // Strict Color Theme Lock: Disabled automatic ambient artwork theming so theme & color harmonics never shift on playback
+    var isAmbientThemingEnabled by mutableStateOf(false)
 
     var ambientArtworkAccent by mutableStateOf<Color?>(null)
         private set
 
     fun setAmbientArtworkColor(color: Color?) {
-        ambientArtworkAccent = color
+        // Strict Theme Lock: No-op. Color themes and harmonics must NEVER change automatically when starting,
+        // switching, or playing tracks or album art. Colors may change ONLY when explicitly selected via Theme / Color Harmonics controls.
     }
 
     fun clearAmbientArtworkColor() {
@@ -236,11 +238,7 @@ val GammaSurfaceGlass: Color
     get() = GammaThemeManager.selectedThemePreset.surfaceGlassColor
 
 private val activeAccent: Color?
-    get() = if (GammaThemeManager.isAmbientThemingEnabled && GammaThemeManager.ambientArtworkAccent != null) {
-        GammaThemeManager.ambientArtworkAccent
-    } else {
-        GammaThemeManager.customAccentColor
-    }
+    get() = GammaThemeManager.customAccentColor
 
 val GammaPrimary: Color
     get() = activeAccent ?: GammaThemeManager.selectedThemePreset.primaryColor

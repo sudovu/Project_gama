@@ -34,8 +34,29 @@ export default function App() {
   const [eqGains, setEqGains] = useState([0, 0, 0, 0, 0]);
   const [eqPreset, setEqPreset] = useState('Flat');
 
-  // Dynamic Album Palette Theming
-  const [dynamicColor, setDynamicColor] = useState({ hex: '#00f0ff', r: 0, g: 240, b: 255 });
+  // Strict Color Theme Lock: User-selected theme & color harmonics (NEVER shifted by playback/artwork)
+  const THEME_PRESETS = [
+    { id: 'cyan', name: 'Cosmic Cyan', hex: '#00f0ff', r: 0, g: 240, b: 255 },
+    { id: 'violet', name: 'Solfeggio Violet', hex: '#a855f7', r: 168, g: 85, b: 247 },
+    { id: 'amber', name: 'Solar Amber', hex: '#f59e0b', r: 245, g: 158, b: 11 },
+    { id: 'emerald', name: 'Emerald Zen', hex: '#10b981', r: 16, g: 185, b: 129 },
+    { id: 'magenta', name: 'Electric Magenta', hex: '#ec4899', r: 236, g: 72, b: 153 }
+  ];
+
+  const [themeColor, setThemeColor] = useState(() => {
+    try {
+      const saved = localStorage.getItem('gama_theme_color');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return { id: 'cyan', name: 'Cosmic Cyan', hex: '#00f0ff', r: 0, g: 240, b: 255 };
+  });
+
+  const selectThemeColor = (preset) => {
+    setThemeColor(preset);
+    try {
+      localStorage.setItem('gama_theme_color', JSON.stringify(preset));
+    } catch {}
+  };
 
   // Synced Lyrics state
   const [lyrics, setLyrics] = useState([]);
@@ -598,39 +619,8 @@ export default function App() {
     }
   }, [eqGains]);
 
-  // Dynamic Album Palette Extraction
-  useEffect(() => {
-    if (!currentTrack?.artworkUrl) return;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      try {
-        const c = document.createElement('canvas');
-        c.width = 16;
-        c.height = 16;
-        const ctx = c.getContext('2d');
-        ctx.drawImage(img, 0, 0, 16, 16);
-        const data = ctx.getImageData(0, 0, 16, 16).data;
-        let bestR = 0, bestG = 240, bestB = 255, maxScore = -1;
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i], g = data[i + 1], b = data[i + 2];
-          const max = Math.max(r, g, b), min = Math.min(r, g, b);
-          const sat = max === 0 ? 0 : (max - min) / max;
-          const val = max / 255;
-          if (val > 0.25 && val < 0.95 && sat > 0.3) {
-            const score = sat * val;
-            if (score > maxScore) {
-              maxScore = score;
-              bestR = r; bestG = g; bestB = b;
-            }
-          }
-        }
-        const hex = `#${((1 << 24) + (bestR << 16) + (bestG << 8) + bestB).toString(16).slice(1)}`;
-        setDynamicColor({ hex, r: bestR, g: bestG, b: bestB });
-      } catch (_) {}
-    };
-    img.src = currentTrack.artworkUrl;
-  }, [currentTrack?.artworkUrl]);
+  // Strict Color Theme Lock: Automatic track/artwork-driven palette shifts on playback are permanently disabled.
+  // The theme and color harmonics stay locked unless explicitly changed via Theme / Color Harmonics settings.
 
   // Synced Lyrics Fetching (LrcLib API)
   useEffect(() => {
@@ -789,7 +779,7 @@ export default function App() {
         const y = canvas.height - height;
 
         const grad = ctx.createLinearGradient(0, canvas.height, 0, 0);
-        grad.addColorStop(0, dynamicColor.hex || '#00f0ff');
+        grad.addColorStop(0, themeColor.hex || '#00f0ff');
         grad.addColorStop(1, '#9d00ff');
 
         ctx.fillStyle = grad;
@@ -802,7 +792,7 @@ export default function App() {
 
     render();
     return () => cancelAnimationFrame(animationId);
-  }, [isPlaying, dynamicColor.hex]);
+  }, [isPlaying, themeColor.hex]);
 
   const playTrack = (track) => {
     setCurrentTrack(track);
@@ -1054,7 +1044,7 @@ export default function App() {
     <div 
       className="flex h-screen bg-gammaBg text-slate-100 aura-glow overflow-hidden relative transition-colors duration-1000"
       style={{
-        backgroundImage: `radial-gradient(circle at 10% 20%, rgba(${dynamicColor.r}, ${dynamicColor.g}, ${dynamicColor.b}, 0.15) 0%, transparent 45%), radial-gradient(circle at 90% 80%, rgba(${dynamicColor.r}, ${dynamicColor.g}, ${dynamicColor.b}, 0.10) 0%, transparent 40%)`
+        backgroundImage: `radial-gradient(circle at 10% 20%, rgba(${themeColor.r}, ${themeColor.g}, ${themeColor.b}, 0.15) 0%, transparent 45%), radial-gradient(circle at 90% 80%, rgba(${themeColor.r}, ${themeColor.g}, ${themeColor.b}, 0.10) 0%, transparent 40%)`
       }}
     >
       {/* SIDEBAR */}
@@ -1186,6 +1176,22 @@ export default function App() {
                 </>
               )}
             </button>
+
+            {/* Strict Theme / Color Harmonics Selector */}
+            <div className="hidden lg:flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-900/80 border border-slate-800">
+              <span className="text-[10px] font-mono text-slate-500 mr-1">THEME:</span>
+              {THEME_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  onClick={() => selectThemeColor(preset)}
+                  title={`Select ${preset.name} (Strict Theme Lock)`}
+                  className={`w-3.5 h-3.5 rounded-full transition-all ${
+                    themeColor.id === preset.id ? 'scale-125 ring-2 ring-white/80' : 'opacity-50 hover:opacity-100 hover:scale-110'
+                  }`}
+                  style={{ backgroundColor: preset.hex }}
+                />
+              ))}
+            </div>
           </div>
 
           <div className="relative w-80">
@@ -1612,8 +1618,8 @@ export default function App() {
                             : 'text-base md:text-lg text-slate-500 hover:text-slate-300 font-semibold opacity-70 hover:opacity-100'
                         }`}
                         style={{
-                          color: isActive ? dynamicColor.hex : undefined,
-                          textShadow: isActive ? `0 0 20px ${dynamicColor.hex}88` : undefined
+                          color: isActive ? themeColor.hex : undefined,
+                          textShadow: isActive ? `0 0 20px ${themeColor.hex}88` : undefined
                         }}
                       >
                         {line.text}
@@ -1653,6 +1659,30 @@ export default function App() {
                     {preset}
                   </button>
                 ))}
+              </div>
+
+              {/* Color Harmonics & Theme Lock */}
+              <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-200">Color Harmonics (Strict Theme Lock)</span>
+                  <span className="text-[10px] font-mono text-gammaCyan">{themeColor.name}</span>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {THEME_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      onClick={() => selectThemeColor(preset)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center space-x-2 border ${
+                        themeColor.id === preset.id
+                          ? 'border-white text-white font-bold bg-slate-800'
+                          : 'border-slate-800 text-slate-400 hover:text-white bg-slate-950'
+                      }`}
+                    >
+                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: preset.hex }} />
+                      <span>{preset.name}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Equalizer Sliders */}
@@ -1849,9 +1879,9 @@ export default function App() {
                         className="flex-1 rounded-full transition-all duration-75"
                         style={{
                           height: `${Math.round(peak * 100)}%`,
-                          backgroundColor: isPlayed ? dynamicColor.hex : '#334155',
+                          backgroundColor: isPlayed ? themeColor.hex : '#334155',
                           opacity: isPlayed ? 1 : 0.45,
-                          boxShadow: isPlayed ? `0 0 4px ${dynamicColor.hex}88` : 'none'
+                          boxShadow: isPlayed ? `0 0 4px ${themeColor.hex}88` : 'none'
                         }}
                       />
                     );

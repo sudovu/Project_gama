@@ -11,6 +11,11 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
+/**
+ * Palette extraction utility.
+ * Note: Under the Strict Color Theme Lock rule, automatic artwork-driven theme shifts during playback
+ * are prohibited. Themes and color harmonics change strictly on explicit user selection.
+ */
 object DynamicPaletteExtractor {
 
     fun extractDominantColor(bitmap: Bitmap?): Color? {
