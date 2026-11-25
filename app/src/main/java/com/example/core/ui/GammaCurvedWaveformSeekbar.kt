@@ -8,8 +8,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,8 +21,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -68,7 +74,12 @@ fun GammaCurvedWaveformSeekbar(
     positionMs: Long,
     durationMs: Long,
     onSeek: (Long) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    cuePoints: List<com.example.core.util.CuePoint> = emptyList(),
+    loopRegion: Pair<Long, Long>? = null,
+    isLoopEnabled: Boolean = false,
+    onCuePointClick: ((com.example.core.util.CuePoint) -> Unit)? = null,
+    onLongPressSeekbar: ((Long) -> Unit)? = null
 ) {
     val density = LocalDensity.current
     val safeDuration = durationMs.coerceAtLeast(1000L)
@@ -217,6 +228,48 @@ fun GammaCurvedWaveformSeekbar(
             val thumbRadiusPx = with(density) { animatedThumbRadius.dp.toPx() }
             val glowRadiusPx = thumbRadiusPx * 2.4f
 
+            // 4. A-B Loop Region Arc (if active)
+            if (loopRegion != null && safeDuration > 0) {
+                val loopStartPct = (loopRegion.first.toFloat() / safeDuration).coerceIn(0f, 1f)
+                val loopEndPct = (loopRegion.second.toFloat() / safeDuration).coerceIn(0f, 1f)
+                if (loopEndPct > loopStartPct) {
+                    val pStart = getCurvePoint(loopStartPct)
+                    val loopPath = Path().apply {
+                        moveTo(pStart.x, pStart.y)
+                        val numSteps = 20
+                        for (s in 1..numSteps) {
+                            val t = loopStartPct + (loopEndPct - loopStartPct) * (s.toFloat() / numSteps)
+                            val pt = getCurvePoint(t)
+                            lineTo(pt.x, pt.y)
+                        }
+                    }
+                    drawPath(
+                        path = loopPath,
+                        color = (if (isLoopEnabled) GammaPrimary else GammaTextMuted).copy(alpha = 0.45f),
+                        style = Stroke(width = trackStrokePx * 1.8f, cap = StrokeCap.Round)
+                    )
+                }
+            }
+
+            // 5. Waveform Cue Points
+            for (cue in cuePoints) {
+                if (safeDuration > 0) {
+                    val cuePct = (cue.positionMs.toFloat() / safeDuration).coerceIn(0f, 1f)
+                    val cuePos = getCurvePoint(cuePct)
+                    drawLine(
+                        color = GammaSecondary.copy(alpha = 0.85f),
+                        start = Offset(cuePos.x, cuePos.y - 6.dp.toPx()),
+                        end = Offset(cuePos.x, cuePos.y + 6.dp.toPx()),
+                        strokeWidth = 2.dp.toPx()
+                    )
+                    drawCircle(
+                        color = Color.White,
+                        radius = 2.5.dp.toPx(),
+                        center = cuePos
+                    )
+                }
+            }
+
             // Outer cyan aura glow
             drawCircle(
                 brush = Brush.radialGradient(
@@ -281,6 +334,54 @@ fun GammaCurvedWaveformSeekbar(
                 textAlign = TextAlign.End,
                 color = GammaTextMuted
             )
+        }
+
+        // Cue Points & A-B Loop Navigation Chips
+        if (cuePoints.isNotEmpty() || loopRegion != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = horizontalPaddingDp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (loopRegion != null) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isLoopEnabled) GammaPrimary.copy(alpha = 0.2f) else GammaSurfaceElevated)
+                                .border(1.dp, if (isLoopEnabled) GammaPrimary else GammaDivider, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "🔁 Loop: ${formatTimeMs(loopRegion.first)} - ${formatTimeMs(loopRegion.second)}",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                color = if (isLoopEnabled) GammaPrimary else GammaTextMuted
+                            )
+                        }
+                    }
+                }
+                items(cuePoints) { cue ->
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(GammaSurfaceElevated)
+                            .border(0.8.dp, GammaSecondary.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                            .clickable {
+                                onCuePointClick?.invoke(cue) ?: onSeek(cue.positionMs)
+                            }
+                            .padding(horizontal = 7.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "📍 ${cue.label}",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
+                            color = GammaSecondary
+                        )
+                    }
+                }
+            }
         }
     }
 }

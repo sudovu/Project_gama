@@ -558,4 +558,55 @@ class AudiophileEngineAndDifferentiatorsTest {
         assertTrue(deserialized[0].isLiveStream)
         assertTrue(deserialized[1].isLiveStream)
     }
+
+    @Test
+    fun testCuePointManagerOperations() {
+        // Timestamp formatting
+        assertEquals("00:00", com.example.core.util.CuePointManager.formatTimestamp(0L))
+        assertEquals("01:05", com.example.core.util.CuePointManager.formatTimestamp(65000L))
+        assertEquals("01:01:01", com.example.core.util.CuePointManager.formatTimestamp(3661000L))
+
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val trackId = "track_cue_test_1"
+
+        // Add Cue Points
+        val pt1 = com.example.core.util.CuePointManager.addCuePoint(context, trackId, 15000L, "Intro Drop")
+        val pt2 = com.example.core.util.CuePointManager.addCuePoint(context, trackId, 45000L, "Solo")
+
+        val retrieved = com.example.core.util.CuePointManager.getCuePoints(context, trackId)
+        assertEquals(2, retrieved.size)
+        assertEquals("Intro Drop", retrieved[0].label)
+        assertEquals(15000L, retrieved[0].timestampMs)
+        assertEquals("Solo", retrieved[1].label)
+        assertEquals(45000L, retrieved[1].timestampMs)
+
+        // Delete pt1
+        com.example.core.util.CuePointManager.deleteCuePoint(context, trackId, pt1.id)
+        val afterDelete = com.example.core.util.CuePointManager.getCuePoints(context, trackId)
+        assertEquals(1, afterDelete.size)
+        assertEquals("Solo", afterDelete[0].label)
+    }
+
+    @Test
+    fun testLoopRegionPlaybackState() {
+        val state = com.example.domain.model.PlaybackState(
+            loopRegion = Pair(10000L, 25000L),
+            isLoopRegionEnabled = true
+        )
+        assertNotNull(state.loopRegion)
+        assertEquals(10000L, state.loopRegion?.first)
+        assertEquals(25000L, state.loopRegion?.second)
+        assertTrue(state.isLoopRegionEnabled)
+    }
+
+    @Test
+    fun testLanSyncServerRememberTokenStorage() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val testToken = "test_perm_tok_abc123"
+
+        com.example.core.remote.GamaLanSyncServer.saveRememberedToken(context, testToken)
+        val tokens = com.example.core.remote.GamaLanSyncServer.getRememberedTokens(context)
+        assertTrue(tokens.contains(testToken))
+        assertTrue(com.example.core.remote.GamaLanSyncServer.validateToken(testToken, context))
+    }
 }

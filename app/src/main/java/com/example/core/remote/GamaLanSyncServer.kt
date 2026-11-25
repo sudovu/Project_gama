@@ -59,6 +59,66 @@ object GamaLanSyncServer {
         private set
 
     private val sessionTokens = ConcurrentHashMap.newKeySet<String>()
+    private const val PREFS_REMEMBERED = "gama_lan_remembered_tokens"
+    private const val KEY_REMEMBERED_TOKENS = "remembered_tokens_set"
+
+    @Volatile
+    var libraryTracksProvider: (suspend () -> List<com.example.domain.model.Track>)? = null
+
+    fun getRememberedTokens(context: Context? = null): Set<String> {
+        val ctx = context ?: appContext ?: return emptySet()
+        return try {
+            val prefs = ctx.getSharedPreferences(PREFS_REMEMBERED, Context.MODE_PRIVATE)
+            prefs.getStringSet(KEY_REMEMBERED_TOKENS, emptySet())?.toSet() ?: emptySet()
+        } catch (_: Exception) {
+            emptySet()
+        }
+    }
+
+    fun saveRememberedToken(context: Context?, token: String) {
+        val ctx = context ?: appContext ?: return
+        try {
+            val prefs = ctx.getSharedPreferences(PREFS_REMEMBERED, Context.MODE_PRIVATE)
+            val set = prefs.getStringSet(KEY_REMEMBERED_TOKENS, emptySet())?.toMutableSet() ?: mutableSetOf()
+            set.add(token)
+            prefs.edit().putStringSet(KEY_REMEMBERED_TOKENS, set).apply()
+        } catch (_: Exception) {}
+    }
+
+    fun getLibraryTracks(): List<com.example.domain.model.Track> {
+        val custom = try {
+            kotlinx.coroutines.runBlocking { libraryTracksProvider?.invoke() }
+        } catch (_: Exception) {
+            null
+        }
+        if (!custom.isNullOrEmpty()) return custom
+        val pmCandidates = playbackManager?.getAvailableCandidates()
+        if (!pmCandidates.isNullOrEmpty()) return pmCandidates
+        return com.example.data.provider.CuratedFrequencies.allTracks
+    }
+
+    private fun isDeviceCharging(context: Context?): Boolean {
+        if (context == null) return false
+        return try {
+            val filter = android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)
+            val batteryStatus = context.registerReceiver(null, filter)
+            val status = batteryStatus?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1) ?: -1
+            status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
+                    status == android.os.BatteryManager.BATTERY_STATUS_FULL
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun getOutputSampleRate(context: Context?): String {
+        if (context == null) return "48000"
+        return try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+            audioManager?.getProperty(android.media.AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE) ?: "48000"
+        } catch (_: Exception) {
+            "48000"
+        }
+    }
 
     fun resetPin(): String {
         pairingPin = generateNewPin()
@@ -69,19 +129,25 @@ object GamaLanSyncServer {
 
     private fun generateNewPin(): String = String.format("%04d", (1000..9999).random())
 
-    fun pairWithPin(pin: String): String? {
+    fun pairWithPin(pin: String, remember: Boolean = false, context: Context? = null): String? {
         if (pin.trim() == pairingPin) {
             val token = UUID.randomUUID().toString().replace("-", "")
             sessionTokens.add(token)
-            Log.i(TAG, "Client successfully paired with PIN. Generated session token: ${token.take(6)}...")
+            if (remember) {
+                saveRememberedToken(context ?: appContext, token)
+            }
+            Log.i(TAG, "Client successfully paired with PIN (remember=$remember). Generated session token: ${token.take(6)}...")
             return token
         }
         return null
     }
 
-    fun validateToken(token: String?): Boolean {
+    fun validateToken(token: String?, context: Context? = null): Boolean {
         if (token.isNullOrBlank()) return false
-        return sessionTokens.contains(token.trim())
+        val clean = token.trim()
+        if (sessionTokens.contains(clean)) return true
+        val remembered = getRememberedTokens(context ?: appContext)
+        return remembered.contains(clean)
     }
 
     fun addTestSessionToken(token: String) {
@@ -155,6 +221,14 @@ object GamaLanSyncServer {
                     setAttribute("model", Build.MODEL)
                     setAttribute("version", "1.2.0")
                     setAttribute("port", port.toString())
+                    setAttribute("codecs", "flac,wav,alac,mp3,aac,opus")
+                    setAttribute("state", if (playbackManager?.playbackState?.value?.isPlaying == true) "playing" else "idle")
+                    val curTrack = playbackManager?.playbackState?.value?.currentTrack?.title ?: ""
+                    if (curTrack.isNotBlank()) {
+                        setAttribute("track", curTrack.take(64))
+                    }
+                    setAttribute("rate", getOutputSampleRate(context))
+                    setAttribute("charging", if (isDeviceCharging(context)) "true" else "false")
                 }
             }
 
@@ -315,12 +389,27 @@ object GamaLanSyncServer {
                         val bodyStr = String(bodyChars)
                         val pairJson = try { JSONObject(bodyStr) } catch (_: Exception) { JSONObject() }
                         val pin = pairJson.optString("pin", "").trim()
-                        val token = pairWithPin(pin)
+                        val remember = pairJson.optBoolean("remember", false)
+                        val rememberToken = pairJson.optString("rememberToken", "").trim()
+                        val existingToken = pairJson.optString("token", "").trim()
+
+                        val isDirectValid = when {
+                            rememberToken.isNotBlank() -> validateToken(rememberToken)
+                            existingToken.isNotBlank() -> validateToken(existingToken)
+                            else -> false
+                        }
+
+                        val token = if (isDirectValid) {
+                            if (rememberToken.isNotBlank()) rememberToken else existingToken
+                        } else {
+                            pairWithPin(pin, remember = remember, context = appContext)
+                        }
 
                         if (token != null) {
                             val resObj = JSONObject().apply {
                                 put("success", true)
                                 put("token", token)
+                                put("remembered", remember || isDirectValid)
                                 put("deviceModel", Build.MODEL)
                                 put("message", "Paired successfully")
                             }
@@ -333,7 +422,7 @@ object GamaLanSyncServer {
                         } else {
                             val resObj = JSONObject().apply {
                                 put("success", false)
-                                put("error", "Invalid 4-digit pairing PIN")
+                                put("error", "Invalid 4-digit pairing PIN or expired token")
                             }
                             val body = resObj.toString()
                             val res = "HTTP/1.1 401 Unauthorized\r\n" +
@@ -370,6 +459,106 @@ object GamaLanSyncServer {
                             output.write(res.toByteArray(Charsets.UTF_8))
                         }
                     }
+                    method == "GET" && path == "/library/tracks" -> {
+                        val authHeader = headers["authorization"]?.removePrefix("Bearer ")?.trim()
+                            ?: headers["x-auth-token"]
+                        val effectiveToken = queryParams["token"] ?: authHeader
+
+                        if (!validateToken(effectiveToken)) {
+                            val errBody = "{\"success\":false,\"error\":\"Unauthorized. Valid pairing token required.\"}"
+                            val res = "HTTP/1.1 401 Unauthorized\r\n" +
+                                    "Content-Type: application/json; charset=utf-8\r\n" +
+                                    "Access-Control-Allow-Origin: *\r\n" +
+                                    "Content-Length: ${errBody.toByteArray().size}\r\n\r\n" + errBody
+                            output.write(res.toByteArray(Charsets.UTF_8))
+                        } else {
+                            val limit = queryParams["limit"]?.toIntOrNull()?.coerceIn(1, 500) ?: 100
+                            val offset = queryParams["offset"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+                            val query = queryParams["query"]?.trim() ?: ""
+                            val albumFilter = queryParams["album"]?.trim() ?: ""
+
+                            val allTracks = getLibraryTracks()
+                            var filtered = allTracks
+                            if (albumFilter.isNotEmpty()) {
+                                filtered = filtered.filter { it.albumTitle.equals(albumFilter, ignoreCase = true) }
+                            }
+                            if (query.isNotEmpty()) {
+                                filtered = filtered.filter {
+                                    it.title.contains(query, ignoreCase = true) ||
+                                    it.artist.contains(query, ignoreCase = true) ||
+                                    it.albumTitle.contains(query, ignoreCase = true)
+                                }
+                            }
+
+                            val paged = filtered.drop(offset).take(limit)
+                            val jsonArray = org.json.JSONArray()
+                            for (t in paged) {
+                                jsonArray.put(JSONObject().apply {
+                                    put("id", t.id)
+                                    put("title", t.title)
+                                    put("artist", t.artist)
+                                    put("albumTitle", t.albumTitle)
+                                    put("durationSeconds", t.durationSeconds)
+                                    put("codec", t.codec)
+                                    put("bitrateKbps", t.bitrateKbps)
+                                    put("frequencyHz", t.frequencyHz)
+                                    put("artworkUrl", t.artworkUrl)
+                                    put("isLocal", t.localAudioUri.isNotEmpty() || t.isDownloaded)
+                                    put("source", t.source)
+                                })
+                            }
+                            val root = JSONObject().apply {
+                                put("total", filtered.size)
+                                put("offset", offset)
+                                put("limit", limit)
+                                put("tracks", jsonArray)
+                            }
+                            val resBody = root.toString()
+                            val res = "HTTP/1.1 200 OK\r\n" +
+                                    "Content-Type: application/json; charset=utf-8\r\n" +
+                                    "Access-Control-Allow-Origin: *\r\n" +
+                                    "Content-Length: ${resBody.toByteArray().size}\r\n\r\n" + resBody
+                            output.write(res.toByteArray(Charsets.UTF_8))
+                        }
+                    }
+                    method == "GET" && path == "/library/albums" -> {
+                        val authHeader = headers["authorization"]?.removePrefix("Bearer ")?.trim()
+                            ?: headers["x-auth-token"]
+                        val effectiveToken = queryParams["token"] ?: authHeader
+
+                        if (!validateToken(effectiveToken)) {
+                            val errBody = "{\"success\":false,\"error\":\"Unauthorized. Valid pairing token required.\"}"
+                            val res = "HTTP/1.1 401 Unauthorized\r\n" +
+                                    "Content-Type: application/json; charset=utf-8\r\n" +
+                                    "Access-Control-Allow-Origin: *\r\n" +
+                                    "Content-Length: ${errBody.toByteArray().size}\r\n\r\n" + errBody
+                            output.write(res.toByteArray(Charsets.UTF_8))
+                        } else {
+                            val allTracks = getLibraryTracks()
+                            val albumsMap = allTracks.groupBy { it.albumTitle.ifBlank { "Unassigned Album" } }
+                            val jsonArray = org.json.JSONArray()
+                            for ((albumTitle, tracks) in albumsMap) {
+                                val first = tracks.firstOrNull()
+                                jsonArray.put(JSONObject().apply {
+                                    put("albumTitle", albumTitle)
+                                    put("artist", first?.artist ?: "Various Artists")
+                                    put("trackCount", tracks.size)
+                                    put("artworkUrl", first?.artworkUrl ?: "")
+                                    put("dominantCodec", tracks.firstOrNull()?.codec ?: "FLAC")
+                                })
+                            }
+                            val root = JSONObject().apply {
+                                put("total", albumsMap.size)
+                                put("albums", jsonArray)
+                            }
+                            val resBody = root.toString()
+                            val res = "HTTP/1.1 200 OK\r\n" +
+                                    "Content-Type: application/json; charset=utf-8\r\n" +
+                                    "Access-Control-Allow-Origin: *\r\n" +
+                                    "Content-Length: ${resBody.toByteArray().size}\r\n\r\n" + resBody
+                            output.write(res.toByteArray(Charsets.UTF_8))
+                        }
+                    }
                     method == "GET" && path == "/stream" -> {
                         val authHeader = headers["authorization"]?.removePrefix("Bearer ")?.trim()
                             ?: headers["x-auth-token"]
@@ -383,7 +572,13 @@ object GamaLanSyncServer {
                                     "Content-Length: ${errBody.toByteArray().size}\r\n\r\n" + errBody
                             output.write(res.toByteArray(Charsets.UTF_8))
                         } else {
-                            val track = playbackManager?.playbackState?.value?.currentTrack
+                            val reqTrackId = queryParams["trackId"]
+                            val track = if (!reqTrackId.isNullOrBlank()) {
+                                getLibraryTracks().firstOrNull { it.id == reqTrackId }
+                                    ?: playbackManager?.playbackState?.value?.currentTrack
+                            } else {
+                                playbackManager?.playbackState?.value?.currentTrack
+                            }
                             handleStreamRequest(output, headers, track, appContext)
                         }
                     }
@@ -410,7 +605,12 @@ object GamaLanSyncServer {
                                 val json = try { JSONObject(bodyStr) } catch (_: Exception) { JSONObject() }
                                 val playNow = json.optBoolean("playNow", false)
 
-                                val pushedTrack = com.example.domain.model.Track(
+                                val reqTrackId = json.optString("trackId", "").trim()
+                                val pushedTrack = if (reqTrackId.isNotEmpty()) {
+                                    getLibraryTracks().firstOrNull { it.id == reqTrackId }
+                                } else null
+
+                                val trackToQueue = pushedTrack ?: com.example.domain.model.Track(
                                     id = json.optString("id", "lan_" + UUID.randomUUID().toString().take(8)),
                                     title = json.optString("title", "LAN Stream Track"),
                                     artist = json.optString("artist", "Windows PC"),
@@ -423,13 +623,13 @@ object GamaLanSyncServer {
 
                                 CoroutineScope(Dispatchers.Main).launch {
                                     if (playNow) {
-                                        playbackManager?.playTrack(pushedTrack)
+                                        playbackManager?.playTrack(trackToQueue)
                                     } else {
-                                        playbackManager?.addToQueue(pushedTrack)
+                                        playbackManager?.addToQueue(trackToQueue)
                                     }
                                 }
 
-                                val resBody = "{\"success\":true,\"message\":\"Track queued on phone\",\"trackId\":\"${pushedTrack.id}\"}"
+                                val resBody = "{\"success\":true,\"message\":\"Track queued on phone\",\"trackId\":\"${trackToQueue.id}\"}"
                                 val res = "HTTP/1.1 200 OK\r\n" +
                                         "Content-Type: application/json; charset=utf-8\r\n" +
                                         "Access-Control-Allow-Origin: *\r\n" +

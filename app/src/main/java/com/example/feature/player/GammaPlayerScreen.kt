@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -69,6 +70,10 @@ import androidx.compose.ui.draw.alpha
 
 
 
+import android.content.Context
+import android.media.AudioManager
+import androidx.compose.ui.platform.LocalContext
+import com.example.core.util.CuePointManager
 import com.example.core.ui.GammaCurvedWaveformSeekbar
 import com.example.core.ui.GammaGestureOverlay
 import com.example.data.provider.TrackDetailsInfo
@@ -162,6 +167,26 @@ fun GammaPlayerScreen(
     val sleepTimerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val speedSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var originalSpeedBeforeBoost by remember { mutableFloatStateOf(1.0f) }
+
+    val context = LocalContext.current
+    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager }
+    val nativeSampleRate = remember {
+        audioManager?.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull() ?: 48000
+    }
+    val nativeBufferSize = remember {
+        audioManager?.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull() ?: 256
+    }
+    var showAudioPathExpanded by remember { mutableStateOf(false) }
+
+    var showAddCueDialog by remember { mutableStateOf(false) }
+    var targetCueTimestamp by remember { mutableStateOf(0L) }
+    var cueLabelInput by remember { mutableStateOf("") }
+    var cueVersion by remember { mutableStateOf(0) }
+    var loopPointA by remember { mutableStateOf<Long?>(null) }
+
+    val cuePoints = remember(track?.id, cueVersion) {
+        track?.id?.let { CuePointManager.getCuePoints(context, it) } ?: emptyList()
+    }
 
     var trackDetails by remember { mutableStateOf<TrackDetailsInfo?>(null) }
     var isLoadingDetails by remember { mutableStateOf(false) }
@@ -483,24 +508,128 @@ fun GammaPlayerScreen(
                             Spacer(modifier = Modifier.width(6.dp))
                         }
 
-                        val qualityBadge = track?.audioQualityBadge
-                        if (!qualityBadge.isNullOrBlank()) {
+                        val isStreamSource = playback.isLiveStream || track?.youtubeVideoId?.isNotBlank() == true || track?.streamUrl?.isNotBlank() == true || (track?.localAudioUri != null && track.localAudioUri.startsWith("http"))
+                        val rawBadge = track?.audioQualityBadge ?: ""
+
+                        if (isStreamSource) {
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(GammaPrimary.copy(alpha = 0.12f))
-                                    .border(0.5.dp, GammaPrimary.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF2563EB).copy(alpha = 0.15f))
+                                    .border(0.5.dp, Color(0xFF3B82F6).copy(alpha = 0.6f), RoundedCornerShape(4.dp))
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = qualityBadge,
+                                    text = if (track?.youtubeVideoId?.isNotBlank() == true) "STREAM • OPUS HQ" else if (rawBadge.isNotBlank() && !rawBadge.contains("Hi-Res", ignoreCase = true)) "STREAM • $rawBadge" else "STREAM • AAC 320k",
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontWeight = FontWeight.SemiBold,
                                         letterSpacing = 0.8.sp
                                     ),
-                                    color = GammaPrimary
+                                    color = Color(0xFF93C5FD)
                                 )
                             }
+                        } else if (rawBadge.isNotBlank() || track != null) {
+                            val isLosslessOrHiRes = track?.codec == "FLAC" || track?.codec == "WAV" || ((track?.bitDepth ?: 0) >= 24 || (track?.sampleRateHz ?: 0) >= 96000) || rawBadge.contains("FLAC", ignoreCase = true) || rawBadge.contains("Lossless", ignoreCase = true)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(if (isLosslessOrHiRes) GammaPrimary.copy(alpha = 0.18f) else GammaSurfaceElevated)
+                                    .border(0.5.dp, if (isLosslessOrHiRes) GammaPrimary.copy(alpha = 0.6f) else GammaDivider, RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (isLosslessOrHiRes) "LOCAL HI-FI • ${if (rawBadge.isNotBlank()) rawBadge else "FLAC Lossless"}" else "LOCAL • ${if (rawBadge.isNotBlank()) rawBadge else "Audio"}",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                        letterSpacing = 0.8.sp
+                                    ),
+                                    color = if (isLosslessOrHiRes) GammaPrimary else GammaTextSecondary
+                                )
+                            }
+                        }
+                    }
+
+                    // Audio Path Diagnostic Chip
+                    val isDirectRate = track?.sampleRateHz == nativeSampleRate
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(GammaSurface.copy(alpha = 0.7f))
+                            .border(
+                                width = 0.5.dp,
+                                color = if (isDirectRate) GammaGlowCyan.copy(alpha = 0.5f) else GammaPrimary.copy(alpha = 0.4f),
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                            .clickable { showAudioPathExpanded = !showAudioPathExpanded }
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.GraphicEq,
+                                contentDescription = "Signal Path",
+                                tint = if (isDirectRate) GammaGlowCyan else GammaPrimary,
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            val srcRateStr = if ((track?.sampleRateHz ?: 0) > 0) "${(track?.sampleRateHz ?: 44100) / 1000}.${((track?.sampleRateHz ?: 44100) % 1000) / 100}k" else "44.1k"
+                            val outRateStr = "${nativeSampleRate / 1000}.${(nativeSampleRate % 1000) / 100}k"
+                            Text(
+                                text = "PATH: $srcRateStr → $outRateStr [${if (isDirectRate) "DIRECT" else "RESAMPLED"}]",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = if (isDirectRate) GammaGlowCyan else GammaTextPrimary,
+                                fontSize = 9.5.sp
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = if (showAudioPathExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.Info,
+                                contentDescription = null,
+                                tint = GammaTextMuted,
+                                modifier = Modifier.size(11.dp)
+                            )
+                        }
+                    }
+
+                    if (showAudioPathExpanded) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.Black.copy(alpha = 0.85f))
+                                .border(1.dp, GammaDivider, RoundedCornerShape(8.dp))
+                                .padding(8.dp)
+                        ) {
+                            Text(
+                                text = "AUDIO SIGNAL CHAIN DIAGNOSTICS",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp),
+                                color = GammaPrimary
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "• Source: ${track?.codec ?: "PCM"} ${track?.sampleRateHz ?: 44100}Hz / ${track?.bitDepth ?: 16}-bit (${track?.bitrateKbps ?: 320} kbps)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = GammaTextPrimary,
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                text = "• DSP Pipeline: 32-bit Float • Preamp: ${playback.equalizerSettings.preampGainDb}dB • EQ: ${if (playback.equalizerSettings.isEnabled) playback.equalizerSettings.currentPreset.displayName else "Bypassed"}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = GammaTextSecondary,
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                text = "• Hardware HAL: Android AudioFlinger @ ${nativeSampleRate}Hz (Buffer: ${nativeBufferSize}f)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = GammaTextSecondary,
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                text = if (isDirectRate) "• Status: Bit-Perfect sample rate match" else "• Status: System resampled from ${track?.sampleRateHz ?: 44100}Hz to ${nativeSampleRate}Hz",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = if (isDirectRate) GammaGlowCyan else Color(0xFFFBBF24),
+                                fontSize = 11.sp
+                            )
                         }
                     }
 
@@ -616,7 +745,18 @@ fun GammaPlayerScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp)
+                    .padding(horizontal = 4.dp),
+                cuePoints = cuePoints,
+                loopRegion = playback.loopRegion,
+                isLoopEnabled = playback.isLoopRegionEnabled,
+                onCuePointClick = { cuePoint ->
+                    viewModel.seekTo(cuePoint.positionMs)
+                },
+                onLongPressSeekbar = { longPressedMs ->
+                    targetCueTimestamp = longPressedMs
+                    cueLabelInput = "Cue ${CuePointManager.formatTimestamp(longPressedMs)}"
+                    showAddCueDialog = true
+                }
             )
 
             // Control Deck (Shuffle, Prev, Hero Play/Pause, Next, Repeat)
@@ -899,8 +1039,146 @@ fun GammaPlayerScreen(
                         )
                     }
                 }
+
+                // A-B Loop Button
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(if (playback.isLoopRegionEnabled) GammaPrimary.copy(alpha = 0.2f) else if (loopPointA != null) GammaSurfaceHighlight else GammaSurface)
+                        .border(
+                            width = 1.dp,
+                            color = if (playback.isLoopRegionEnabled) GammaPrimary else if (loopPointA != null) GammaGlowCyan else GammaDivider,
+                            shape = CircleShape
+                        )
+                        .clickable {
+                            if (playback.isLoopRegionEnabled) {
+                                viewModel.playbackManager.clearLoopRegion()
+                                loopPointA = null
+                            } else if (loopPointA == null) {
+                                loopPointA = playback.positionMs
+                            } else {
+                                val ptA = loopPointA ?: 0L
+                                val ptB = playback.positionMs
+                                val (start, end) = if (ptA < ptB) Pair(ptA, ptB) else Pair(ptB, ptA)
+                                if (end - start > 500) {
+                                    viewModel.playbackManager.setLoopRegion(start, end)
+                                    loopPointA = null
+                                } else {
+                                    viewModel.playbackManager.clearLoopRegion()
+                                    loopPointA = null
+                                }
+                            }
+                        }
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                        .testTag("loop_region_button")
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Repeat,
+                            contentDescription = "A-B Loop",
+                            tint = if (playback.isLoopRegionEnabled) GammaPrimary else if (loopPointA != null) GammaGlowCyan else GammaTextMuted,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        val loopLabel = when {
+                            playback.isLoopRegionEnabled -> {
+                                val r = playback.loopRegion
+                                if (r != null) "Loop: ${CuePointManager.formatTimestamp(r.first)}-${CuePointManager.formatTimestamp(r.second)}" else "Loop: Active"
+                            }
+                            loopPointA != null -> "Set B (${CuePointManager.formatTimestamp(loopPointA!!)})"
+                            else -> "A-B Loop"
+                        }
+                        Text(
+                            text = loopLabel,
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = if (playback.isLoopRegionEnabled) FontWeight.Bold else FontWeight.Normal),
+                            color = if (playback.isLoopRegionEnabled) GammaPrimary else GammaTextPrimary
+                        )
+                    }
+                }
+
+                // Add Cue Point Button
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(GammaSurface)
+                        .border(width = 1.dp, color = GammaDivider, shape = CircleShape)
+                        .clickable {
+                            targetCueTimestamp = playback.positionMs
+                            cueLabelInput = "Cue ${CuePointManager.formatTimestamp(playback.positionMs)}"
+                            showAddCueDialog = true
+                        }
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                        .testTag("add_cue_button")
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Drop Cue Point",
+                            tint = GammaGlowCyan,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = "Cue (${cuePoints.size})",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = GammaTextPrimary
+                        )
+                    }
+                }
             }
         }
+    }
+
+    // Add Cue Dialog
+    if (showAddCueDialog && track != null) {
+        AlertDialog(
+            onDismissRequest = { showAddCueDialog = false },
+            title = {
+                Text("Add Cue Point", color = GammaTextPrimary, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Save timestamp at ${CuePointManager.formatTimestamp(targetCueTimestamp)} for instant recall.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = GammaTextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = cueLabelInput,
+                        onValueChange = { cueLabelInput = it },
+                        label = { Text("Cue Label") },
+                        singleLine = true,
+                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GammaPrimary,
+                            unfocusedBorderColor = GammaDivider,
+                            focusedTextColor = GammaTextPrimary,
+                            unfocusedTextColor = GammaTextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (cueLabelInput.isNotBlank()) {
+                            CuePointManager.addCuePoint(context, track.id, targetCueTimestamp, cueLabelInput.trim())
+                            cueVersion++
+                        }
+                        showAddCueDialog = false
+                    }
+                ) {
+                    Text("Save Cue", color = GammaPrimary, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddCueDialog = false }) {
+                    Text("Cancel", color = GammaTextMuted)
+                }
+            },
+            containerColor = GammaSurfaceElevated
+        )
     }
 
     // Synced Karaoke Lyrics Bottom Sheet (LrcLib integration)

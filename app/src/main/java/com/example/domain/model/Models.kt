@@ -218,7 +218,9 @@ data class PlaybackState(
     val isLiveStream: Boolean = false,
     val streamMetadataTitle: String? = null,
     val isReconnecting: Boolean = false,
-    val reconnectAttempt: Int = 0
+    val reconnectAttempt: Int = 0,
+    val loopRegion: Pair<Long, Long>? = null,
+    val isLoopRegionEnabled: Boolean = false
 ) {
     val progress: Float
         get() = if (durationMs > 0) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f

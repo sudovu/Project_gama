@@ -583,6 +583,27 @@ class PlaybackManager(val context: Context) {
         seekTo(current + deltaMs)
     }
 
+    fun setLoopRegion(startMs: Long, endMs: Long) {
+        val s = startMs.coerceAtLeast(0L)
+        val e = endMs.coerceAtLeast(s + 500L)
+        _playbackState.update { it.copy(loopRegion = Pair(s, e), isLoopRegionEnabled = true) }
+        val cur = _playbackState.value.positionMs
+        if (cur < s || cur >= e) {
+            seekTo(s)
+        }
+    }
+
+    fun clearLoopRegion() {
+        _playbackState.update { it.copy(loopRegion = null, isLoopRegionEnabled = false) }
+    }
+
+    fun toggleLoopRegion() {
+        val cur = _playbackState.value
+        if (cur.loopRegion != null) {
+            _playbackState.update { it.copy(isLoopRegionEnabled = !it.isLoopRegionEnabled) }
+        }
+    }
+
     fun setPlaybackSpeed(speed: Float) {
         val clamped = speed.coerceIn(0.25f, 3.0f)
         _playbackState.update { it.copy(playbackSpeed = clamped) }
@@ -1054,9 +1075,18 @@ class PlaybackManager(val context: Context) {
         }
         val posMs = (currentTimeSec.coerceAtLeast(0f) * 1000f).toLong()
         val durMs = if (durationSec > 0f) (durationSec * 1000f).toLong() else _playbackState.value.durationMs
-        audioEngine.setExternalPosition(posMs, durMs)
+        
+        val loop = _playbackState.value.loopRegion
+        val effectivePos = if (_playbackState.value.isLoopRegionEnabled && loop != null && posMs >= loop.second) {
+            seekTo(loop.first)
+            loop.first
+        } else {
+            posMs
+        }
+
+        audioEngine.setExternalPosition(effectivePos, durMs)
         _playbackState.update { state ->
-            state.copy(positionMs = posMs, durationMs = durMs)
+            state.copy(positionMs = effectivePos, durationMs = durMs)
         }
     }
 
@@ -1226,9 +1256,17 @@ class PlaybackManager(val context: Context) {
                         if (engineDur > 1000L) engineDur else state.durationMs
                     }
 
+                    val loop = state.loopRegion
+                    val effectivePos = if (state.isLoopRegionEnabled && loop != null && newPos >= loop.second) {
+                        seekTo(loop.first)
+                        loop.first
+                    } else {
+                        newPos
+                    }
+
                     _playbackState.update {
                         it.copy(
-                            positionMs = newPos,
+                            positionMs = effectivePos,
                             durationMs = dur,
                             visualizerBands = bands
                         )

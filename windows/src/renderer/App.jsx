@@ -97,6 +97,100 @@ export default function App() {
       return JSON.parse(localStorage.getItem('gama_recent_streams') || '[]');
     } catch { return []; }
   });
+
+  // Phone Library State & Functions
+  const [phoneTracks, setPhoneTracks] = useState([]);
+  const [phoneAlbums, setPhoneAlbums] = useState([]);
+  const [isLoadingPhoneLib, setIsLoadingPhoneLib] = useState(false);
+  const [phoneLibSearch, setPhoneLibSearch] = useState('');
+  const [rememberDevice, setRememberDevice] = useState(() => localStorage.getItem('gama_lan_remember') !== 'false');
+
+  const fetchPhoneLibrary = async (query = '') => {
+    const ip = lanPhoneIp.trim();
+    if (!ip) return;
+    setIsLoadingPhoneLib(true);
+    try {
+      const token = localStorage.getItem('gama_lan_token') || lanPin || '';
+      const q = query ? `&query=${encodeURIComponent(query)}` : '';
+      const res = await fetch(`http://${ip}:8765/library/tracks?token=${encodeURIComponent(token)}${q}&limit=100`);
+      if (res.ok) {
+        const data = await res.json();
+        setPhoneTracks(data.tracks || []);
+      }
+      const albRes = await fetch(`http://${ip}:8765/library/albums?token=${encodeURIComponent(token)}`);
+      if (albRes.ok) {
+        const albData = await albRes.json();
+        setPhoneAlbums(albData.albums || []);
+      }
+    } catch (err) {
+      console.warn('[Phone Library Fetch Failed]', err);
+    } finally {
+      setIsLoadingPhoneLib(false);
+    }
+  };
+
+  const playTrackOnPhone = async (track) => {
+    const ip = lanPhoneIp.trim();
+    if (!ip) return;
+    try {
+      const token = localStorage.getItem('gama_lan_token') || lanPin || '';
+      await fetch(`http://${ip}:8765/queue/push?token=${encodeURIComponent(token)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trackId: track.id, playNow: true })
+      });
+    } catch (err) {
+      console.error('Play on phone failed:', err);
+    }
+  };
+
+  const queueTrackOnPhone = async (track) => {
+    const ip = lanPhoneIp.trim();
+    if (!ip) return;
+    try {
+      const token = localStorage.getItem('gama_lan_token') || lanPin || '';
+      await fetch(`http://${ip}:8765/queue/push?token=${encodeURIComponent(token)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trackId: track.id, playNow: false })
+      });
+    } catch (err) {
+      console.error('Queue on phone failed:', err);
+    }
+  };
+
+  const streamTrackToPc = (track) => {
+    const ip = lanPhoneIp.trim();
+    if (!ip || !pcAudioRef.current) return;
+    const token = localStorage.getItem('gama_lan_token') || lanPin || '';
+    const streamUrl = `http://${ip}:8765/stream?token=${encodeURIComponent(token)}&trackId=${encodeURIComponent(track.id)}`;
+    setCurrentTrack({
+      id: `phone-${track.id}`,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      duration: track.durationMs ? track.durationMs / 1000 : 0,
+      audioQualityBadge: track.audioQualityBadge || (track.isHiRes ? 'Hi-Res Lossless' : 'Lossless'),
+      source: 'phone_stream',
+      codec: track.codec || 'FLAC'
+    });
+    setIsUsingYouTube(false);
+    isUsingYouTubeRef.current = false;
+    pcAudioRef.current.src = streamUrl;
+    pcAudioRef.current.load();
+    pcAudioRef.current.play().then(() => {
+      setIsPlaying(true);
+      setPlaybackError(null);
+    }).catch((err) => {
+      setPlaybackError({
+        code: 'PHONE_STREAM_ERR',
+        message: `Failed to stream ${track.title} to PC: ${err.message}`,
+        trackTitle: track.title,
+        src: streamUrl,
+        timestamp: Date.now()
+      });
+    });
+  };
   const lanSocketRef = useRef(null);
   const pcAudioRef = useRef(null);
   const isUsingYouTubeRef = useRef(false);
@@ -371,14 +465,16 @@ export default function App() {
 
       let token = localStorage.getItem('gama_lan_token');
 
-      // If no token or pin is specified, execute PIN pairing handshake first
-      if (!token && pin) {
+      // If token exists and no pin override provided, attempt direct connect
+      if (token && !pinOverride) {
+        setLanStatusMsg(`Connecting with remembered token to ${ip}:8765...`);
+      } else if (pin) {
         setLanStatusMsg(`Pairing with ${ip}:8765 using PIN ${pin}...`);
         try {
           const pairRes = await fetch(`http://${ip}:8765/pair`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pin, client: 'Windows Desktop' })
+            body: JSON.stringify({ pin, client: 'Windows Desktop', remember: rememberDevice })
           });
           if (pairRes.ok) {
             const pairData = await pairRes.json();
@@ -386,6 +482,7 @@ export default function App() {
               token = pairData.token;
               localStorage.setItem('gama_lan_token', token);
               localStorage.setItem('gama_lan_pin', pin);
+              localStorage.setItem('gama_lan_last_ip', ip);
             }
           } else {
             setLanStatusMsg('PIN Pairing failed (HTTP 401). Check PIN displayed on phone.');
@@ -1146,6 +1243,27 @@ export default function App() {
               <span>My Library</span>
             </button>
             <button
+              onClick={() => {
+                setActiveTab('phone_library');
+                if (lanConnected) fetchPhoneLibrary(phoneLibSearch);
+              }}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                activeTab === 'phone_library' 
+                  ? 'bg-gradient-to-r from-gammaCyan/20 to-gammaViolet/20 text-gammaCyan border border-gammaCyan/30' 
+                  : lanConnected
+                  ? 'text-cyan-300 hover:text-white hover:bg-slate-800/40'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+              }`}
+            >
+              <div className="flex items-center space-x-3">
+                <Smartphone className="w-4 h-4" />
+                <span>Phone Library</span>
+              </div>
+              {lanConnected && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Phone Synced" />
+              )}
+            </button>
+            <button
               onClick={() => setActiveTab('lyrics')}
               className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 activeTab === 'lyrics' 
@@ -1677,6 +1795,170 @@ export default function App() {
             </div>
           )}
 
+          {activeTab === 'phone_library' && (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                <div>
+                  <h3 className="text-xl font-black tracking-wide text-white flex items-center space-x-2">
+                    <Smartphone className="w-5 h-5 text-gammaCyan" />
+                    <span>PHONE MUSIC REPOSITORY</span>
+                    {lanConnected && (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                        {lanPhoneIp} • SYNCED
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Direct access to audio files physically stored on your connected mobile device over LAN Sync.
+                  </p>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                    <input 
+                      type="text" 
+                      placeholder="Search phone tracks..."
+                      value={phoneLibSearch}
+                      onChange={(e) => {
+                        setPhoneLibSearch(e.target.value);
+                        if (lanConnected) fetchPhoneLibrary(e.target.value);
+                      }}
+                      className="bg-slate-900 border border-slate-700/80 rounded-xl pl-9 pr-4 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-gammaCyan w-48"
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (lanConnected) fetchPhoneLibrary(phoneLibSearch);
+                      else setShowLanModal(true);
+                    }}
+                    className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                    title={lanConnected ? "Refresh Phone Library" : "Connect LAN Sync"}
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isLoadingPhoneLib ? 'animate-spin text-gammaCyan' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {!lanConnected ? (
+                <div className="p-12 text-center rounded-3xl bg-gammaSurface border border-slate-800 space-y-4 max-w-lg mx-auto">
+                  <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center mx-auto text-cyan-400">
+                    <Smartphone className="w-8 h-8" />
+                  </div>
+                  <h4 className="text-lg font-bold text-white">Phone Disconnected</h4>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Connect to your phone using LAN Sync to browse the entire local audio library on your mobile device, stream high-fidelity audio directly to PC speakers, or remote control playback.
+                  </p>
+                  <button
+                    onClick={() => setShowLanModal(true)}
+                    className="px-5 py-2.5 rounded-xl bg-gammaCyan text-black font-bold text-xs hover:bg-gammaCyan/80 transition-all shadow-lg shadow-cyan-500/20"
+                  >
+                    Open LAN Sync Connection
+                  </button>
+                </div>
+              ) : isLoadingPhoneLib ? (
+                <div className="py-20 text-center text-slate-400 space-y-2">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto text-gammaCyan" />
+                  <p className="text-xs font-mono">Fetching audio tracks from phone...</p>
+                </div>
+              ) : phoneTracks.length === 0 ? (
+                <div className="p-12 text-center rounded-3xl bg-gammaSurface border border-slate-800 space-y-3">
+                  <Music className="w-8 h-8 text-slate-600 mx-auto" />
+                  <p className="text-sm text-slate-300">No tracks found on phone matching filter.</p>
+                  <button 
+                    onClick={() => fetchPhoneLibrary('')}
+                    className="text-xs text-gammaCyan hover:underline font-mono"
+                  >
+                    Clear Filter & Reload
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Albums Carousel / Tags */}
+                  {phoneAlbums.length > 0 && (
+                    <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-none">
+                      <span className="text-xs font-mono text-slate-500 px-2 py-1">ALBUMS:</span>
+                      {phoneAlbums.slice(0, 10).map((album, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            setPhoneLibSearch(album.title);
+                            fetchPhoneLibrary(album.title);
+                          }}
+                          className="px-3 py-1 rounded-full text-xs font-mono bg-slate-900 border border-slate-800 hover:border-gammaCyan/40 text-slate-300 whitespace-nowrap"
+                        >
+                          {album.title} ({album.trackCount})
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Track List */}
+                  <div className="rounded-2xl bg-gammaSurface border border-slate-800 overflow-hidden divide-y divide-slate-800/60">
+                    {phoneTracks.map((trk) => {
+                      const isHiRes = trk.isHiRes || trk.codec === 'FLAC' || trk.codec === 'WAV';
+                      return (
+                        <div 
+                          key={trk.id} 
+                          className="flex items-center justify-between p-3.5 hover:bg-white/5 transition-colors group"
+                        >
+                          <div className="flex items-center space-x-3 min-w-0 flex-1">
+                            <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700/60 flex items-center justify-center flex-shrink-0 text-slate-400">
+                              <Music className="w-5 h-5 text-gammaCyan" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center space-x-2">
+                                <h4 className="text-sm font-semibold text-slate-200 truncate">{trk.title}</h4>
+                                <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ${
+                                  isHiRes 
+                                    ? 'bg-gammaCyan/10 text-gammaCyan border-gammaCyan/30' 
+                                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                                }`}>
+                                  {isHiRes ? 'LOCAL HI-FI' : 'LOCAL'} • {trk.codec || 'AUDIO'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-400 truncate">{trk.artist} {trk.album ? `• ${trk.album}` : ''}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-2 flex-shrink-0">
+                            <span className="text-xs font-mono text-slate-500 mr-2">
+                              {trk.durationMs ? formatTime(trk.durationMs / 1000) : '--:--'}
+                            </span>
+                            <button
+                              onClick={() => streamTrackToPc(trk)}
+                              className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-gammaCyan/20 text-gammaCyan border border-gammaCyan/40 hover:bg-gammaCyan hover:text-black transition-all flex items-center space-x-1"
+                              title="Stream directly to PC speakers"
+                            >
+                              <Volume2 className="w-3.5 h-3.5" />
+                              <span>PC Stream</span>
+                            </button>
+                            <button
+                              onClick={() => playTrackOnPhone(trk)}
+                              className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 transition-all flex items-center space-x-1"
+                              title="Play on Phone speaker"
+                            >
+                              <Play className="w-3.5 h-3.5" />
+                              <span>Play on Phone</span>
+                            </button>
+                            <button
+                              onClick={() => queueTrackOnPhone(trk)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                              title="Add to Phone Queue"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'lyrics' && (
             <div className="max-w-3xl mx-auto space-y-6 py-4 flex flex-col h-full">
               {/* Lyrics Header */}
@@ -1945,11 +2227,23 @@ export default function App() {
               ) : (
                 <span className="text-[10px] text-gammaCyan font-mono uppercase">{currentTrack.genre || 'Frequency'} • 432Hz</span>
               )}
-              {currentTrack.audioQualityBadge && (
-                <span className="text-[9px] px-1.5 py-0.2 rounded bg-gammaCyan/20 text-gammaCyan font-mono uppercase border border-gammaCyan/40">
-                  {currentTrack.audioQualityBadge}
+              {(currentTrack.source === 'stream' || currentTrack.streamUrl || isUsingYouTube) ? (
+                <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-400 font-mono font-semibold uppercase border border-blue-500/40">
+                  STREAM • {currentTrack.codec || 'AAC/OPUS HQ'}
                 </span>
-              )}
+              ) : currentTrack.source === 'phone_stream' ? (
+                <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-400 font-mono font-semibold uppercase border border-cyan-500/40">
+                  PHONE HI-FI • {currentTrack.audioQualityBadge || 'FLAC'}
+                </span>
+              ) : (currentTrack.codec === 'FLAC' || currentTrack.codec === 'WAV' || (currentTrack.bitrateKbps && currentTrack.bitrateKbps >= 900) || currentTrack.audioQualityBadge?.includes('Hi-Res') || currentTrack.audioQualityBadge?.includes('Lossless')) ? (
+                <span className="text-[9px] px-1.5 py-0.2 rounded bg-gammaCyan/20 text-gammaCyan font-mono uppercase border border-gammaCyan/40">
+                  LOCAL HI-FI • {currentTrack.audioQualityBadge || 'FLAC 24-bit'}
+                </span>
+              ) : currentTrack.audioQualityBadge ? (
+                <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 font-mono uppercase border border-slate-700">
+                  LOCAL • {currentTrack.audioQualityBadge}
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
@@ -2236,6 +2530,19 @@ export default function App() {
                   />
                 </div>
               </div>
+
+              <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer select-none">
+                <input 
+                  type="checkbox"
+                  checked={rememberDevice}
+                  onChange={(e) => {
+                    setRememberDevice(e.target.checked);
+                    localStorage.setItem('gama_lan_remember', e.target.checked ? 'true' : 'false');
+                  }}
+                  className="rounded border-slate-700 text-gammaCyan focus:ring-0 accent-gammaCyan"
+                />
+                <span>Remember this device (Auto-reconnect without PIN)</span>
+              </label>
 
               <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300 space-y-1">
                 <div className="flex items-center justify-between">
