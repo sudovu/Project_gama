@@ -2235,15 +2235,42 @@ export default function App() {
                 <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-400 font-mono font-semibold uppercase border border-cyan-500/40">
                   PHONE HI-FI • {currentTrack.audioQualityBadge || 'FLAC'}
                 </span>
-              ) : (currentTrack.codec === 'FLAC' || currentTrack.codec === 'WAV' || (currentTrack.bitrateKbps && currentTrack.bitrateKbps >= 900) || currentTrack.audioQualityBadge?.includes('Hi-Res') || currentTrack.audioQualityBadge?.includes('Lossless')) ? (
-                <span className="text-[9px] px-1.5 py-0.2 rounded bg-gammaCyan/20 text-gammaCyan font-mono uppercase border border-gammaCyan/40">
-                  LOCAL HI-FI • {currentTrack.audioQualityBadge || 'FLAC 24-bit'}
-                </span>
-              ) : currentTrack.audioQualityBadge ? (
-                <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 font-mono uppercase border border-slate-700">
-                  LOCAL • {currentTrack.audioQualityBadge}
-                </span>
-              ) : null}
+              ) : (() => {
+                const codecUpper = (currentTrack.codec || '').toUpperCase();
+                const bitrate = currentTrack.bitrateKbps || 0;
+                const bitDepth = currentTrack.bitDepth || 16;
+                const sampleRate = currentTrack.sampleRateHz || 44100;
+                const isSubHiFiLossy = (bitrate > 0 && bitrate < 256) || bitDepth < 16 || sampleRate < 44100;
+                const isHiFi = !isSubHiFiLossy && (
+                  codecUpper === 'FLAC' || codecUpper === 'WAV' || codecUpper === 'ALAC' ||
+                  bitDepth >= 24 || sampleRate >= 96000 || bitrate >= 900 ||
+                  currentTrack.audioQualityBadge?.includes('Hi-Res') ||
+                  currentTrack.audioQualityBadge?.includes('Lossless')
+                );
+                if (isHiFi) {
+                  return (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-gammaCyan/20 text-gammaCyan font-mono uppercase border border-gammaCyan/40">
+                      LOCAL HI-FI • {currentTrack.audioQualityBadge || 'FLAC 24-bit'}
+                    </span>
+                  );
+                }
+                if (isSubHiFiLossy) {
+                  const c = codecUpper || 'MP3';
+                  return (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 font-mono uppercase border border-slate-700">
+                      LOCAL • {bitrate > 0 ? `${c} ${bitrate}` : c}
+                    </span>
+                  );
+                }
+                if (currentTrack.audioQualityBadge || codecUpper) {
+                  return (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 font-mono uppercase border border-slate-700">
+                      LOCAL • {currentTrack.audioQualityBadge || codecUpper}
+                    </span>
+                  );
+                }
+                return null;
+              })()}
             </div>
           </div>
         </div>
@@ -2490,7 +2517,7 @@ export default function App() {
                     <div key={dev.ip} className="flex items-center justify-between p-2 rounded-lg bg-slate-800/80 hover:bg-slate-800">
                       <div>
                         <div className="text-xs font-bold text-slate-200">{dev.deviceModel}</div>
-                        <div className="text-[10px] text-slate-400 font-mono">{dev.ip}:8765 {dev.pairingPin ? `• PIN: ${dev.pairingPin}` : ''}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">{dev.ip}:8765 {dev.pairingPin ? `• PIN: ${dev.pairingPin}` : ''} • {dev.trackTitle || 'No track'}</div>
                       </div>
                       <button
                         onClick={() => {

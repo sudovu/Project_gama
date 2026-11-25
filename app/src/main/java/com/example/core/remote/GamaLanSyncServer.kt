@@ -1,12 +1,15 @@
 package com.example.core.remote
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.util.Base64
 import android.util.Log
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.example.core.media.PlaybackManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -60,16 +63,62 @@ object GamaLanSyncServer {
 
     private val sessionTokens = ConcurrentHashMap.newKeySet<String>()
     private const val PREFS_REMEMBERED = "gama_lan_remembered_tokens"
+    private const val PREFS_REMEMBERED_ENCRYPTED = "gama_lan_remembered_tokens_enc"
     private const val KEY_REMEMBERED_TOKENS = "remembered_tokens_set"
+
+    @Volatile
+    private var lastMdnsState: Pair<Boolean, String>? = null
+
+    @Volatile
+    var isTestMode: Boolean = false
 
     @Volatile
     var libraryTracksProvider: (suspend () -> List<com.example.domain.model.Track>)? = null
 
+    private fun isRobolectricOrTest(): Boolean =
+        isTestMode || Build.FINGERPRINT.contains("robolectric", ignoreCase = true)
+
+    private fun getEncryptedRememberedPrefs(ctx: Context): SharedPreferences {
+        return try {
+            val masterKey = MasterKey.Builder(ctx.applicationContext)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            EncryptedSharedPreferences.create(
+                ctx.applicationContext,
+                PREFS_REMEMBERED_ENCRYPTED,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: java.security.GeneralSecurityException) {
+            if (isRobolectricOrTest()) {
+                ctx.getSharedPreferences(PREFS_REMEMBERED_ENCRYPTED, Context.MODE_PRIVATE)
+            } else {
+                Log.e(TAG, "EncryptedSharedPreferences failed on device", e)
+                throw e
+            }
+        } catch (e: Exception) {
+            if (isRobolectricOrTest()) {
+                ctx.getSharedPreferences(PREFS_REMEMBERED_ENCRYPTED, Context.MODE_PRIVATE)
+            } else {
+                Log.e(TAG, "EncryptedSharedPreferences initialization failed", e)
+                throw e
+            }
+        }
+    }
+
     fun getRememberedTokens(context: Context? = null): Set<String> {
         val ctx = context ?: appContext ?: return emptySet()
         return try {
-            val prefs = ctx.getSharedPreferences(PREFS_REMEMBERED, Context.MODE_PRIVATE)
-            prefs.getStringSet(KEY_REMEMBERED_TOKENS, emptySet())?.toSet() ?: emptySet()
+            val encPrefs = getEncryptedRememberedPrefs(ctx)
+            val plainPrefs = ctx.getSharedPreferences(PREFS_REMEMBERED, Context.MODE_PRIVATE)
+            val legacyTokens = plainPrefs.getStringSet(KEY_REMEMBERED_TOKENS, null)
+            if (!legacyTokens.isNullOrEmpty()) {
+                val merged = (encPrefs.getStringSet(KEY_REMEMBERED_TOKENS, emptySet()) ?: emptySet()) + legacyTokens
+                encPrefs.edit().putStringSet(KEY_REMEMBERED_TOKENS, merged).apply()
+                plainPrefs.edit().remove(KEY_REMEMBERED_TOKENS).apply()
+            }
+            encPrefs.getStringSet(KEY_REMEMBERED_TOKENS, emptySet())?.toSet() ?: emptySet()
         } catch (_: Exception) {
             emptySet()
         }
@@ -78,16 +127,41 @@ object GamaLanSyncServer {
     fun saveRememberedToken(context: Context?, token: String) {
         val ctx = context ?: appContext ?: return
         try {
-            val prefs = ctx.getSharedPreferences(PREFS_REMEMBERED, Context.MODE_PRIVATE)
-            val set = prefs.getStringSet(KEY_REMEMBERED_TOKENS, emptySet())?.toMutableSet() ?: mutableSetOf()
+            val encPrefs = getEncryptedRememberedPrefs(ctx)
+            val set = getRememberedTokens(ctx).toMutableSet()
             set.add(token)
-            prefs.edit().putStringSet(KEY_REMEMBERED_TOKENS, set).apply()
+            encPrefs.edit().putStringSet(KEY_REMEMBERED_TOKENS, set).apply()
         } catch (_: Exception) {}
     }
 
-    fun getLibraryTracks(): List<com.example.domain.model.Track> {
+    fun revokePairedDevice(context: Context? = null, token: String): Boolean {
+        val clean = token.trim()
+        sessionTokens.remove(clean)
+        val ctx = context ?: appContext ?: return false
+        return try {
+            val encPrefs = getEncryptedRememberedPrefs(ctx)
+            val set = getRememberedTokens(ctx).toMutableSet()
+            val removed = set.remove(clean)
+            encPrefs.edit().putStringSet(KEY_REMEMBERED_TOKENS, set).apply()
+            removed
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun clearPairedDevices(context: Context? = null) {
+        sessionTokens.clear()
+        val ctx = context ?: appContext ?: return
+        try {
+            getEncryptedRememberedPrefs(ctx).edit().remove(KEY_REMEMBERED_TOKENS).apply()
+            ctx.getSharedPreferences(PREFS_REMEMBERED, Context.MODE_PRIVATE)
+                .edit().remove(KEY_REMEMBERED_TOKENS).apply()
+        } catch (_: Exception) {}
+    }
+
+    suspend fun getLibraryTracks(): List<com.example.domain.model.Track> {
         val custom = try {
-            kotlinx.coroutines.runBlocking { libraryTracksProvider?.invoke() }
+            withContext(Dispatchers.IO) { libraryTracksProvider?.invoke() }
         } catch (_: Exception) {
             null
         }
@@ -222,10 +296,13 @@ object GamaLanSyncServer {
                     setAttribute("version", "1.2.0")
                     setAttribute("port", port.toString())
                     setAttribute("codecs", "flac,wav,alac,mp3,aac,opus")
-                    setAttribute("state", if (playbackManager?.playbackState?.value?.isPlaying == true) "playing" else "idle")
+                    val isPlayingNow = playbackManager?.playbackState?.value?.isPlaying == true
                     val curTrack = playbackManager?.playbackState?.value?.currentTrack?.title ?: ""
+                    lastMdnsState = Pair(isPlayingNow, curTrack)
+                    setAttribute("state", if (isPlayingNow) "playing" else "idle")
                     if (curTrack.isNotBlank()) {
-                        setAttribute("track", curTrack.take(64))
+                        val encodedTrack = java.net.URLEncoder.encode(curTrack.take(64), "UTF-8")
+                        setAttribute("track", encodedTrack)
                     }
                     setAttribute("rate", getOutputSampleRate(context))
                     setAttribute("charging", if (isDeviceCharging(context)) "true" else "false")
@@ -263,11 +340,24 @@ object GamaLanSyncServer {
         nsdManager = null
     }
 
+    private fun updateMdnsStateIfNeeded() {
+        val ctx = appContext ?: return
+        val isPlayingNow = playbackManager?.playbackState?.value?.isPlaying == true
+        val curTrack = playbackManager?.playbackState?.value?.currentTrack?.title ?: ""
+        val currentState = Pair(isPlayingNow, curTrack)
+        if (lastMdnsState != currentState) {
+            lastMdnsState = currentState
+            unregisterMdnsService()
+            registerMdnsService(ctx, DEFAULT_PORT)
+        }
+    }
+
     private fun startBroadcastLoop() {
         broadcastJob?.cancel()
         broadcastJob = scope.launch {
             while (isActive && isRunning) {
                 delay(100) // ~10Hz smooth telemetry updates for FFT and position
+                updateMdnsStateIfNeeded()
                 if (connectedClients.isNotEmpty()) {
                     val statusJson = buildStatusJson().toString()
                     val frame = createWebSocketTextFrame(statusJson)
@@ -286,7 +376,7 @@ object GamaLanSyncServer {
         }
     }
 
-    private fun handleClient(socket: Socket) {
+    private suspend fun handleClient(socket: Socket) {
         try {
             val input = BufferedReader(InputStreamReader(socket.getInputStream()))
             val output = socket.getOutputStream()
@@ -377,7 +467,7 @@ object GamaLanSyncServer {
                     method == "OPTIONS" -> {
                         val res = "HTTP/1.1 204 No Content\r\n" +
                                 "Access-Control-Allow-Origin: *\r\n" +
-                                "Access-Control-Allow-Methods: GET, POST, OPTIONS, HEAD\r\n" +
+                                "Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS, HEAD\r\n" +
                                 "Access-Control-Allow-Headers: Range, Authorization, X-Auth-Token, Content-Type, X-Track-Filename, X-Track-Title, X-Track-Artist\r\n" +
                                 "Access-Control-Max-Age: 86400\r\n\r\n"
                         output.write(res.toByteArray(Charsets.UTF_8))
@@ -429,6 +519,65 @@ object GamaLanSyncServer {
                                     "Content-Type: application/json; charset=utf-8\r\n" +
                                     "Access-Control-Allow-Origin: *\r\n" +
                                     "Content-Length: ${body.toByteArray().size}\r\n\r\n" + body
+                            output.write(res.toByteArray(Charsets.UTF_8))
+                        }
+                    }
+                    method == "GET" && path == "/pair/remembered" -> {
+                        val authHeader = headers["authorization"]?.removePrefix("Bearer ")?.trim()
+                            ?: headers["x-auth-token"]
+                        val effectiveToken = queryParams["token"] ?: authHeader
+                        if (!validateToken(effectiveToken)) {
+                            val errBody = "{\"success\":false,\"error\":\"Unauthorized. Valid pairing token required.\"}"
+                            val res = "HTTP/1.1 401 Unauthorized\r\n" +
+                                    "Content-Type: application/json; charset=utf-8\r\n" +
+                                    "Access-Control-Allow-Origin: *\r\n" +
+                                    "Content-Length: ${errBody.toByteArray().size}\r\n\r\n" + errBody
+                            output.write(res.toByteArray(Charsets.UTF_8))
+                        } else {
+                            val tokens = getRememberedTokens(appContext)
+                            val arr = JSONArray()
+                            tokens.forEachIndexed { idx, t ->
+                                arr.put(JSONObject().apply {
+                                    put("id", t.take(6))
+                                    put("name", "Paired Device #${idx + 1}")
+                                    put("tokenPrefix", t.take(6))
+                                })
+                            }
+                            val resBody = JSONObject().apply {
+                                put("success", true)
+                                put("count", tokens.size)
+                                put("devices", arr)
+                            }.toString()
+                            val res = "HTTP/1.1 200 OK\r\n" +
+                                    "Content-Type: application/json; charset=utf-8\r\n" +
+                                    "Access-Control-Allow-Origin: *\r\n" +
+                                    "Content-Length: ${resBody.toByteArray().size}\r\n\r\n" + resBody
+                            output.write(res.toByteArray(Charsets.UTF_8))
+                        }
+                    }
+                    method == "DELETE" && path == "/pair/remembered" -> {
+                        val authHeader = headers["authorization"]?.removePrefix("Bearer ")?.trim()
+                            ?: headers["x-auth-token"]
+                        val effectiveToken = queryParams["token"] ?: authHeader
+                        if (!validateToken(effectiveToken)) {
+                            val errBody = "{\"success\":false,\"error\":\"Unauthorized. Valid pairing token required.\"}"
+                            val res = "HTTP/1.1 401 Unauthorized\r\n" +
+                                    "Content-Type: application/json; charset=utf-8\r\n" +
+                                    "Access-Control-Allow-Origin: *\r\n" +
+                                    "Content-Length: ${errBody.toByteArray().size}\r\n\r\n" + errBody
+                            output.write(res.toByteArray(Charsets.UTF_8))
+                        } else {
+                            val targetId = queryParams["id"]?.trim()
+                            if (!targetId.isNullOrBlank()) {
+                                revokePairedDevice(appContext, targetId)
+                            } else {
+                                clearPairedDevices(appContext)
+                            }
+                            val resBody = "{\"success\":true,\"message\":\"Remembered paired devices cleared.\"}"
+                            val res = "HTTP/1.1 200 OK\r\n" +
+                                    "Content-Type: application/json; charset=utf-8\r\n" +
+                                    "Access-Control-Allow-Origin: *\r\n" +
+                                    "Content-Length: ${resBody.toByteArray().size}\r\n\r\n" + resBody
                             output.write(res.toByteArray(Charsets.UTF_8))
                         }
                     }

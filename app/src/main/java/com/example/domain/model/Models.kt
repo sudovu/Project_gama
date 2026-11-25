@@ -284,6 +284,8 @@ data class PlaybackState(
         if (streamMetadataTitle != other.streamMetadataTitle) return false
         if (isReconnecting != other.isReconnecting) return false
         if (reconnectAttempt != other.reconnectAttempt) return false
+        if (loopRegion != other.loopRegion) return false
+        if (isLoopRegionEnabled != other.isLoopRegionEnabled) return false
 
         return true
     }
@@ -318,6 +320,8 @@ data class PlaybackState(
         result = 31 * result + (streamMetadataTitle?.hashCode() ?: 0)
         result = 31 * result + isReconnecting.hashCode()
         result = 31 * result + reconnectAttempt
+        result = 31 * result + (loopRegion?.hashCode() ?: 0)
+        result = 31 * result + isLoopRegionEnabled.hashCode()
         return result
     }
 }

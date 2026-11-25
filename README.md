@@ -39,6 +39,7 @@ Architected and developed by **VHUWON MATHERS**.
 - **Asynchronous Peak Extraction:** Background `MediaExtractor` decoder calculates 100 normalized amplitude peaks with realistic envelope fallback for live streams.
 - **High-Performance Canvas Scrubber:** 60fps Jetpack Compose `Canvas` rendering 100 rounded bars with dynamic theme gradients, interactive tap/drag gesture seeking, and a floating timestamp bubble.
 - **Dual Seeker Modes:** Instant one-tap toggle between the waveform scrubber and the cybernetic circular arc scrubber.
+- **Cue Points & A-B Loop:** Drop persistent timestamped cue markers directly on the waveform, jump to any marker with a tap, and loop precision A-B regions (minimum 1 second, automatic reset on track change, crossfade suppressed during active loops).
 
 ### 3. Seamless Audio-Video Continuity & Floating PiP
 - **One-Tap Audio/Video Toggle:** Switch between full-frame video playback and lightweight background audio-only mode without reloading or losing timestamp position.
@@ -53,12 +54,23 @@ Architected and developed by **VHUWON MATHERS**.
   - `Video Tracks` (continuity tracks with video streams)
 
 ### 5. Cross-Device LAN Sync (Android $\leftrightarrow$ Windows Desktop $\leftrightarrow$ Web)
-- **Zero Cloud Accounts:** All synchronization runs over your local Wi-Fi network using standard TCP, HTTP, and RFC 6455 WebSockets on port `8765`.
-- **mDNS Auto-Discovery (`_gama-sync._tcp`):** Android broadcasts service info via `NsdManager`; Windows desktop discovers phones with 1 click.
-- **4-Digit PIN Security:** Cryptographic session tokens (`POST /pair`) ensure only authorized devices on your network can control playback or stream audio.
-- **Direct LAN Audio Streaming (`GET /stream`):** Full HTTP Range-request support (`Accept-Ranges: bytes`, `206 Partial Content`) lets your PC speakers play lossless audio streamed directly from your phone.
+**Your phone is the server; your PC is the remote.** All synchronization runs over your local Wi-Fi network using standard TCP, HTTP, and RFC 6455 WebSockets on port `8765` with zero cloud accounts.
+
+- **mDNS Auto-Discovery (`_gama-sync._tcp`):** Android broadcasts capability and playback state TXT records (`state`, `track`, `rate`, `charging`) via `NsdManager`; Windows desktop discovers phones with 1 click.
+- **4-Digit PIN & Encrypted Remembered Pairing (`POST /pair`, `GET/DELETE /pair/remembered`):** Cryptographic session tokens stored in Android `EncryptedSharedPreferences` ensure only authorized devices on your network can control playback, browse the library, or stream audio—with per-device revocation in LAN settings.
+- **Phone Library Browsing on PC (`GET /library/tracks`, `GET /library/albums`):** Authenticated endpoints expose your phone's local track and album catalog directly to the Windows Phone Library tab for remote Play, Queue, or PC streaming.
+- **Direct LAN Audio Streaming (`GET /stream`, `GET /stream?trackId=...`):** Full HTTP Range-request support (`Accept-Ranges: bytes`, `206 Partial Content`) lets your PC speakers play lossless audio streamed directly from your phone.
 - **Two-Way Queue Push (`POST /queue/push`):** Send tracks or upload local `.flac`/`.mp3` files from PC straight to your phone's active playback queue with chunked disk streaming.
 - **Mobile/Browser Web Remote (`GET /`):** Point any browser (iPhone Safari, iPad, Android Chrome, Mac/Linux) to `http://<phone_ip>:8765/` to control playback, view live FFT bars, or stream audio without installing an app.
+
+---
+
+## Local Development Environment
+
+- **JDK:** Java 17+ required by Gradle 9.3.1 (e.g., `JAVA_HOME=C:\Users\AD\.gradle\jdks\jdk-17.0.21.1+2`)
+- **Android SDK:** Platform `36.1` and Build-Tools `36.0.0` (e.g., `ANDROID_HOME=C:\Users\AD\AppData\Local\Android\Sdk`)
+- **Android Unit Tests:** `.\gradlew.bat testDebugUnitTest --no-daemon` (70/70 tests verified passing)
+- **Windows Desktop Build:** `cd windows && npm ci && npm run build` (Vite production bundle verified green, 1,507 modules)
 
 ---
 

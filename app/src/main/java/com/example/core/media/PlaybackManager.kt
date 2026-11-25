@@ -168,13 +168,19 @@ class PlaybackManager(val context: Context) {
         audioEngine.setReplayGainEnabled(enabled)
     }
 
+    private var previousCrossfadeDuration: Int = 0
+
     fun setCrossfadeDuration(seconds: Int) {
         val clamped = seconds.coerceIn(0, 8)
+        previousCrossfadeDuration = clamped
         _playbackState.update {
             it.copy(equalizerSettings = it.equalizerSettings.copy(crossfadeSeconds = clamped))
         }
-        audioEngine.setCrossfadeDuration(clamped)
+        val effectiveCrossfade = if (_playbackState.value.isLoopRegionEnabled) 0 else clamped
+        audioEngine.setCrossfadeDuration(effectiveCrossfade)
     }
+
+    internal fun getEngineCrossfadeSeconds(): Int = audioEngine.getCrossfadeDuration()
 
     fun attachBridge(bridge: YouTubePlayerBridge) {
         this.playerBridge = bridge
@@ -344,6 +350,11 @@ class PlaybackManager(val context: Context) {
         val trackDurationMs = if (isLive) 0L else (playableTrack.durationSeconds * 1000L).coerceAtLeast(1000L)
         audioEngine.setExternalPosition(0L, trackDurationMs)
 
+        val restoreCrossfade = if (_playbackState.value.isLoopRegionEnabled) {
+            previousCrossfadeDuration
+        } else {
+            _playbackState.value.equalizerSettings.crossfadeSeconds
+        }
         _playbackState.update { current ->
             current.copy(
                 currentTrack = playableTrack,
@@ -361,9 +372,12 @@ class PlaybackManager(val context: Context) {
                 isLiveStream = isLive,
                 streamMetadataTitle = null,
                 isReconnecting = false,
-                reconnectAttempt = 0
+                reconnectAttempt = 0,
+                loopRegion = null,
+                isLoopRegionEnabled = false
             )
         }
+        audioEngine.setCrossfadeDuration(restoreCrossfade)
 
         if (isLive && playableTrack.streamUrl.isNotEmpty()) {
             fetchLiveStreamMetadata(playableTrack.streamUrl)
@@ -585,8 +599,13 @@ class PlaybackManager(val context: Context) {
 
     fun setLoopRegion(startMs: Long, endMs: Long) {
         val s = startMs.coerceAtLeast(0L)
-        val e = endMs.coerceAtLeast(s + 500L)
+        val e = endMs.coerceAtLeast(s + 1000L)
+        if (!_playbackState.value.isLoopRegionEnabled) {
+            previousCrossfadeDuration = _playbackState.value.equalizerSettings.crossfadeSeconds
+        }
         _playbackState.update { it.copy(loopRegion = Pair(s, e), isLoopRegionEnabled = true) }
+        // Suppress gapless crossfade while A-B loop is active
+        audioEngine.setCrossfadeDuration(0)
         val cur = _playbackState.value.positionMs
         if (cur < s || cur >= e) {
             seekTo(s)
@@ -595,13 +614,30 @@ class PlaybackManager(val context: Context) {
 
     fun clearLoopRegion() {
         _playbackState.update { it.copy(loopRegion = null, isLoopRegionEnabled = false) }
+        audioEngine.setCrossfadeDuration(previousCrossfadeDuration)
     }
 
     fun toggleLoopRegion() {
         val cur = _playbackState.value
         if (cur.loopRegion != null) {
-            _playbackState.update { it.copy(isLoopRegionEnabled = !it.isLoopRegionEnabled) }
+            val nextEnabled = !cur.isLoopRegionEnabled
+            if (nextEnabled) {
+                previousCrossfadeDuration = cur.equalizerSettings.crossfadeSeconds
+            }
+            _playbackState.update { it.copy(isLoopRegionEnabled = nextEnabled) }
+            audioEngine.setCrossfadeDuration(if (nextEnabled) 0 else previousCrossfadeDuration)
         }
+    }
+
+    internal fun shouldWrapLoopRegion(
+        prevPosMs: Long,
+        newPosMs: Long,
+        loop: Pair<Long, Long>?,
+        isEnabled: Boolean
+    ): Boolean {
+        if (!isEnabled || loop == null) return false
+        if (loop.second - loop.first < 1000L) return false
+        return prevPosMs < loop.second && newPosMs >= loop.second
     }
 
     fun setPlaybackSpeed(speed: Float) {
@@ -1076,8 +1112,9 @@ class PlaybackManager(val context: Context) {
         val posMs = (currentTimeSec.coerceAtLeast(0f) * 1000f).toLong()
         val durMs = if (durationSec > 0f) (durationSec * 1000f).toLong() else _playbackState.value.durationMs
         
+        val prevPosMs = _playbackState.value.positionMs
         val loop = _playbackState.value.loopRegion
-        val effectivePos = if (_playbackState.value.isLoopRegionEnabled && loop != null && posMs >= loop.second) {
+        val effectivePos = if (shouldWrapLoopRegion(prevPosMs, posMs, loop, _playbackState.value.isLoopRegionEnabled) && loop != null) {
             seekTo(loop.first)
             loop.first
         } else {
@@ -1257,7 +1294,7 @@ class PlaybackManager(val context: Context) {
                     }
 
                     val loop = state.loopRegion
-                    val effectivePos = if (state.isLoopRegionEnabled && loop != null && newPos >= loop.second) {
+                    val effectivePos = if (shouldWrapLoopRegion(state.positionMs, newPos, loop, state.isLoopRegionEnabled) && loop != null) {
                         seekTo(loop.first)
                         loop.first
                     } else {

@@ -228,13 +228,21 @@ ipcMain.handle('discover-lan-devices', async () => {
           res.on('end', () => {
             try {
               const data = JSON.parse(rawData);
+              let decodedTrackTitle = '';
+              if (data.track?.title) {
+                try {
+                  decodedTrackTitle = decodeURIComponent(String(data.track.title).replace(/\+/g, ' '));
+                } catch (_) {
+                  decodedTrackTitle = String(data.track.title);
+                }
+              }
               resolve({
                 ip,
                 port: 8765,
                 deviceModel: data.deviceModel || 'GAMA Device',
                 protocolVersion: data.protocolVersion || '1.2.0',
                 pairingPin: data.pairingPin || '',
-                trackTitle: data.track?.title || ''
+                trackTitle: decodedTrackTitle || 'No track'
               });
             } catch (_) {
               resolve(null);

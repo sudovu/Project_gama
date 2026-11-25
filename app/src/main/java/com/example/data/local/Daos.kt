@@ -203,3 +203,18 @@ interface TrackPlayStatDao {
         }
     }
 }
+
+@Dao
+interface CuePointDao {
+    @Query("SELECT * FROM cue_points WHERE trackId = :trackId ORDER BY positionMs ASC")
+    suspend fun getCuePointsForTrack(trackId: String): List<CuePointEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCuePoint(cuePoint: CuePointEntity)
+
+    @Query("DELETE FROM cue_points WHERE trackId = :trackId AND id = :cueId")
+    suspend fun deleteCuePoint(trackId: String, cueId: String)
+
+    @Query("DELETE FROM cue_points WHERE trackId = :trackId")
+    suspend fun deleteCuePointsForTrack(trackId: String)
+}

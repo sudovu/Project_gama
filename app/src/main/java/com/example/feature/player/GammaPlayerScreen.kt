@@ -529,7 +529,24 @@ fun GammaPlayerScreen(
                                 )
                             }
                         } else if (rawBadge.isNotBlank() || track != null) {
-                            val isLosslessOrHiRes = track?.codec == "FLAC" || track?.codec == "WAV" || ((track?.bitDepth ?: 0) >= 24 || (track?.sampleRateHz ?: 0) >= 96000) || rawBadge.contains("FLAC", ignoreCase = true) || rawBadge.contains("Lossless", ignoreCase = true)
+                            val codecUpper = (track?.codec ?: "").uppercase()
+                            val bitrate = track?.bitrateKbps ?: 0
+                            val bitDepth = track?.bitDepth ?: 16
+                            val sampleRate = track?.sampleRateHz ?: 44100
+                            val isSubHiFiLossy = (bitrate in 1..255) || bitDepth < 16 || sampleRate < 44100
+                            val isLosslessOrHiRes = !isSubHiFiLossy && (
+                                codecUpper == "FLAC" || codecUpper == "WAV" || codecUpper == "ALAC" ||
+                                bitDepth >= 24 || sampleRate >= 96000 ||
+                                rawBadge.contains("FLAC", ignoreCase = true) || rawBadge.contains("Lossless", ignoreCase = true)
+                            )
+                            val localBadgeLabel = when {
+                                isLosslessOrHiRes -> "LOCAL HI-FI • ${if (rawBadge.isNotBlank()) rawBadge else "FLAC Lossless"}"
+                                isSubHiFiLossy -> {
+                                    val c = codecUpper.ifBlank { "MP3" }
+                                    if (bitrate > 0) "LOCAL • $c $bitrate" else "LOCAL • $c"
+                                }
+                                else -> "LOCAL • ${if (rawBadge.isNotBlank()) rawBadge else codecUpper.ifBlank { "Audio" }}"
+                            }
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
@@ -538,7 +555,7 @@ fun GammaPlayerScreen(
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = if (isLosslessOrHiRes) "LOCAL HI-FI • ${if (rawBadge.isNotBlank()) rawBadge else "FLAC Lossless"}" else "LOCAL • ${if (rawBadge.isNotBlank()) rawBadge else "Audio"}",
+                                    text = localBadgeLabel,
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontWeight = FontWeight.SemiBold,
                                         letterSpacing = 0.8.sp
@@ -549,87 +566,97 @@ fun GammaPlayerScreen(
                         }
                     }
 
-                    // Audio Path Diagnostic Chip
-                    val isDirectRate = track?.sampleRateHz == nativeSampleRate
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(GammaSurface.copy(alpha = 0.7f))
-                            .border(
-                                width = 0.5.dp,
-                                color = if (isDirectRate) GammaGlowCyan.copy(alpha = 0.5f) else GammaPrimary.copy(alpha = 0.4f),
-                                shape = RoundedCornerShape(6.dp)
-                            )
-                            .clickable { showAudioPathExpanded = !showAudioPathExpanded }
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.GraphicEq,
-                                contentDescription = "Signal Path",
-                                tint = if (isDirectRate) GammaGlowCyan else GammaPrimary,
-                                modifier = Modifier.size(11.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            val srcRateStr = if ((track?.sampleRateHz ?: 0) > 0) "${(track?.sampleRateHz ?: 44100) / 1000}.${((track?.sampleRateHz ?: 44100) % 1000) / 100}k" else "44.1k"
-                            val outRateStr = "${nativeSampleRate / 1000}.${(nativeSampleRate % 1000) / 100}k"
-                            Text(
-                                text = "PATH: $srcRateStr → $outRateStr [${if (isDirectRate) "DIRECT" else "RESAMPLED"}]",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = if (isDirectRate) GammaGlowCyan else GammaTextPrimary,
-                                fontSize = 9.5.sp
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = if (showAudioPathExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.Info,
-                                contentDescription = null,
-                                tint = GammaTextMuted,
-                                modifier = Modifier.size(11.dp)
-                            )
-                        }
-                    }
-
-                    if (showAudioPathExpanded) {
+                    // Audio Path Diagnostic Chip (hidden for YouTube/stream tracks)
+                    val isStreamTrack = playback.isLiveStream || track?.youtubeVideoId?.isNotBlank() == true || track?.streamUrl?.isNotBlank() == true || (track?.localAudioUri != null && track.localAudioUri.startsWith("http"))
+                    if (!isStreamTrack) {
+                        val isDirectRate = track?.sampleRateHz == nativeSampleRate
                         Spacer(modifier = Modifier.height(4.dp))
-                        Column(
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.Black.copy(alpha = 0.85f))
-                                .border(1.dp, GammaDivider, RoundedCornerShape(8.dp))
-                                .padding(8.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(GammaSurface.copy(alpha = 0.7f))
+                                .border(
+                                    width = 0.5.dp,
+                                    color = if (isDirectRate) GammaGlowCyan.copy(alpha = 0.5f) else GammaPrimary.copy(alpha = 0.4f),
+                                    shape = RoundedCornerShape(6.dp)
+                                )
+                                .clickable { showAudioPathExpanded = !showAudioPathExpanded }
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
-                            Text(
-                                text = "AUDIO SIGNAL CHAIN DIAGNOSTICS",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp),
-                                color = GammaPrimary
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "• Source: ${track?.codec ?: "PCM"} ${track?.sampleRateHz ?: 44100}Hz / ${track?.bitDepth ?: 16}-bit (${track?.bitrateKbps ?: 320} kbps)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = GammaTextPrimary,
-                                fontSize = 11.sp
-                            )
-                            Text(
-                                text = "• DSP Pipeline: 32-bit Float • Preamp: ${playback.equalizerSettings.preampGainDb}dB • EQ: ${if (playback.equalizerSettings.isEnabled) playback.equalizerSettings.currentPreset.displayName else "Bypassed"}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = GammaTextSecondary,
-                                fontSize = 11.sp
-                            )
-                            Text(
-                                text = "• Hardware HAL: Android AudioFlinger @ ${nativeSampleRate}Hz (Buffer: ${nativeBufferSize}f)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = GammaTextSecondary,
-                                fontSize = 11.sp
-                            )
-                            Text(
-                                text = if (isDirectRate) "• Status: Bit-Perfect sample rate match" else "• Status: System resampled from ${track?.sampleRateHz ?: 44100}Hz to ${nativeSampleRate}Hz",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = if (isDirectRate) GammaGlowCyan else Color(0xFFFBBF24),
-                                fontSize = 11.sp
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.GraphicEq,
+                                    contentDescription = "Signal Path",
+                                    tint = if (isDirectRate) GammaGlowCyan else GammaPrimary,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                val srcRateStr = if ((track?.sampleRateHz ?: 0) > 0) "${(track?.sampleRateHz ?: 44100) / 1000}.${((track?.sampleRateHz ?: 44100) % 1000) / 100}k" else "44.1k"
+                                val outRateStr = "${nativeSampleRate / 1000}.${(nativeSampleRate % 1000) / 100}k"
+                                Text(
+                                    text = "PATH: $srcRateStr → $outRateStr [${if (isDirectRate) "Direct path candidate" else "OS mixer resampling"}]",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = if (isDirectRate) GammaGlowCyan else GammaTextPrimary,
+                                    fontSize = 9.5.sp
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = if (showAudioPathExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = GammaTextMuted,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                            }
+                        }
+
+                        if (showAudioPathExpanded) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color.Black.copy(alpha = 0.85f))
+                                    .border(1.dp, GammaDivider, RoundedCornerShape(8.dp))
+                                    .padding(8.dp)
+                            ) {
+                                Text(
+                                    text = "AUDIO SIGNAL CHAIN DIAGNOSTICS",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp),
+                                    color = GammaPrimary
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "• Source: ${track?.codec ?: "PCM"} ${track?.sampleRateHz ?: 44100}Hz / ${track?.bitDepth ?: 16}-bit (${track?.bitrateKbps ?: 320} kbps)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = GammaTextPrimary,
+                                    fontSize = 11.sp
+                                )
+                                Text(
+                                    text = "• DSP Pipeline: 32-bit Float • Preamp: ${playback.equalizerSettings.preampGainDb}dB • EQ: ${if (playback.equalizerSettings.isEnabled) playback.equalizerSettings.currentPreset.displayName else "Bypassed"}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = GammaTextSecondary,
+                                    fontSize = 11.sp
+                                )
+                                Text(
+                                    text = "• Hardware HAL: Android AudioFlinger @ ${nativeSampleRate}Hz (Buffer: ${nativeBufferSize}f)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = GammaTextSecondary,
+                                    fontSize = 11.sp
+                                )
+                                Text(
+                                    text = if (isDirectRate) "• Status: Direct path candidate" else "• Status: OS mixer resampling (${track?.sampleRateHz ?: 44100}Hz → ${nativeSampleRate}Hz)",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = if (isDirectRate) GammaGlowCyan else Color(0xFFFBBF24),
+                                    fontSize = 11.sp
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Android AudioFlinger may resample even when rates match. True bit-perfect requires a USB DAC with exclusive mode, which GAMA does not currently implement.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = GammaTextMuted,
+                                    fontSize = 10.sp
+                                )
+                            }
                         }
                     }
 
@@ -1673,6 +1700,58 @@ fun GammaPlayerScreen(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = GammaSecondary
                             )
+                        }
+
+                        var pairedRevision by remember { mutableStateOf(0) }
+                        val rememberedTokens = remember(pairedRevision) {
+                            com.example.core.remote.GamaLanSyncServer.getRememberedTokens(context).toList()
+                        }
+                        if (rememberedTokens.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Paired Devices (${rememberedTokens.size})",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = GammaTextPrimary
+                                )
+                                TextButton(
+                                    onClick = {
+                                        com.example.core.remote.GamaLanSyncServer.clearPairedDevices(context)
+                                        pairedRevision++
+                                    },
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text("Revoke All", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF4D6D))
+                                }
+                            }
+                            rememberedTokens.forEachIndexed { idx, tokenVal ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "• Device #${idx + 1} (${tokenVal.take(6)}…)",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                                        color = GammaTextSecondary
+                                    )
+                                    TextButton(
+                                        onClick = {
+                                            com.example.core.remote.GamaLanSyncServer.revokePairedDevice(context, tokenVal)
+                                            pairedRevision++
+                                        },
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("Revoke", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF4D6D))
+                                    }
+                                }
+                            }
                         }
                     }
                 }

@@ -8,7 +8,9 @@ import com.example.domain.model.EqualizerSettings
 import com.example.domain.model.Track
 import com.example.ui.theme.DynamicPaletteExtractor
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -608,5 +610,222 @@ class AudiophileEngineAndDifferentiatorsTest {
         val tokens = com.example.core.remote.GamaLanSyncServer.getRememberedTokens(context)
         assertTrue(tokens.contains(testToken))
         assertTrue(com.example.core.remote.GamaLanSyncServer.validateToken(testToken, context))
+    }
+
+    @Test
+    fun testLibraryAndStreamEndpointsRequireAuthAndHandleConcurrency() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val pm = com.example.core.media.PlaybackManager(context)
+        val server = com.example.core.remote.GamaLanSyncServer
+        val testPort = 18765
+
+        val tempAudio = java.io.File.createTempFile("gama_test_audio", ".flac")
+        tempAudio.writeBytes(ByteArray(128) { 1 })
+        tempAudio.deleteOnExit()
+
+        val tracksFixture = (1..5000).map { idx ->
+            com.example.domain.model.Track(
+                id = "trk_$idx",
+                title = "Track $idx",
+                artist = "Artist $idx",
+                albumTitle = "Album ${idx % 20}",
+                codec = "FLAC",
+                bitrateKbps = 1411,
+                localAudioUri = if (idx == 1) tempAudio.absolutePath else ""
+            )
+        }
+        server.libraryTracksProvider = { tracksFixture }
+
+        val validToken = "valid_test_token_xyz"
+        server.stop()
+        server.addTestSessionToken(validToken)
+        server.start(context, pm, port = testPort)
+        var waitedMs = 0
+        while (!server.isRunning && waitedMs < 3000) {
+            Thread.sleep(25)
+            waitedMs += 25
+        }
+
+        try {
+            fun httpGet(pathAndQuery: String, token: String? = null): Int {
+                val url = java.net.URL("http://127.0.0.1:$testPort$pathAndQuery")
+                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 2000
+                    readTimeout = 2000
+                    if (token != null) setRequestProperty("Authorization", "Bearer $token")
+                }
+                return conn.responseCode
+            }
+
+            // Follow-Up 4: Unauthorized requests must return 401
+            assertEquals(401, httpGet("/library/tracks"))
+            assertEquals(401, httpGet("/library/albums"))
+            assertEquals(401, httpGet("/stream?trackId=trk_1"))
+
+            // Follow-Up 4: Authorized requests must return 200
+            assertEquals(200, httpGet("/library/tracks?limit=50", validToken))
+            assertEquals(200, httpGet("/library/albums", validToken))
+            assertEquals(200, httpGet("/stream?trackId=trk_1", validToken))
+
+            // Follow-Up 3: 10 concurrent /library/tracks requests on 5,000-track fixture within 2 seconds
+            val executor = java.util.concurrent.Executors.newFixedThreadPool(10)
+            val startGate = java.util.concurrent.CountDownLatch(1)
+            val startMs = System.currentTimeMillis()
+            val futures = (1..10).map {
+                executor.submit<Int> {
+                    startGate.await(2, java.util.concurrent.TimeUnit.SECONDS)
+                    httpGet("/library/tracks?limit=50", validToken)
+                }
+            }
+            startGate.countDown()
+            val codes = futures.map { it.get(2, java.util.concurrent.TimeUnit.SECONDS) }
+            val elapsed = System.currentTimeMillis() - startMs
+            executor.shutdownNow()
+            assertTrue("Expected all 10 concurrent requests to return 200", codes.all { it == 200 })
+            assertTrue("Expected concurrent requests to complete within 2000ms, took ${elapsed}ms", elapsed < 2000L)
+        } finally {
+            server.libraryTracksProvider = null
+            server.stop()
+        }
+    }
+
+    @Test
+    fun testCrossfadeSuppressedAndRestoredOnAbLoop() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val pm = com.example.core.media.PlaybackManager(context)
+
+        pm.setCrossfadeDuration(3)
+        assertEquals(3, pm.getEngineCrossfadeSeconds())
+
+        pm.setLoopRegion(5000L, 15000L)
+        assertEquals(0, pm.getEngineCrossfadeSeconds())
+
+        pm.toggleLoopRegion()
+        assertEquals(3, pm.getEngineCrossfadeSeconds())
+
+        pm.toggleLoopRegion()
+        assertEquals(0, pm.getEngineCrossfadeSeconds())
+
+        pm.clearLoopRegion()
+        assertEquals(3, pm.getEngineCrossfadeSeconds())
+    }
+
+    @Test
+    fun testCrossfadeRestoredOnTrackChangeWhileLoopEnabled() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val pm = com.example.core.media.PlaybackManager(context)
+
+        pm.setCrossfadeDuration(4)
+        pm.setLoopRegion(5000L, 15000L)
+        assertEquals(0, pm.getEngineCrossfadeSeconds())
+
+        pm.playTrack(Track(id = "trk_cf_next", title = "Next", artist = "Artist", durationSeconds = 120))
+        assertNull(pm.playbackState.value.loopRegion)
+        assertFalse(pm.playbackState.value.isLoopRegionEnabled)
+        assertEquals(4, pm.getEngineCrossfadeSeconds())
+    }
+
+    @Test
+    fun testCrossfadeChangeWhileLoopEnabledUsesNewValueOnRestore() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val pm = com.example.core.media.PlaybackManager(context)
+
+        pm.setCrossfadeDuration(2)
+        pm.setLoopRegion(5000L, 15000L)
+        assertEquals(0, pm.getEngineCrossfadeSeconds())
+
+        pm.setCrossfadeDuration(6)
+        assertEquals(0, pm.getEngineCrossfadeSeconds())
+
+        pm.clearLoopRegion()
+        assertEquals(6, pm.getEngineCrossfadeSeconds())
+    }
+
+    @Test
+    fun testAbLoopEdgeCases() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val pm = com.example.core.media.PlaybackManager(context)
+
+        // (c) Loop does not fire if region is shorter than 1 second
+        assertFalse(pm.shouldWrapLoopRegion(800L, 950L, Pair(100L, 950L), isEnabled = true))
+
+        // (d) Seeking outside the region does not immediately snap back; only snaps when crossing end
+        assertFalse(pm.shouldWrapLoopRegion(26000L, 26120L, Pair(10000L, 25000L), isEnabled = true))
+        assertTrue(pm.shouldWrapLoopRegion(24900L, 25050L, Pair(10000L, 25000L), isEnabled = true))
+
+        // (a) & (b) setLoopRegion enforces >= 1s and resets on playTrack
+        pm.setCrossfadeDuration(4)
+        pm.setLoopRegion(5000L, 5400L)
+        val loop = pm.playbackState.value.loopRegion
+        assertNotNull(loop)
+        assertTrue((loop!!.second - loop.first) >= 1000L)
+        assertTrue(pm.playbackState.value.isLoopRegionEnabled)
+
+        val nextTrack = com.example.domain.model.Track(
+            id = "next_trk",
+            title = "Next",
+            artist = "Artist",
+            durationSeconds = 120
+        )
+        pm.playTrack(nextTrack)
+        assertNull(pm.playbackState.value.loopRegion)
+        assertFalse(pm.playbackState.value.isLoopRegionEnabled)
+    }
+
+    @Test
+    fun testLocalBadgeTiersFixture() {
+        val mp3Low = com.example.domain.model.Track(
+            id = "mp3_128",
+            title = "Lossy MP3",
+            artist = "Tester",
+            codec = "MP3",
+            bitrateKbps = 128,
+            bitDepth = 16,
+            sampleRateHz = 44100
+        )
+        val mp3Boundary = com.example.domain.model.Track(
+            id = "mp3_256",
+            title = "Threshold MP3",
+            artist = "Tester",
+            codec = "MP3",
+            bitrateKbps = 256,
+            bitDepth = 16,
+            sampleRateHz = 44100
+        )
+        val flac16 = com.example.domain.model.Track(
+            id = "flac_16",
+            title = "CD Lossless",
+            artist = "Tester",
+            codec = "FLAC",
+            bitrateKbps = 950,
+            bitDepth = 16,
+            sampleRateHz = 44100
+        )
+        val flac24 = com.example.domain.model.Track(
+            id = "flac_24",
+            title = "Hi-Res Master",
+            artist = "Tester",
+            codec = "FLAC",
+            bitrateKbps = 2800,
+            bitDepth = 24,
+            sampleRateHz = 96000
+        )
+
+        fun badgeFor(t: com.example.domain.model.Track): String {
+            val codecUpper = t.codec.uppercase()
+            val isSubHiFiLossy = (t.bitrateKbps in 1..255) || t.bitDepth < 16 || t.sampleRateHz < 44100
+            val isHiFi = !isSubHiFiLossy && (codecUpper == "FLAC" || codecUpper == "WAV" || t.bitDepth >= 24 || t.sampleRateHz >= 96000)
+            return when {
+                isHiFi -> "LOCAL HI-FI • $codecUpper"
+                isSubHiFiLossy -> "LOCAL • $codecUpper ${t.bitrateKbps}"
+                else -> "LOCAL • $codecUpper"
+            }
+        }
+
+        assertEquals("LOCAL • MP3 128", badgeFor(mp3Low))
+        assertEquals("LOCAL • MP3", badgeFor(mp3Boundary))
+        assertEquals("LOCAL HI-FI • FLAC", badgeFor(flac16))
+        assertEquals("LOCAL HI-FI • FLAC", badgeFor(flac24))
     }
 }

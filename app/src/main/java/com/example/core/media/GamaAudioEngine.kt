@@ -718,6 +718,8 @@ class GamaAudioEngine(private val context: Context) {
         crossfadeSeconds = seconds.coerceIn(0, 8)
     }
 
+    fun getCrossfadeDuration(): Int = crossfadeSeconds
+
     private fun getEffectiveVolume(): Float {
         val preampFactor = 10.0.pow(preampGainDb.toDouble() / 20.0).toFloat().coerceIn(0.5f, 2.0f)
         val replayFactor = if (isReplayGainEnabled) 0.92f else 1.0f

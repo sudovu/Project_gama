@@ -149,3 +149,17 @@ data class TrackPlayStatEntity(
     val playCount: Int = 1,
     val lastPlayedAt: Long = System.currentTimeMillis()
 )
+
+@Entity(
+    tableName = "cue_points",
+    indices = [
+        Index(value = ["trackId"]),
+        Index(value = ["positionMs"])
+    ]
+)
+data class CuePointEntity(
+    @PrimaryKey val id: String,
+    val trackId: String,
+    val positionMs: Long,
+    val label: String
+)
